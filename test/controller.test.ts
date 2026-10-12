@@ -83,7 +83,7 @@ interface Harness {
 }
 
 // userDataDir: reuse another harness's settings and sign-in (the launcher opened again).
-function harness(userDataDir?: string): Harness {
+function harness(userDataDir?: string, relayPort: number | undefined = RELAY_PORT): Harness {
   let snap: Snapshot | null = null;
   const spawns: Harness["spawns"] = [];
   let child: EventEmitter | null = null;
@@ -108,7 +108,7 @@ function harness(userDataDir?: string): Harness {
       decrypt: (data) => Buffer.from(data.toString().slice(4), "base64").toString(),
     },
     manifest,
-    relayPort: RELAY_PORT,
+    relayPort,
     exePin: { relativePath: EXE, sha256: sha256(files.find((f) => f.path === EXE)!.data) },
     chooseFolder: async () => null,
     openExternal: async () => undefined,
@@ -217,6 +217,20 @@ test("the launcher opened again signs in with the rotated refresh token, once", 
   const refreshes = mystic.calls.filter((c) => c.path === "/launcher/v1/auth/refresh").length - before;
   assert.equal(refreshes, 1);
   assert.equal(mystic.revokedFamilies.size, 0);
+});
+
+test("without a fixed relay port the relay takes any free one and the game is told which", async () => {
+  const h = harness(firstUserData, undefined);
+  await opened(h);
+  const win64 = path.join(h.installDir, "Archon", "Binaries", "Win64");
+  assert.deepEqual(await h.c.startInstall(), { ok: true });
+  assert.ok(existsSync(path.join(win64, "MysticParadox.dll")));
+  assert.deepEqual(await h.c.play(), { ok: true });
+  const base = h.spawns[0].env?.MYSTICPARADOX_API_BASE ?? "";
+  const port = Number(/^http:\/\/127\.0\.0\.1:(\d+)$/.exec(base)?.[1]);
+  assert.ok(port > 0 && port !== 61000, base);
+  h.child()!.emit("exit", 0);
+  await new Promise((r) => setTimeout(r, 50));
 });
 
 test("signing out removes the stored sign-in; signing in by username brings it back", async () => {

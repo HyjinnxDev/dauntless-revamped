@@ -64,7 +64,7 @@ import { SettingsStore, type StoredServer, type StoredSettings } from "./setting
 import { freeBytes } from "./system";
 import { fixedLinkUrl, isAllowedExternalUrl } from "./links";
 import { describeError, log } from "./log";
-import { DEFAULT_RELAY_PORT, Relay, RelayError } from "./relay";
+import { Relay, RelayError } from "./relay";
 import { DISK_MARGIN_BYTES, EXE_NAME, EXE_RELATIVE_PATH, PINNED_EXE_SHA256, PROJECT_URL, STATUS_POLL_MS } from "./constants";
 
 export interface Platform {
@@ -999,7 +999,8 @@ export class Controller {
       // The relay first: the game talks to it from its first request.
       const started = await this.startRelay(sv);
       if (!started.ok) return started;
-      const relayPort = this.relay?.port ?? DEFAULT_RELAY_PORT;
+      const relayPort = this.relay?.port;
+      if (!relayPort) return this.fail("relay_failed");
       let launched = false;
       try {
         const args = buildLaunchArgs({
@@ -1026,7 +1027,9 @@ export class Controller {
 
   private async startRelay(sv: StoredServer): Promise<ActionResult> {
     await this.stopRelay();
-    const port = this.p.relayPort ?? DEFAULT_RELAY_PORT;
+    // Any free port: the runtime learns it from MYSTICPARADOX_API_BASE, so nothing needs a fixed one
+    // (61000 belongs to a 1.4.4 Dauntless Revived server on the same PC).
+    const port = this.p.relayPort ?? 0;
     const relay = new Relay({
       target: { host: sv.host, port: sv.port, fingerprint: sv.fp },
       port,
