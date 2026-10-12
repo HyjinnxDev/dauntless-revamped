@@ -117,8 +117,9 @@ export class GameProcess {
 }
 
 // Lists running Dauntless clients. Game servers (the same exe started with -server, as on the
-// host's own PC) do not count. Only process ids and a yes/no are read back: other processes'
-// command lines contain login codes and never leave PowerShell.
+// host's own PC) do not count, nor do processes whose command line Windows will not show (game
+// servers started by an elevated Director). Only process ids and a yes/no are read back: other
+// processes' command lines contain login codes and never leave PowerShell.
 export function findRunningClients(platform: NodeJS.Platform = process.platform): Promise<number[]> {
   if (platform !== "win32") return Promise.resolve([]);
   return new Promise((resolve) => {
@@ -126,7 +127,7 @@ export function findRunningClients(platform: NodeJS.Platform = process.platform)
       if (err || !stdout.toLowerCase().includes(EXE_NAME.toLowerCase())) return resolve([]);
       const script =
         `Get-CimInstance Win32_Process -Filter "Name='${EXE_NAME}'" | ForEach-Object { ` +
-        `if ($_.CommandLine -notmatch '(^|\\s)-server(\\s|$)') { $_.ProcessId } }`;
+        `if ($_.CommandLine -and $_.CommandLine -notmatch '(^|\\s)-server(\\s|$)') { $_.ProcessId } }`;
       execFile(
         "powershell.exe",
         ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
