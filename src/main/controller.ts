@@ -821,7 +821,8 @@ export class Controller {
       await installRuntime(ep, dir, release);
     } catch (e) {
       log.error(`runtime install failed: ${describeError(e)}`);
-      return { ok: false, error: e instanceof RuntimeError && e.code === "download" ? "runtime_unavailable" : "runtime_failed", detail: e instanceof RuntimeError ? e.file : undefined };
+      const map = { download: "runtime_unavailable", in_use: "runtime_in_use", hash: "runtime_failed", disk: "runtime_failed" } as const;
+      return { ok: false, error: e instanceof RuntimeError ? map[e.code] : "runtime_failed", detail: e instanceof RuntimeError ? e.file : undefined };
     }
     log.info(`runtime ${release.version} installed`);
     return release;

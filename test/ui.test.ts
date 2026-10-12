@@ -46,6 +46,7 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   verify_failed: true,
   runtime_unavailable: true,
   runtime_failed: true,
+  runtime_in_use: true,
   runtime_rejected: true,
   game_files_invalid: true,
   already_running: true,

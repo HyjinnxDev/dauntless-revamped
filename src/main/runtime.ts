@@ -11,7 +11,8 @@ import { downloadRuntimeFile, type RuntimeArtifact, type RuntimeRelease } from "
 import type { Endpoint } from "./http";
 
 export class RuntimeError extends Error {
-  constructor(public readonly file: string, public readonly code: "download" | "hash" | "disk", message: string) {
+  // in_use: a running process has the old file loaded (on the host's PC: its own game servers).
+  constructor(public readonly file: string, public readonly code: "download" | "hash" | "disk" | "in_use", message: string) {
     super(message);
     this.name = "RuntimeError";
   }
@@ -62,7 +63,8 @@ export async function installRuntime(ep: Endpoint, installDir: string, release: 
       await fsp.rename(tmp, target);
     } catch (e) {
       await fsp.unlink(tmp).catch(() => undefined);
-      throw new RuntimeError(f.name, "disk", (e as Error).message);
+      const code = (e as NodeJS.ErrnoException).code;
+      throw new RuntimeError(f.name, code === "EPERM" || code === "EBUSY" ? "in_use" : "disk", (e as Error).message);
     }
     await unblock(target);
     if ((await hashFile(target)) !== f.sha256) throw new RuntimeError(f.name, "hash", "changed after writing (antivirus?)");

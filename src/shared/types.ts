@@ -56,6 +56,7 @@ export type ErrorCode =
   | "verify_failed"
   | "runtime_unavailable" // the server has no runtime release published
   | "runtime_failed" // the runtime files could not be installed
+  | "runtime_in_use" // the old runtime is loaded by a running process (the host's own game servers)
   | "runtime_rejected" // the server refused this runtime release (it changed: Repair)
   | "game_files_invalid"
   | "already_running"

@@ -487,6 +487,7 @@ const en = {
   err_runtime_unavailable: "The server has no runtime files published. Ask the host.",
   err_runtime_failed: "The server's runtime files couldn't be installed. Antivirus may have blocked them: check its quarantine.",
   err_runtime_rejected: "The server refused this runtime version. Use Repair game files, then try again.",
+  err_runtime_in_use: "The game files in this folder are in use, most likely by the game servers running on this PC. Choose another game folder in Settings: the server's own folder can't be used to play.",
 };
 
 export type StringKey = keyof typeof en;
@@ -974,6 +975,7 @@ const fi: Record<StringKey, string> = {
   err_runtime_unavailable: "Palvelimella ei ole julkaistuja ajonaikaisia tiedostoja. Kysy ylläpitäjältä.",
   err_runtime_failed: "Palvelimen ajonaikaisia tiedostoja ei voitu asentaa. Virustorjunta on voinut estää ne: tarkista sen karanteeni.",
   err_runtime_rejected: "Palvelin hylkäsi tämän ajonaikaisen version. Korjaa pelitiedostot ja yritä uudelleen.",
+  err_runtime_in_use: "Tämän kansion pelitiedostot ovat käytössä, luultavasti tällä PC:llä käynnissä olevien pelipalvelinten. Valitse toinen pelikansio asetuksista: palvelimen omaa kansiota ei voi käyttää pelaamiseen.",
 };
 
 const es: Record<StringKey, string> = {
@@ -1455,6 +1457,7 @@ const es: Record<StringKey, string> = {
   err_runtime_unavailable: "El servidor no tiene archivos de runtime publicados. Pregunta al anfitrión.",
   err_runtime_failed: "No se pudieron instalar los archivos de runtime del servidor. Puede que el antivirus los bloqueara: revisa su cuarentena.",
   err_runtime_rejected: "El servidor rechazó esta versión del runtime. Repara los archivos del juego y vuelve a intentarlo.",
+  err_runtime_in_use: "Los archivos del juego de esta carpeta están en uso, seguramente por los servidores de juego de este PC. Elige otra carpeta del juego en Ajustes: la carpeta del propio servidor no sirve para jugar.",
 };
 
 export const STRINGS: Record<Language, Record<StringKey, string>> = { en, fi, es };
