@@ -15,6 +15,7 @@ for(const Name of [
 ]){
     delete process.env[Name];
 }
+process.env.STORE = "off";
 
 // Sets environment variables for the length of Body (a test), then puts the old values back
 export async function WithEnv<T>(Values: Record<string, string | undefined>, Body: () => T | Promise<T>): Promise<T> {

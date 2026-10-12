@@ -34,7 +34,8 @@ storeRouter.post("/reconcile", HasUndauntedMetagameAuth, async (req: any, res) =
 
     const Balances: Record<string, unknown> = {
         id_currency_notes: Notes,
-        CURRENCY_NOTES: Notes
+        CURRENCY_NOTES: Notes,
+        ...(BalanceFromInventory() ? {id_currency_platinum: 0, CURRENCY_PLATINUM: 0, CURRENCY_PLATINUM_UNIV: 0} : {})
     };
 
     ApplyHeldCurrencies(req.AuthData.userId, Balances);
@@ -97,6 +98,7 @@ storeRouter.get("/balance", HasUndauntedMetagameAuth, async (req: any, res) => {
         id_currency_gauntlet_coin_faded: 0,
         CURRENCY_S15_COIN: 0,
         CURRENCY_PLATINUM: 0,
+        CURRENCY_PLATINUM_UNIV: 0,
         id_currency_platinum: 0,
         id_currency_s15_coin: 0,
         id_currency_marks_gilded: 0,

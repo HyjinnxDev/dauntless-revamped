@@ -108,15 +108,13 @@ export const EscalationStrict = DefineSwitch({
     Show: ShowOnOff
 });
 
-// The in-game store (roadmap 3.7; controllers/freestore.ts). off, the default: the store screen gets the
-// old 400 and the purchase routes answer 404, as before. free: the catalogue in vendor/store_catalog.json,
-// every offer free, bought with the client's two-step purchase token. Free or priced is the owner's
-// decision (the economy question of 3.7), and the store waits for an in-game test.
+// Earned economy by default: hunt platinum, priced cosmetics, paid seasonal Elite.
+// off disables storefront/earnings; free retains legacy free-store behavior for explicit local testing.
 export const StoreMode = DefineSwitch({
     Env: "STORE",
     Label: "store",
-    Default: "off" as "off" | "free",
-    Parse: ParseChoice(["off", "free"] as const),
+    Default: "earned" as "off" | "free" | "earned",
+    Parse: ParseChoice(["off", "free", "earned"] as const),
     Show: (Value: string) => Value
 });
 

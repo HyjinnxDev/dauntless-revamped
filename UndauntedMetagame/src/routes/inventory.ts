@@ -3,6 +3,7 @@ import { PlayerMutationRateLimit } from "../middleware/RateLimits";
 import { HasUndauntedMetagameAuth } from "../middleware/HasUndauntedMetagameAuth";
 import { logger } from "../logger";
 import { GetInventoryForUserIdAndCharacterId, InventoryError, RunInventoryTransaction, UpdateInstancedItem } from "../controllers/inventory";
+import { ReadHuntCompletion } from "../controllers/huntplatinum";
 
 export const inventoryRouter = Router();
 
@@ -62,10 +63,12 @@ inventoryRouter.post("/inventory", HasUndauntedMetagameAuth, PlayerMutationRateL
     const InstancedItemsToRemove = req.body.removeInstancedItems;
     const StackedItemsToRemove = req.body.removeStackedItems;
     const InstancedItemsToSave = req.body.saveInstancedItems;
+    const Completion = req.AuthData.IsGameserver ? ReadHuntCompletion(req.headers["x-dauntless-hunt-completion"]) : undefined;
 
     const TransactionResult = await RunInventoryTransaction(UserId, CharacterId, TransactionId, InstancedItemsToAdd, StackedItemsToAdd, InstancedItemsToRemove, StackedItemsToRemove, InstancedItemsToSave, {
         Caller: req.AuthData.IsGameserver ? "gameserver" : "client",
-        Source: req.body.source
+        Source: req.body.source,
+        HuntCompletion: Completion?.id.startsWith(`${req.headers["x-dauntless-game-session-id"]}:`) ? Completion : undefined
     });
 
     if(TransactionResult.success){

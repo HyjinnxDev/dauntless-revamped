@@ -204,6 +204,13 @@
       "when": 1792200000000,
       "tag": "0028_us_region",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1792300000000,
+      "tag": "0029_hunt_completions",
+      "breakpoints": true
     }
   ]
 }

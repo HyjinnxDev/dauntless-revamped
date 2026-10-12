@@ -3,6 +3,8 @@ import { GetDb } from "../db";
 import { entitlements } from "../db/schema";
 import { logger } from "../logger";
 import { Tx } from "./savehistory";
+import { GetActiveHuntPass, GetConfiguredPaths, GetHuntPassScope } from "./progressionconfig";
+import { IsEarnedStore, IsHuntPass } from "./huntpassseason";
 
 // Entitlements of real-mode accounts (GET /entitlementsv2, POST /entitlementv2/:uid,
 // DELETE /entitlement/:uid/:name). The client never checks expiry itself, so an
@@ -12,14 +14,21 @@ export type EntitlementRecord = { name: string, duration: number, activatedDate:
 
 const HOUR_MS = 60 * 60 * 1000;
 
-// season09b_premium is the Elite Hunt Pass (every account gets it); season_premium_any
-// and season_free_any are what the Blueprints check. ENTITLEMENTS_DEFAULT replaces the list.
+// Legacy defaults remain available in explicit free/off mode. Earned mode seeds
+// Basic only, scopes paid ownership to season occurrence, and derives native aliases.
 const DEFAULT_ENTITLEMENTS = "season09b_premium,season_premium_any,season_free_any";
 
 export function GetDefaultEntitlements(){
     const Raw = process.env.ENTITLEMENTS_DEFAULT ?? DEFAULT_ENTITLEMENTS;
 
-    return Raw.split(",").map((Name) => Name.trim()).filter((Name) => Name.length > 0);
+    return Raw.split(",").map((Name) => Name.trim()).filter((Name) => Name.length > 0
+        && (!IsEarnedStore() || (Name !== "season_premium_any" && !/^season.*_premium/.test(Name))));
+}
+
+function ScopedName(Name: string){
+    if(!IsEarnedStore()) return Name;
+    const Path = GetConfiguredPaths().find((Path) => IsHuntPass(Path) && Path.premium_gating_entitlement === Name);
+    return Path ? `${Name}@${GetHuntPassScope(Path.progression_id).split("@")[1]}` : Name;
 }
 
 type EntitlementRow = typeof entitlements.$inferSelect;
@@ -42,6 +51,14 @@ function IsActive(Row: EntitlementRow, Now: number){
 function EnsureDefaultEntitlements(tx: Tx, AccountId: string){
     const Now = new Date().toISOString();
 
+    if(IsEarnedStore()){
+        for(const Row of tx.select().from(entitlements).where(and(eq(entitlements.accountId, AccountId), eq(entitlements.source, "default"), isNull(entitlements.revokedDate))).all()){
+            if(Row.name === "season_premium_any" || /^season.*_premium/.test(Row.name)){
+                tx.update(entitlements).set({revokedDate: Now}).where(and(eq(entitlements.accountId, AccountId), eq(entitlements.name, Row.name))).run();
+            }
+        }
+    }
+
     for(const Name of GetDefaultEntitlements()){
         tx.insert(entitlements).values({
             accountId: AccountId,
@@ -58,10 +75,18 @@ function EnsureDefaultEntitlements(tx: Tx, AccountId: string){
 function ActiveRecords(tx: Tx, AccountId: string): EntitlementRecord[]{
     const Now = Date.now();
 
-    return tx.select().from(entitlements).where(and(eq(entitlements.accountId, AccountId), isNull(entitlements.revokedDate))).all()
+    const Records = tx.select().from(entitlements).where(and(eq(entitlements.accountId, AccountId), isNull(entitlements.revokedDate))).all()
         .filter((Row) => IsActive(Row, Now))
         .sort((A, B) => A.name.localeCompare(B.name))
         .map((Row) => ({name: Row.name, duration: Row.duration, activatedDate: Row.activatedDate}));
+    if(!IsEarnedStore()) return Records;
+    const Gate = GetConfiguredPaths().find((Path) => Path.progression_id === GetActiveHuntPass())?.premium_gating_entitlement;
+    const Current = Gate && Records.find((Row) => Row.name === ScopedName(Gate));
+    const Visible = Records.filter((Row) => Row.name !== "season_premium_any" && !/^season.*_premium/.test(Row.name));
+    if(Current && Gate){
+        Visible.push({...Current, name: Gate}, {...Current, name: "season_premium_any"});
+    }
+    return Visible.sort((A, B) => A.name.localeCompare(B.name));
 }
 
 export function ListEntitlements(AccountId: string): EntitlementRecord[]{
@@ -74,6 +99,14 @@ export function ListEntitlements(AccountId: string): EntitlementRecord[]{
 
 export function HasActiveEntitlement(tx: Tx, AccountId: string, Name: string){
     EnsureDefaultEntitlements(tx, AccountId);
+    if(IsEarnedStore() && Name === "season_premium_any"){
+        return ActiveRecords(tx, AccountId).some((Row) => Row.name === Name);
+    }
+    if(IsEarnedStore() && /^season.*_premium/.test(Name)){
+        const Path = GetConfiguredPaths().find((Path) => Path.progression_id === GetActiveHuntPass());
+        if(Name !== Path?.premium_gating_entitlement) return false;
+    }
+    Name = ScopedName(Name);
 
     const Row = tx.select().from(entitlements).where(and(eq(entitlements.accountId, AccountId), eq(entitlements.name, Name))).get();
 
@@ -86,6 +119,7 @@ export function HasActiveEntitlement(tx: Tx, AccountId: string, Name: string){
 // stacking rule is unknown; this is the safe reading.
 export function GrantEntitlementInTx(tx: Tx, AccountId: string, Name: string, Duration: number, Source: string){
     EnsureDefaultEntitlements(tx, AccountId);
+    Name = ScopedName(Name);
 
     const Now = new Date();
     const Row = tx.select().from(entitlements).where(and(eq(entitlements.accountId, AccountId), eq(entitlements.name, Name))).get();
@@ -126,6 +160,7 @@ export function GrantEntitlementInTx(tx: Tx, AccountId: string, Name: string, Du
 
 export function RevokeEntitlementInTx(tx: Tx, AccountId: string, Name: string){
     EnsureDefaultEntitlements(tx, AccountId);
+    Name = ScopedName(Name);
 
     const Revoked = tx.update(entitlements).set({revokedDate: new Date().toISOString()})
         .where(and(eq(entitlements.accountId, AccountId), eq(entitlements.name, Name), isNull(entitlements.revokedDate))).returning().all();

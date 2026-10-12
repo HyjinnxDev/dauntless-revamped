@@ -7,13 +7,16 @@ import { DoesCharacterBelongToUserId } from "./character";
 import type { Tx } from "./savehistory";
 import { FindFusionItemIndex, IsValidFusionRemoval, IsValidFusionSave, MiddlemanConflictError, MiddlemanValidationError, NormaliseFusionItem, ValidateFusionCompletions } from "./middleman";
 import { MiddlemanFusionGuards } from "../features";
+import { HuntCompletion, PLATINUM_ITEM, ReserveHuntPlatinum } from "./huntplatinum";
+import { AuthorizePassRewards, IsPassItem } from "./huntpassrewards";
+import { IsEarnedStore } from "./huntpassseason";
 
 export type InventoryError = "forbidden" | "not_found" | "conflict" | "insufficient_quantity" | "invalid_inventory_item" | "invalid_inventory_data" | "db_error";
 export type InventoryResult<T = void> = { success: true, data?: T } | { success: false, error: InventoryError };
 
 // "store": grants of the storefront (roadmap 3.7), made inside its own purchase transaction
 export type InventoryCaller = "client" | "gameserver" | "admin" | "store" | "trials";
-export type InventoryContext = { Caller: InventoryCaller, Source?: unknown };
+export type InventoryContext = { Caller: InventoryCaller, Source?: unknown, HuntCompletion?: HuntCompletion };
 export type TransactionResponse = { createdInstancedItems: any, updatedInstancedItems: any[], updatedStackedItems: any[], removedInstancedItems: any };
 
 // One POST /inventory body, the lists exactly as they arrived (undefined when missing)
@@ -514,8 +517,8 @@ function PrepareInventoryTransaction(Request: InventoryTransactionRequest): Prep
 
     return {
         Request,
-        InstancedItemsToAdd,
-        StackedItemsToAdd,
+        InstancedItemsToAdd: [...InstancedItemsToAdd],
+        StackedItemsToAdd: [...StackedItemsToAdd],
         InstancedItemsToRemove,
         StackedItemsToRemove,
         InstancedItemsToSave,
@@ -592,6 +595,33 @@ function ApplyPreparedInventoryTransaction(tx: Tx, Prepared: PreparedInventoryTr
     }
 
     const Update: Partial<typeof inventory.$inferInsert> = {};
+    if(Context.Caller === "gameserver" && IsEarnedStore() && [...StackedItemsToAdd, ...InstancedItemsToAdd].some((Item) => IsPassItem(Item.catalogId))){
+        const Owned = new Set<string>([
+            ...JSON.parse(CurrentInventory.stackedItems).filter((Item: any) => Number(Item.quantity) > 0),
+            ...JSON.parse(CurrentInventory.instancedItems)
+        ].map((Item: any) => Item.catalogId));
+        for(const Items of [StackedItemsToAdd, InstancedItemsToAdd]){
+            for(let Index = 0; Index < Items.length;){
+                const Item = Items[Index];
+                if(IsPassItem(Item.catalogId) && Owned.has(Item.catalogId)) Items.splice(Index, 1);
+                else {
+                    if(IsPassItem(Item.catalogId) && Item.quantity !== undefined){
+                        const Quantity = Number(Item.quantity);
+                        if(!Number.isSafeInteger(Quantity) || Quantity < 0) throw new InventoryValidationError("Invalid pass cosmetic quantity");
+                        if(Quantity === 0){ Items.splice(Index, 1); continue; }
+                        Items[Index] = {...Item, quantity: 1}; // Basic/Elite can name same permanent unlock.
+                    }
+                    Owned.add(Item.catalogId);
+                    Index++;
+                }
+            }
+        }
+    }
+    const NewPassSaves = Context.Caller === "gameserver" && IsEarnedStore() && InstancedItemsToSave.length > 0 ? InstancedItemsToSave.filter((Item) => IsPassItem(Item.catalogId)
+        && !(JSON.parse(CurrentInventory.instancedItems) as any[]).some((Held) => Held.catalogId === Item.catalogId && Held.instanceId === Item.instanceId)) : [];
+    if(Context.Caller === "gameserver" && !AuthorizePassRewards(tx, UserId, [...StackedItemsToAdd, ...InstancedItemsToAdd, ...NewPassSaves])){
+        throw new InventoryForbiddenError("Hunt Pass reward is not earned or has already paid its platinum allowance");
+    }
     const Log: LogEntry[] = [];
     let TouchedStackedItems: any[] = [];
     let Overspent: string[] = [];
@@ -663,7 +693,11 @@ function ApplyPreparedInventoryTransaction(tx: Tx, Prepared: PreparedInventoryTr
         }
     }
 
-    if(Prepared.ShouldTouchStackedItems){
+    const HuntPlatinum = Context.Caller === "gameserver" ? ReserveHuntPlatinum(tx, UserId, CharacterId, Context.HuntCompletion) : 0;
+    if(HuntPlatinum > 0){
+        StackedItemsToAdd.push({catalogId: PLATINUM_ITEM, quantity: HuntPlatinum});
+    }
+    if(Prepared.ShouldTouchStackedItems || HuntPlatinum > 0){
         const StackedItems: any[] = JSON.parse(CurrentInventory.stackedItems);
 
         if(Context.Caller === "gameserver"){
@@ -684,7 +718,7 @@ function ApplyPreparedInventoryTransaction(tx: Tx, Prepared: PreparedInventoryTr
 
     WriteLog(tx, UserId, CharacterId, DedupeKey ?? (typeof TransactionId === "string" ? TransactionId : undefined), Context, Log);
 
-    const Response = MakeTransactionResponse(Request, TouchedStackedItems);
+    const Response = MakeTransactionResponse({...Request, InstancedItemsToAdd: Request.InstancedItemsToAdd === undefined ? undefined : InstancedItemsToAdd}, TouchedStackedItems);
 
     if(DedupeKey != undefined){
         const Now = new Date();
@@ -720,7 +754,7 @@ export function ApplyInventoryTransactionInTx(tx: Tx, Request: InventoryTransact
 
     const Prepared = PrepareInventoryTransaction(Request);
 
-    if(!Prepared.ShouldTouchInstancedItems && !Prepared.ShouldTouchStackedItems){
+    if(!Prepared.ShouldTouchInstancedItems && !Prepared.ShouldTouchStackedItems && Context.HuntCompletion === undefined){
         return {response: MakeTransactionResponse(Request, []), replayed: false, overspent: []};
     }
 
@@ -778,7 +812,7 @@ export async function RunInventoryTransaction(UserId: string, CharacterId: strin
         return {success: false, error: "invalid_inventory_item"};
     }
 
-    if(!Prepared.ShouldTouchInstancedItems && !Prepared.ShouldTouchStackedItems){
+    if(!Prepared.ShouldTouchInstancedItems && !Prepared.ShouldTouchStackedItems && Context.HuntCompletion === undefined){
         return {success: true, data: {response: MakeTransactionResponse(Request, []), replayed: false}};
     }
 

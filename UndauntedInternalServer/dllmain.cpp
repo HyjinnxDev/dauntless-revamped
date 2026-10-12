@@ -4,6 +4,7 @@
 #include "HuntIdlePolicy.h"
 #include "NativeDiagnostics.h"
 #include "ConnectedPlayerSnapshot.h"
+#include "HuntCompletion.h"
 
 
 #include "ServerFrameLimit.h"
@@ -64,6 +65,7 @@ namespace Globals {
 }
 
 static ConnectedPlayerSnapshot::Cache ConnectedPlayers;
+static HuntCompletion::Cache CompletedHunt;
 
 static const std::wstring& WorkerGameSessionId() {
     static const std::wstring Id = [] {
@@ -78,7 +80,7 @@ static const std::wstring& WorkerGameSessionId() {
 // Called only from GameEngineTickHook. HTTP workers see copied strings under a
 // mutex, never engine objects or the connection array. Pointer values in Shape
 // are compared only, so a new connection/controller forces an immediate sample.
-static void UpdateConnectedPlayerSnapshot() {
+static void UpdateConnectedPlayerSnapshot(bool Force = false) {
     if (WorkerGameSessionId().empty()) return;
     const auto Now = GetTickCount64();
     static ULONGLONG NextCapture = 0;
@@ -140,7 +142,7 @@ static void UpdateConnectedPlayerSnapshot() {
         NextCapture = 0;
         return;
     }
-    if (Now < NextCapture && Shape == PreviousShape) return;
+    if (!Force && Now < NextCapture && Shape == PreviousShape) return;
 
     ConnectedPlayerSnapshot::Builder Snapshot;
     auto* GameplayStatics = Active.empty() ? nullptr : UArchonGameplayStatics::StaticClass();
@@ -585,6 +587,10 @@ char ProcessRequest(void* Request) {
 
     const auto SetHeader = reinterpret_cast<void(*)(void*, FString*, FString*)>(Globals::BaseAddress + 0x28AAAA0);
     SetHeader(Request, &APIHeader, &APIKey);
+    const auto Completion = CompletedHunt.Read();
+    FString CompletionHeader(L"x-dauntless-hunt-completion");
+    FString CompletionValue(Completion.c_str());
+    SetHeader(Request, &CompletionHeader, &CompletionValue);
 
     const auto& SessionId = WorkerGameSessionId();
     if (!SessionId.empty()) {
@@ -864,6 +870,34 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
         return;
     }
 
+    if (Object && Function) {
+        const auto ShortName = Function->GetName();
+        const auto Name = ShortName == "TransitionToIslandGameplay" || ShortName == "OnEndOfHuntStarted" || ShortName == "OnHuntFinished"
+            ? Function->GetFullName() : std::string{};
+        if (Name == "Function Archon.ArchonGameMode_Island.TransitionToIslandGameplay") {
+            CompletedHunt.Clear();
+        }
+        bool Terminal = false, Successful = false;
+        if (Parms && Name == "Function Archon.ArchonGameMode_Island.OnEndOfHuntStarted") {
+            Terminal = true;
+            Successful = static_cast<Params::ArchonGameMode_Island_OnEndOfHuntStarted*>(Parms)->bSucccess;
+        } else if (Parms && Name == "Function Archon.MasteryComponent.OnHuntFinished") {
+            Terminal = true;
+            Successful = static_cast<Params::MasteryComponent_OnHuntFinished*>(Parms)->bHuntSuccessful;
+        }
+        if (Terminal) {
+            auto* World = UWorld::GetWorld();
+            auto* State = World && World->GameState && World->GameState->IsA(AArchonGameState::StaticClass())
+                ? static_cast<AArchonGameState*>(World->GameState) : nullptr;
+            if (State && State->IslandGameplayStartTime > 0 && State->MatchmakerHuntID.IsValid()) {
+                UpdateConnectedPlayerSnapshot(true);
+                const auto Hunt = std::wstring(State->MatchmakerHuntID.CStr());
+                CompletedHunt.Capture(WorkerGameSessionId(), Hunt,
+                    static_cast<unsigned long long>(State->IslandGameplayStartTime * 1000),
+                    ConnectedPlayers.Read(GetTickCount64()), Successful);
+            }
+        }
+    }
     reinterpret_cast<void(*)(UObject*, UFunction*, void*)>(OrigProcessEvent)(Object, Function, Parms);
 }
 

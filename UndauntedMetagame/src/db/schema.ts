@@ -489,3 +489,18 @@ export const accountkeyrecovery = sqliteTable("accountkeyrecovery", {
     keyHash: text("keyHash").notNull(),
     ciphertext: text("ciphertext").notNull()
 });
+
+export const huntcompletions = sqliteTable("huntcompletions", {
+    accountId: text("accountId").notNull(),
+    completionId: text("completionId").notNull(),
+    characterId: text("characterId").notNull(),
+    huntId: text("huntId").notNull(),
+    platinum: integer("platinum").notNull(),
+    completedDate: text("completedDate").notNull()
+}, (table) => [primaryKey({columns: [table.accountId, table.completionId]})]);
+
+export const huntpassplatinum = sqliteTable("huntpassplatinum", {
+    accountId: text("accountId").notNull(),
+    progressionScope: text("progressionScope").notNull(),
+    quantity: integer("quantity").notNull()
+}, (table) => [primaryKey({columns: [table.accountId, table.progressionScope]})]);

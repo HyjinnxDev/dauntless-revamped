@@ -9,6 +9,8 @@ const Dir = fs.mkdtempSync(path.join(os.tmpdir(), "undaunted-test-"));
 process.env.DB_FILENAME = path.join(Dir, "test.db");
 process.env.NODE_ENV = "production";
 process.env.LOG_LEVEL = process.env.TEST_LOG_LEVEL ?? "silent";
+// Existing suites exercise legacy switches; earned-economy integration opts in explicitly.
+process.env.STORE = "off";
 
 export function RemoveTestDb(Close: () => void){
     try{

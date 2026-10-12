@@ -41,7 +41,9 @@ export function OverlayHeldCurrencies(Sheet: Record<string, unknown>, Held: Map<
     const Changed: string[] = [];
 
     for(const Key of Object.keys(Sheet)){
-        const CatalogId = Key.startsWith("CURRENCY_") ? Key : Key.startsWith("id_currency_") ? `CURRENCY_${Key.slice("id_currency_".length).toUpperCase()}` : undefined;
+        const CatalogId = Key === "CURRENCY_PLATINUM" || Key === "id_currency_platinum" || Key === "CURRENCY_PLATINUM_UNIV"
+            ? Held.has("CURRENCY_PLATINUM_UNIV") ? "CURRENCY_PLATINUM_UNIV" : "CURRENCY_PLATINUM"
+            : Key.startsWith("CURRENCY_") ? Key : Key.startsWith("id_currency_") ? `CURRENCY_${Key.slice("id_currency_".length).toUpperCase()}` : undefined;
 
         if(CatalogId !== undefined && Held.has(CatalogId)){
             Sheet[Key] = Held.get(CatalogId);

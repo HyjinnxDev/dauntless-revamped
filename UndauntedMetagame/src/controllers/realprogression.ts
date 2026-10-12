@@ -7,7 +7,8 @@ import { IsProgressionModeStub } from "./progressionmode";
 import { Caller, DoesAccountExist, IsPlainObject, ParsePathInteger, ReadField, ReadInteger, RealReply, RecordProgressionEvent } from "./progressionevents";
 import { ComputeEarnedRanks, GetProgressionPath, GetProgressionPaths, INT32_MAX, MaxRankId, PremiumGatingEntitlement, ProgressionPath, TotalXpToMaxRank } from "./progressionrank";
 import { Tx } from "./savehistory";
-import { GetActiveHuntPass } from "./progressionconfig";
+import { GetActiveHuntPass, GetConfiguredPath, GetHuntPassScope, IsAvailableHuntPass } from "./progressionconfig";
+import { IsEarnedStore, IsHuntPass } from "./huntpassseason";
 import { ProgressionConfirmEntitlements, ProgressionReplayWindow } from "../features";
 import { GrantEntitlementInTx } from "./entitlements";
 
@@ -76,7 +77,7 @@ function ToObjectiveRecord(AccountId: string, Row: ObjectiveRow): ObjectiveRecor
 }
 
 function TrackFor(AccountId: string, ProgressionId: string){
-    return and(eq(progresstracks.accountId, AccountId), eq(progresstracks.progressionId, ProgressionId));
+    return and(eq(progresstracks.accountId, AccountId), eq(progresstracks.progressionId, GetHuntPassScope(ProgressionId)));
 }
 
 function ReadTrack(tx: Tx, AccountId: string, ProgressionId: string){
@@ -86,7 +87,7 @@ function ReadTrack(tx: Tx, AccountId: string, ProgressionId: string){
 function WriteTrack(tx: Tx, AccountId: string, ProgressionId: string, Values: {progress: number, confirmedFreeRank: number, confirmedPremiumRank: number, confirmedDate: string}){
     const UpdatedDate = new Date().toISOString();
 
-    return tx.insert(progresstracks).values({accountId: AccountId, progressionId: ProgressionId, ...Values, updatedDate: UpdatedDate})
+    return tx.insert(progresstracks).values({accountId: AccountId, progressionId: GetHuntPassScope(ProgressionId), ...Values, updatedDate: UpdatedDate})
         .onConflictDoUpdate({target: [progresstracks.accountId, progresstracks.progressionId], set: {...Values, updatedDate: UpdatedDate}})
         .returning().get();
 }
@@ -109,10 +110,10 @@ export function GetTrackRecords(AccountId: string): TrackRecord[]{
     const Rows = GetDb().select().from(progresstracks).where(eq(progresstracks.accountId, AccountId)).all();
     const ByTrack = new Map(Rows.map((Row) => [Row.progressionId, Row]));
 
-    const Records = GetProgressionPaths().map((Path) => ToTrackRecord(AccountId, Path.progression_id, ByTrack.get(Path.progression_id)));
+    const Records = GetProgressionPaths().map((Path) => ToTrackRecord(AccountId, Path.progression_id, ByTrack.get(GetHuntPassScope(Path.progression_id))));
 
     for(const Row of Rows){
-        if(GetProgressionPath(Row.progressionId) == undefined){
+        if(!Row.progressionId.includes("@") && GetProgressionPath(Row.progressionId) == undefined){
             Records.push(ToTrackRecord(AccountId, Row.progressionId, Row));
         }
     }
@@ -279,6 +280,11 @@ function FindRetriedGrant(tx: Tx, AccountId: string, Route: string, Body: unknow
         return undefined;
     }
 
+    if(IsEarnedStore() && (Body as any)?.progress_tracks?.some((Track: any) => /^season/.test(String(Track?.progression_id)))
+        && Date.parse(Original.time) < Date.parse(String(GetConfiguredPath(GetActiveHuntPass())?.start_date))){
+        return undefined;
+    }
+
     const Age = Date.now() - Date.parse(Original.time);
 
     if(!(Age >= 0 && Age < Window * 1000)){
@@ -308,6 +314,10 @@ export function GrantProgression(AccountId: string, Body: unknown, Who: Caller):
             RecordProgressionEvent(tx, {AccountId, Caller: Who, Route, Body, Status: 400, Notes});
             WarnNotes(`Refusing progression grant for ${AccountId}`, Notes);
             return {Status: 400};
+        }
+
+        if(IsEarnedStore() && [...Parsed.Tracks.keys()].some((Id) => /^season/.test(Id) && !IsAvailableHuntPass(Id))){
+            return {Status: 403};
         }
 
         const Retry = FindRetriedGrant(tx, AccountId, Route, Body);
@@ -397,6 +407,7 @@ export function GrantProgressionInTrack(AccountId: string, ProgressionId: string
     const Route = "POST /progression/:uid/:track/:amount";
     const Notes: string[] = [];
     const Amount = ParsePathInteger(AmountRaw, true);
+    if(IsEarnedStore() && /^season/.test(ProgressionId) && !IsAvailableHuntPass(ProgressionId)) return {Status: 403};
 
     return GetDb().transaction((tx) => {
         if(!DoesAccountExist(tx, AccountId)){
@@ -484,6 +495,7 @@ export function ConfirmRank(AccountId: string, ProgressionId: string, RankRaw: s
     const Context = `track ${ProgressionId} rank ${RankRaw} ${Kind}`;
     const Rank = ParsePathInteger(RankRaw);
     const Path = GetProgressionPath(ProgressionId);
+    if(IsEarnedStore() && /^season/.test(ProgressionId) && !IsAvailableHuntPass(ProgressionId)) return {Status: 403};
 
     return GetDb().transaction((tx) => {
         const Refuse = (Status: number, Why: string) => {
@@ -604,7 +616,7 @@ export function ResetTrack(AccountId: string, ProgressionId: string, Who: Caller
 export function GetSelectedHuntPass(AccountId: string){
     const Row = GetDb().select().from(huntpassselection).where(eq(huntpassselection.accountId, AccountId)).get();
 
-    return Row != undefined && GetProgressionPath(Row.progressionId) != undefined ? Row.progressionId : GetActiveHuntPass();
+    return Row != undefined && GetProgressionPath(Row.progressionId) != undefined && IsAvailableHuntPass(Row.progressionId) ? Row.progressionId : GetActiveHuntPass();
 }
 
 // POST /huntpass/:uid {"progression_id": "..."} (game server, debug only in the binary)
@@ -614,7 +626,8 @@ export function SetSelectedHuntPass(AccountId: string, Body: unknown, Who: Calle
     const ProgressionId = ReadField(Body, ["progression_id", "progressionId"], "hunt pass id", Notes);
 
     return GetDb().transaction((tx) => {
-        if(typeof ProgressionId !== "string" || GetProgressionPath(ProgressionId) == undefined){
+        if(typeof ProgressionId !== "string" || GetProgressionPath(ProgressionId) == undefined
+            || (IsEarnedStore() && (!IsHuntPass(GetProgressionPath(ProgressionId)) || !IsAvailableHuntPass(ProgressionId)))){
             RecordProgressionEvent(tx, {AccountId, Caller: Who, Route, Body, Status: 400, Notes: [...Notes, "not a configured track"]});
             logger.warn(`Refusing hunt pass selection ${JSON.stringify(ProgressionId)} for ${AccountId}: not a configured track`);
             return {Status: 400};
@@ -672,7 +685,7 @@ export function SeedProgression(AccountId: string, Mode: SeedMode, Admin: string
         }
 
         for(const Path of GetProgressionPaths()){
-            WriteTrack(tx, AccountId, Path.progression_id, SeedTrack(Path, Before.find((Row) => Row.progressionId === Path.progression_id), Mode));
+            WriteTrack(tx, AccountId, Path.progression_id, SeedTrack(Path, Before.find((Row) => Row.progressionId === GetHuntPassScope(Path.progression_id)), Mode));
         }
 
         const Tracks = tx.select().from(progresstracks).where(eq(progresstracks.accountId, AccountId)).all()

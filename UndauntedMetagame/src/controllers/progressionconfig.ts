@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import bundledConfig from "../vendor/progression_config.json";
+import { IsEarnedStore, IsHuntPass, SeasonRewards, SelectHuntPassSeason } from "./huntpassseason";
 
 // The progression config (the Hunt Pass seasons and the mastery tracks), loaded in one place: GET
 // /progression/config serves it and the rank math (progressionrank.ts) reads it, so the server and the
@@ -50,6 +51,7 @@ type LoadedConfig = {
 };
 
 let Loaded: LoadedConfig | undefined;
+let Scheduled: LoadedConfig | undefined;
 
 function IsWhole(Value: unknown){
     return Number.isSafeInteger(Value) && (Value as number) >= 0;
@@ -200,8 +202,21 @@ export function GetProgressionConfig(): LoadedConfig {
 
     if(Loaded === undefined || Loaded.Key !== Key){
         Loaded = {...Load(Folder, Active), Key: Key};
+        Scheduled = undefined;
     }
 
+    if(IsEarnedStore()){
+        const Season = SelectHuntPassSeason(Loaded.Paths);
+        const SeasonKey = `${Key}|${Season.start}`;
+        if(Scheduled?.Key !== SeasonKey){
+            const Paths = Loaded.Paths.map((Path) => Path.progression_id === Season.id
+                ? {...SeasonRewards(Path), start_date: new Date(Season.start).toISOString(), end_date: new Date(Season.end).toISOString()} : Path);
+            Scheduled = {...Loaded, Key: SeasonKey, Paths, ById: new Map(Paths.map((Path) => [Path.progression_id, Path])),
+                ActiveHuntPass: Season.id, Description: `${Loaded.Description}; scheduled ${Season.id} ${new Date(Season.start).toISOString()} to ${new Date(Season.end).toISOString()}`,
+                Payload: {...(Loaded.Payload as any), payload: {...(Loaded.Payload as any).payload, paths: Paths}}};
+        }
+        return Scheduled;
+    }
     return Loaded;
 }
 
@@ -221,6 +236,18 @@ export function GetConfiguredPath(ProgressionId: string): ProgressionPath | unde
 
 export function GetActiveHuntPass(){
     return GetProgressionConfig().ActiveHuntPass;
+}
+
+// Stable native IDs on the wire, distinct saves for each six-week occurrence.
+export function GetHuntPassScope(Id: string){
+    const Path = GetConfiguredPath(Id);
+    return IsEarnedStore() && IsHuntPass(Path) ? `${Id}@${Date.parse(String(Path!.start_date))}` : Id;
+}
+
+export function IsAvailableHuntPass(Id: string){
+    if(!IsEarnedStore()) return true;
+    const Path = GetConfiguredPath(Id);
+    return Id === GetActiveHuntPass() && Date.now() >= Date.parse(String(Path?.start_date)) && Date.now() < Date.parse(String(Path?.end_date));
 }
 
 // At boot: loads the config once and says what was loaded; throws ProgressionConfigError (the caller stops)

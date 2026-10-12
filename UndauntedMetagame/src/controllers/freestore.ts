@@ -7,6 +7,7 @@ import { characters, inventory, storepurchases } from "../db/schema";
 import { logger } from "../logger";
 import { MiddlemanStore, StoreMode, StoreRepeatableTokens, TrialsStore } from "../features";
 import catalog from "../vendor/store_catalog.json";
+import platinumPrices from "../vendor/store_platinum_prices.json";
 import curated30 from "../vendor/store_curated_30.json";
 import itemKinds from "../vendor/store_item_kinds.json";
 import ladyLuck from "../vendor/store_ladyluck.json";
@@ -17,6 +18,9 @@ import { GrantEntitlementInTx, HasActiveEntitlement } from "./entitlements";
 import { ApplyInventoryTransactionInTx, InventoryErrorOf } from "./inventory";
 import { Tx } from "./savehistory";
 import { FinalizeCompletedTrialWeeks } from "./trials";
+import { GetActiveHuntPass, GetConfiguredPath, IsAvailableHuntPass } from "./progressionconfig";
+import { HuntPassPrice, IsEarnedStore } from "./huntpassseason";
+import { IsPassItem } from "./huntpassrewards";
 
 // The free store (roadmap 3.7, STORE=free). The client's flow (0x140b39657, 0x140b55011):
 // - GET /product/skus/public?requiredTags=<tag>: the offers of one tag (the storefront is "webstore"),
@@ -178,6 +182,8 @@ const CURRENCY_ALIASES: Record<string, string> = {
     id_currency_marks_gilded: "marksgilded",
     currency_marks_gilded: "marksgilded",
     currency_platinum_univ: "platinum",
+    id_currency_platinum: "platinum",
+    currency_platinum: "platinum",
     currency_prestige: "prestige",
     marks_steel: "markssteel",
     marks_gilded: "marksgilded",
@@ -200,6 +206,23 @@ const ITEM_KINDS = itemKinds as unknown as Record<string, string>;
 
 const Hash = (Value: string) => createHash("sha256").update(Value).digest("hex");
 const OfferHash = (Offer: StoreOffer) => Hash(JSON.stringify(Offer));
+
+function EarnedOffer(Offer: StoreOffer): StoreOffer {
+    if(!IsEarnedStore() || LADY_LUCK_IDS.has(Offer.id) || MIDDLEMAN_VENDOR_IDS.has(Offer.id) || MIDDLEMAN_OFFER_IDS.has(Offer.id)) return Offer;
+    const Price = (platinumPrices as Record<string, number>)[Offer.id];
+    if(Price === undefined) throw new StoreError(409, "Store offer has no reviewed platinum price");
+    return {...Offer, platinumPrice: Price};
+}
+
+function ActivePassOffer(): StoreOffer | undefined {
+    if(!IsEarnedStore()) return undefined;
+    const Path = GetConfiguredPath(GetActiveHuntPass());
+    if(!Path?.premium_gating_entitlement || !IsAvailableHuntPass(Path.progression_id)) return undefined;
+    const Template = (Catalog.season09b_pass as StoreOffer[])[0];
+    return {...Template, id: Path.premium_gating_entitlement, tags: [`${Path.progression_id}_pass`],
+        platinumPrice: HuntPassPrice(Path), entitlements: [{name: Path.premium_gating_entitlement, duration: 0}],
+        availableFrom: Path.start_date, availableTo: Path.end_date};
+}
 
 export function GrantKind(CatalogId: string): "stacked" | "instanced" | undefined {
     if(MIDDLEMAN_CELL_IDS.has(CatalogId)){
@@ -238,25 +261,30 @@ function IsListed(Offer: StoreOffer){
 
     if(LadyLuckOffer && !TrialsStore()) return false;
     if(MiddlemanOffer && !MiddlemanStore()) return false;
-    if(!LadyLuckOffer && !MiddlemanOffer && StoreMode() !== "free") return false;
+    if(!LadyLuckOffer && !MiddlemanOffer && StoreMode() === "off") return false;
+    if(IsEarnedStore()){
+        if(Offer.tags.some((Tag) => /^season.*_(pass|rank)$/.test(Tag))) return false;
+        if((Offer.items ?? []).some((Item) => IsPassItem(Item.catalogId))) return false;
+        if(!LadyLuckOffer && !MiddlemanOffer && !Object.prototype.hasOwnProperty.call(platinumPrices, Offer.id)) return false;
+    }
     if (process.env.STORE_CATALOG_PROFILE === "curated30" && Offer.tags.includes("webstore") && !curated30.includes(Offer.id)) return false;
     return !IsRepeatable(Offer) || LADY_LUCK_REPEATABLE.has(Offer.id) || MiddlemanOffer || StoreRepeatableTokens();
 }
 
 export function IsAnyStoreEnabled(){
-    return StoreMode() === "free" || TrialsStore() || MiddlemanStore();
+    return StoreMode() !== "off" || TrialsStore() || MiddlemanStore();
 }
 
 export function IsStoreTagEnabled(Tag: string){
     if(Tag === "ladyluckstore") return TrialsStore();
     if(Tag === MIDDLEMAN_WEEKLY_TAG || Tag === "exchange_vendor_slot_2" || Tag === "exchange_vendor_slot_3") return MiddlemanStore();
-    return StoreMode() === "free";
+    return StoreMode() !== "off";
 }
 
 export function IsStoreSkuEnabled(SkuId: string){
     if(LADY_LUCK_IDS.has(SkuId)) return TrialsStore();
     if(MIDDLEMAN_VENDOR_IDS.has(SkuId) || MIDDLEMAN_OFFER_IDS.has(SkuId)) return MiddlemanStore();
-    return StoreMode() === "free";
+    return StoreMode() !== "off";
 }
 
 function FinalizeTrialsForOffer(Offer: StoreOffer | undefined){
@@ -266,10 +294,13 @@ function FinalizeTrialsForOffer(Offer: StoreOffer | undefined){
 }
 
 function FindOffer(SkuId: string){
+    const Pass = ActivePassOffer();
+    if(Pass?.id === SkuId) return Pass;
     const Middleman = MiddlemanStore() ? SelectWeeklyMiddlemanOffers().find((Offer) => Offer.id === SkuId) : undefined;
     if(Middleman != undefined) return Middleman;
     if(MIDDLEMAN_OFFER_IDS.has(SkuId)) return undefined;
-    return AllOffers.find((Offer) => Offer.id === SkuId && IsListed(Offer)) ?? ExtraOffersForTests.find((Offer) => Offer.id === SkuId);
+    const Offer = AllOffers.find((Offer) => Offer.id === SkuId && IsListed(Offer));
+    return Offer ? EarnedOffer(Offer) : ExtraOffersForTests.find((Offer) => Offer.id === SkuId);
 }
 
 function ResolveOfferPricing(Offer: StoreOffer){
@@ -395,7 +426,8 @@ function WithRemaining(tx: Tx, AccountId: string, Held: Set<string>, Offer: Stor
 
 // GET /product/skus/public?requiredTags=<tag>. An unknown tag is an empty list.
 export function ListStoreOffers(AccountId: string, Tag: string): StoreOffer[] {
-    const ForTag = Tag === MIDDLEMAN_WEEKLY_TAG
+    const Pass = ActivePassOffer();
+    const ForTag = Pass?.tags.includes(Tag) ? [Pass] : Tag === MIDDLEMAN_WEEKLY_TAG
         ? (MiddlemanStore() ? SelectWeeklyMiddlemanOffers() : [])
         : CatalogTags.includes(Tag) ? (Catalog[Tag] as StoreOffer[]).filter(IsListed) : [];
 
@@ -406,12 +438,12 @@ export function ListStoreOffers(AccountId: string, Tag: string): StoreOffer[] {
     return GetDb().transaction((tx) => {
         const Held = HeldCatalogIds(tx, GetActiveCharacter(tx, AccountId)?.characterId);
 
-        return ForTag.map((Offer) => WithRemaining(tx, AccountId, Held, Offer));
+        return ForTag.map((Offer) => WithRemaining(tx, AccountId, Held, Pass?.id === Offer.id ? Offer : EarnedOffer(Offer)));
     });
 }
 
 export function IsKnownStoreTag(Tag: string){
-    return CatalogTags.includes(Tag);
+    return CatalogTags.includes(Tag) || !!ActivePassOffer()?.tags.includes(Tag);
 }
 
 // GET /product/sku/<sku>, from any tag (the Elite pass is under season09b_pass)
@@ -581,6 +613,10 @@ export function RedeemStorePurchase(AccountId: string, Currency: string, Token: 
 
         if(Pricing.Currency !== Currency){
             throw new StoreError(400, "Offer is not sold in that currency");
+        }
+
+        if(IsEarnedStore() && Offer.id === ActivePassOffer()?.id && WithRemaining(tx, AccountId, HeldCatalogIds(tx, Purchase.characterId), Offer).remaining === 0){
+            throw new StoreError(409, "You already own this Hunt Pass");
         }
 
         // Two tokens issued before either was redeemed: only the first one buys this week's cell
