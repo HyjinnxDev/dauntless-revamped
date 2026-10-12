@@ -405,12 +405,21 @@ section); it does not mean the other player is not there.
 
 ### Add a friend
 
-1. Open **Add Friends**, type the other player's username and press **Add**. It is not a search: the
+Both players must have accounts on the **same private server**. The name box may ask for an
+**Epic Games display name**: enter the username the other player registered with this server instead.
+No Epic account or Epic launcher is needed. An account on a different private server will not be found.
+
+1. Open **Social > Add Friends**, type the other player's server username and press **Add**. It is not a search: the
    name must be exact, but upper and lower case do not matter. You get a "friend invite sent"
    message, and nothing else changes on your screen.
-2. The other player sees your request **the next time they log in**, not straight away, with
-   **Accept** and **Decline**.
-3. Once they accept, you appear under each other's **OFFLINE** list after your next login.
+2. The other player **fully closes Dauntless and starts it again on the same server** to refresh their
+   friend list. Open **Social > My Friends**, find the incoming request and choose **Accept** or **Decline**.
+3. Once they accept, both players restart the game to refresh their lists. Without online presence,
+   the accepted friend appears under **OFFLINE**; this does not prevent SlayerLink pairing.
+
+If no request appears after restarting, tell the host both server usernames and the approximate time
+of the attempt. See [Add Friends does nothing]({{ '/setup/troubleshooting.html' | relative_url }}#add-friends)
+for the host's checks.
 
 From a friend's menu you can **Remove** them, or **Block** a player (they move to **BLOCKED**, any
 open party or guild invites between you are removed, and neither of you can send the other friend
@@ -442,6 +451,10 @@ a friend into one of your three link slots, and they accept into one of theirs. 
 and neither of you may have blocked the other. An invite waits 24 hours for an answer. You can remove a
 link at any time; it ends for both of you. Removing a friend or blocking them cancels the invites
 between you that are still waiting. The game may keep the tab hidden; if it does, nothing changes.
+
+First finish the friend-request steps above and refresh both friend lists. Then open **My Links**,
+choose an empty slot and invite the accepted friend. The other player accepts the link into one of
+their own empty slots. Pairing is implemented; hunt progress and reward claims are not implemented yet.
 
 ### Guilds
 

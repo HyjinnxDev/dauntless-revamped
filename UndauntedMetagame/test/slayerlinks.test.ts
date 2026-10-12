@@ -9,6 +9,7 @@ import { GetDb } from "../src/db";
 import { slayerlinkinvites, slayerlinks, users } from "../src/db/schema";
 import { INVITE_EXPIRY_HOURS, INVITE_WINDOW_MS, LINK_DURATION_HOURS, MAX_INVITES_PER_WINDOW, SetSlayerLinkClockForTests } from "../src/controllers/slayerlinks";
 import { Count } from "./helpers";
+import { ParseFriendsList, SocialClient } from "./socialclient";
 
 // Slayer Links over HTTP, with the bodies and paths the 1.4.4 client sends (controllers/slayerlinks.ts has
 // the exe addresses). Harmonic's fork (github.com/Harmonicrain/Undaunted 895f7c7) had the first working
@@ -70,6 +71,53 @@ function AssertRefused(Reply: Reply, Status: number, Message?: string){
 }
 
 describe("Slayer Links", () => {
+    it("adding a server username, accepting the friend request and logging in again enables SlayerLink pairing", async () => {
+        const Alpha = Player("Alpha"), Bravo = Player("Bravo");
+        const BravoName = `Bravo${Counter}`;
+        const ClientOf = (Who: string) => new SocialClient(Who, async (Method, Path, Body) => {
+            const Reply = await Call(Method, Path, { as: Who, body: Body });
+            return { status: Reply.status, text: Reply.text };
+        });
+        const FriendsOf = async (Who: string) => {
+            const Reply = await Call("GET", `/friends/api/public/friends/${Who}?includePending=true`, { as: Who });
+            assert.equal(Reply.status, 200);
+            return ParseFriendsList(Reply.text);
+        };
+
+        const ClientAlpha = await ClientOf(Alpha).Login();
+        const ByName = await Call("GET", `/account/api/public/account/displayName/${BravoName.toLowerCase()}`, { as: Alpha });
+        assert.deepEqual([ByName.status, ByName.json], [200, { id: Bravo, displayName: BravoName, externalAuths: {} }]);
+        const Resolved = await ClientAlpha.ResolveFromEpic(ByName.json.id);
+        assert.deepEqual(Resolved, { outcome: "resolved", phoenixId: Bravo });
+        assert.deepEqual(ClientAlpha.Calls, ["POST /accountinfo/public", "POST /account/mapping", "POST /accountinfo/public"]);
+        assert.equal(ClientAlpha.NameOf(Bravo), BravoName);
+
+        assert.equal((await Call("POST", `/friends/api/public/friends/${Alpha}/${Resolved.phoenixId}`, { as: Alpha })).status, 204);
+        const ClientBravo = await ClientOf(Bravo).Login();
+        assert.deepEqual(await FriendsOf(Bravo), [{ accountId: Alpha, status: "PENDING", direction: "INBOUND" }]);
+        assert.deepEqual(await ClientBravo.ResolveFromEpic(Alpha), { outcome: "resolved", phoenixId: Alpha });
+        assert.deepEqual(await Available(Alpha, [Bravo]), [{ account_id: Bravo, available: false }], "a pending friend cannot link");
+        AssertRefused(await Invite(Alpha, Bravo, 1), 403);
+
+        assert.equal((await Call("POST", `/friends/api/public/friends/${Bravo}/${Alpha}`, { as: Bravo, raw: "" })).status, 204);
+        for(const [Who, Other, Direction] of [[Alpha, Bravo, "OUTBOUND"], [Bravo, Alpha, "INBOUND"]]){
+            const FreshClient = await ClientOf(Who).Login();
+            assert.deepEqual(await FriendsOf(Who), [{ accountId: Other, status: "ACCEPTED", direction: Direction }]);
+            assert.deepEqual(await FreshClient.ResolveFromEpic(Other), { outcome: "resolved", phoenixId: Other });
+            assert.deepEqual(await Available(Who, [Other]), [{ account_id: Other, available: true }]);
+        }
+
+        const LinkId = AssertOk(await Invite(Alpha, Bravo, 1)).link_id;
+        assert.deepEqual((await Invites(Bravo)).map((Entry) => [Entry.account_id, Entry.direction, Entry.link_id]), [[Alpha, "Received", LinkId]]);
+        assert.equal(AssertOk(await Answer(Bravo, Alpha, "accept", 2)).link_id, LinkId);
+        for(const [Who, Other, Slot] of [[Alpha, Bravo, 1], [Bravo, Alpha, 2]] as const){
+            const Status = AssertOk(await Call("GET", "/slayerlink/status_good", { as: Who }));
+            assert.deepEqual(Status.links.map((Link: any) => [Link.account_id, Link.linked_account_id, Link.slot, Link.link_id]), [[Other, Other, Slot, LinkId]]);
+            assert.deepEqual(Status.invites, []);
+        }
+        AssertOk(await RemoveLink(Alpha, Bravo, 1));
+    });
+
     // from Harmonicrain/Undaunted test/social-friends.test.js:76, rewritten to the client's paths and bodies
     it("a friend is invited, accepts, both see the link, outsiders cannot touch it, and it is removed for both", async () => {
         const John = Player("John"), Manda = Player("Manda"), Todd = Player("Todd");

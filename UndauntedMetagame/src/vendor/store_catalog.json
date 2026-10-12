@@ -25,6 +25,41 @@
   ],
   "webstore": [
     {
+      "id": "store_tutorial_dye_bundle_openbeta",
+      "displayName": "Recruit's Dye",
+      "displayDescription": "Free Recruit's Dye for See What's In Store.",
+      "displayPriority": 4000,
+      "tags": [
+        "webstore",
+        "feature",
+        "your_offers",
+        "dye_armour",
+        "personality_stylekit"
+      ],
+      "platinumPrice": 0,
+      "platinumSalePrice": null,
+      "cellDustPrice": null,
+      "prestigePrice": null,
+      "event01Price": null,
+      "steelMarksPrice": null,
+      "gildedMarksPrice": null,
+      "items": [
+        {
+          "catalogId": "TOKEN_STORE_TUTORIAL_DYE_BUNDLE",
+          "quantity": 1
+        }
+      ],
+      "entitlements": [],
+      "maxAllowed": 1,
+      "remaining": 1,
+      "loadoutSlots": null,
+      "availableFrom": null,
+      "availableTo": null,
+      "timeAvailabilityReason": null,
+      "platformOfferId": null,
+      "missingEntitlementNames": null
+    },
+    {
       "id": "bundle_currency_bounty_small",
       "displayName": "20 Bounty Tokens",
       "displayDescription": "Purchased Bounty Tokens persist into the next season. Free on this private server.",

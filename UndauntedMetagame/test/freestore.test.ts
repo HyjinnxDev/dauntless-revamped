@@ -553,6 +553,25 @@ describe("the catalogue", () => {
 });
 
 describe("over HTTP", () => {
+    it("Recruit's Dye grants the See What's In Store quest item once through the purchase flow", async () => {
+        const A = await MakePlayer();
+        const Sku = "store_tutorial_dye_bundle_openbeta";
+        const Item = "TOKEN_STORE_TUTORIAL_DYE_BUNDLE";
+        const Listed = await Call("GET", "/product/skus/public?requiredTags=webstore", { as: A.UserId });
+        assert.equal(Listed.status, 200);
+        assert.ok(Listed.json.some((Offer: any) => Offer.id === Sku && Offer.platinumPrice === 0 && Offer.remaining === 1));
+
+        const Issued = await Call("GET", `/token/platinum/${Sku}`, { as: A.UserId });
+        assert.equal(Issued.status, 200);
+        const Confirm = () => Call("POST", `/notification/platinum?token=${Issued.json.purchaseToken}`, { as: A.UserId });
+        assert.equal((await Confirm()).status, 204);
+        assert.equal((await Confirm()).status, 204);
+        assert.equal(StackQuantity(A.CharacterId, Item), 1);
+        assert.equal(GetStoreOffer(A.UserId, Sku).remaining, 0);
+        assert.throws(() => Token(A.UserId, Sku), { Status: 409 });
+        assert.equal(GrantKind("TOKEN_STORE_TUTORIAL_PLAT_BUNDLE"), undefined);
+    });
+
     // from Harmonicrain/Undaunted test/free-store.test.js:89
     it("authenticates, ignores asked-for grants and prices, and follows the client's token flow", async () => {
         const A = await MakePlayer();

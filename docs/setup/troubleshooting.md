@@ -56,6 +56,36 @@ Get-Content C:\dr\data\metagame.log -Tail 40 | ForEach-Object { try { ($_ | Conv
 
 ---
 
+## Add Friends does nothing or asks for an Epic Games friend {#add-friends}
+
+The 1.4.4 client keeps Epic's wording, but the client DLL redirects its friend and account requests
+to your metagame. Players enter their **server registration usernames**, not their Epic names.
+Both accounts must exist on the same backend.
+
+Check the deployed metagame settings. Defaults already enable this flow: `MISC_ROUTES` and
+`ACCOUNT_MAPPING` must not be `0`, `ACCOUNTINFO_PUBLIC_LEGACY` must not be `1`, and `SLAYER_LINKS`
+must be enabled for pairing. After an update or a configuration change, restart the metagame and
+fully restart both game clients; the client keeps account mappings and user info for its session.
+
+Reproduce one Add Friends attempt and follow these messages in the metagame log:
+
+1. `EOS Account by name by <A>: <B>`: the server username was found. `not found` means an unknown
+   name, an account on another backend, or a missing valid player token.
+2. `account/mapping by <A>: ... -> 1 of 1 mapped`: the local account mapped successfully.
+3. `accountinfo/public by <A> for <B> -> found`: the target's public account info resolved.
+4. `friends: request by=<A> to=<B> -> requested`: the request is stored. If this says `already_requested`,
+   there is already a pending request; the recipient must log in and accept it.
+
+A cached lookup may skip steps 2 or 3. If no name lookup reaches the backend at all, check that the
+client launched against this backend and loaded the supplied DLLs; see **Client console window** above.
+If the chain stops, record the last completed step and any refusal instead of changing unrelated settings.
+
+The recipient refreshes the list by restarting the game. Expect `friends: list for <B>: ... 1 pending`,
+then `friends: request by=<B> to=<A> -> accepted` after they accept. Refresh both clients again;
+an accepted friend can show under **OFFLINE** without preventing SlayerLink pairing.
+Pairing requires accepted friendship: a pending request is not sufficient. If **My Links** never
+appears or sends a request, report that client behavior separately from friend creation.
+
 ## Port 60000 is taken, and the metagame says "Clear Skies" anyway {#port-60000-is-taken-and-the-metagame-says-clear-skies-anyway}
 
 **Symptom.** The metagame printed that it was listening on port 60000, and `Clear Skies, Slayer.`,

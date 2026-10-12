@@ -185,7 +185,7 @@ const CURRENCY_ALIASES: Record<string, string> = {
     gildedmarks: "marksgilded"
 };
 
-// Which items the store may hand out at all: cosmetics, and the repeatable consumable. Anything else
+// Which items the store may hand out at all: cosmetics, the tutorial quest item, and the repeatable consumable. Anything else
 // (currencies, boosts, weapons proper) is refused even if an offer lists it.
 const COSMETIC_PREFIXES = ["AR_", "WP_", "EM_", "DYE_", "QI_FLARE_", "BNC_FABRIC_", "BNC_STANDARD_", "BNC_SIGIL_", "LT_"];
 
@@ -212,7 +212,8 @@ export function GrantKind(CatalogId: string): "stacked" | "instanced" | undefine
         return SpecialKind;
     }
 
-    if(!REPEATABLE_ITEMS.has(CatalogId) && !COSMETIC_PREFIXES.some((Prefix) => CatalogId.startsWith(Prefix))){
+    // Tutorial_Quests collects this hidden, stackable item, displayed as "free Recruit's Dye" in 1.4.4.
+    if(CatalogId !== "TOKEN_STORE_TUTORIAL_DYE_BUNDLE" && !REPEATABLE_ITEMS.has(CatalogId) && !COSMETIC_PREFIXES.some((Prefix) => CatalogId.startsWith(Prefix))){
         return undefined;
     }
 
