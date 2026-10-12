@@ -16,7 +16,7 @@ test("CDN URLs require HTTPS and contain no credentials or query", () => {
   }
 });
 
-test("CDN resumes without a key or SHA If-Range, accepts R2 ETags, and rejects corrupt bytes", async (t) => {
+test("CDN resumes without a token or SHA If-Range, accepts R2 ETags, and rejects corrupt bytes", async (t) => {
   const cert = makeTestCert();
   const dir = mkdtempSync(path.join(tmpdir(), "dr-cdn-"));
   const data = Buffer.from("verified CDN game bytes");
@@ -24,7 +24,7 @@ test("CDN resumes without a key or SHA If-Range, accepts R2 ETags, and rejects c
   const seen: {range?: string; key?: string; ifRange?: string}[] = [];
   let corrupt = false;
   const server = https.createServer({key: cert.keyPem, cert: cert.certPem}, (req, res) => {
-    seen.push({range: req.headers.range, key: req.headers["x-undaunted-user-api-key"] as string, ifRange: req.headers["if-range"] as string});
+    seen.push({range: req.headers.range, key: req.headers.authorization as string, ifRange: req.headers["if-range"] as string});
     assert.equal(req.url, "/build/game.bin");
     const start = Number(/^bytes=(\d+)-$/.exec(req.headers.range ?? "")?.[1] ?? 0);
     const body = Buffer.from(data.subarray(start));
@@ -37,7 +37,7 @@ test("CDN resumes without a key or SHA If-Range, accepts R2 ETags, and rejects c
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address() as {port: number};
-  const opts = {endpoint: {host: "127.0.0.1", port: 1, pin: null}, key: "must-not-reach-CDN", installDir: dir, files: [file], downloadBaseUrl: `https://127.0.0.1:${address.port}/build/`, maxAttempts: 1};
+  const opts = {endpoint: {host: "127.0.0.1", port: 1, pin: "0".repeat(64)}, auth: async () => "must-not-reach-CDN", installDir: dir, files: [file], downloadBaseUrl: `https://127.0.0.1:${address.port}/build/`, maxAttempts: 1};
   try {
     // A self-signed CDN is rejected by default, unlike the invite's separately pinned gateway.
     await assert.rejects(new DownloadJob(opts).run());

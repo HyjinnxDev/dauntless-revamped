@@ -7,18 +7,18 @@ import newsBadge from "./brand/news-badge.svg";
 import { buildScene } from "./scene";
 import { isStringKey, translate, type StringKey } from "../shared/i18n";
 import { localized, PATRONS, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, type CreditPerson, type CreditRole } from "../shared/credits";
-import { parseInvite } from "../shared/invite";
-import { checkUsername, extractAccountKey } from "../shared/username";
-import { exposureKey, graphicsKey, primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
+import { isTailnetHost, parseInvite } from "../shared/invite";
+import { checkUsername, isValidPassword } from "../shared/username";
+import { primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
 import { formatBytes, formatDate, formatDuration, formatRunningTime } from "../shared/format";
 import { sortInstances, type InstanceKind, type ServerStatus, type StatusInstance } from "../shared/status";
-import { EXPOSURE_MODES, GAME_LANGUAGES, GRAPHICS_PRESETS, LANGUAGES, type Branding, type ExposureMode, type ExternalTarget, type GameLanguage, type GraphicsPreset, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
+import { GAME_LANGUAGES, LANGUAGES, type Branding, type ExternalTarget, type GameLanguage, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
 
-type View = "play" | "news" | "server" | "settings" | "mods" | "credits";
-const VIEWS: readonly View[] = ["play", "news", "server", "settings", "mods", "credits"];
+type View = "play" | "news" | "server" | "settings" | "credits";
+const VIEWS: readonly View[] = ["play", "news", "server", "settings", "credits"];
 type Modal =
-  | { kind: "invite"; link: string; name: string; host: string; mode: "public" | "private"; fp: string | null }
-  // A public invite whose certificate is not the one this PC's key for that server belongs to.
+  | { kind: "invite"; link: string; name: string; host: string; tailnet: boolean; fp: string }
+  // An invite whose certificate is not the one this PC's sign-in for that server belongs to.
   | { kind: "cert_changed"; link: string; name: string; host: string; oldFp: string | null; newFp: string }
   | { kind: "logout" }
   | { kind: "leave" }
@@ -37,7 +37,8 @@ const state = {
   inviteText: "",
   revealed: new Set<string>(), // streamer mode: the values shown with the eye, until the launcher closes
   username: "",
-  keyFormOpen: false,
+  password: "",
+  signIn: false, // the account page shows "Sign in" instead of "Create account"
   existingFormOpen: false,
   news: [] as NewsItem[],
   newsSeen: false,
@@ -92,14 +93,17 @@ const usernameInput = h("input", {
 });
 const usernameHint = h("div", { class: "hint", id: "username-hint", "aria-live": "polite" });
 
-const keyInput = h("input", {
-  class: "input",
-  id: "key-input",
+const passwordInput = h("input", {
+  class: "input input-big",
+  id: "password-input",
   type: "password",
+  maxlength: 256,
   spellcheck: "false",
   autocomplete: "off",
-  "data-fk": "key",
+  "data-fk": "password",
+  "aria-describedby": "password-hint",
 });
+const passwordHint = h("div", { class: "hint", id: "password-hint", "aria-live": "polite" });
 
 // "I already have the game files": a path to paste (Vvoidddd, #8). The main process checks it again.
 const existingGameInput = h("input", {
@@ -140,10 +144,15 @@ usernameInput.addEventListener("keydown", (e) => {
     void onPrimary();
   }
 });
-keyInput.addEventListener("keydown", (e) => {
+passwordInput.addEventListener("input", () => {
+  state.password = passwordInput.value;
+  updatePasswordFeedback();
+  renderActionBar();
+});
+passwordInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
-    void useKey();
+    void onPrimary();
   }
 });
 
@@ -156,7 +165,9 @@ function clearInviteInput(): void {
 function formState() {
   return {
     inviteValid: parseInvite(state.inviteText).ok,
-    usernameValid: checkUsername(state.username.trim()) === "ok",
+    usernameValid: state.signIn ? state.username.trim().length > 0 : checkUsername(state.username.trim()) === "ok",
+    passwordValid: state.signIn ? state.password.length > 0 : isValidPassword(state.password),
+    signIn: state.signIn,
   };
 }
 
@@ -169,10 +180,11 @@ function shortFingerprint(fp: string): string {
   return `${groupedFingerprint(fp.slice(0, 16))}…`;
 }
 
-function modeBadge(mode: "public" | "private"): HTMLElement {
-  return mode === "public"
-    ? h("span", { class: "badge badge-public" }, icon("shield"), t("mode_public"))
-    : h("span", { class: "badge badge-private" }, icon("tunnel"), t("mode_private"));
+// Every server is reached over pinned TLS; the badge says whether that goes through Tailscale.
+function modeBadge(tailnet: boolean): HTMLElement {
+  return tailnet
+    ? h("span", { class: "badge badge-private" }, icon("tunnel"), t("mode_private"))
+    : h("span", { class: "badge badge-public" }, icon("shield"), t("mode_public"));
 }
 
 function updateInviteFeedback(): void {
@@ -196,12 +208,12 @@ function updateInviteFeedback(): void {
         { class: "preview-text" },
         h("div", { class: "preview-name" }, r.invite.name),
         h("div", { class: "preview-host" }, secret(`${r.invite.host}:${r.invite.port}`, "invite-host")),
-        r.invite.fp ? h("div", { class: "preview-host mono" }, t("link_fingerprint", { fp: hideText(shortFingerprint(r.invite.fp)) })) : null,
+        h("div", { class: "preview-host mono" }, t("link_fingerprint", { fp: hideText(shortFingerprint(r.invite.fp)) })),
       ),
-      h("span", {}, modeBadge(r.invite.mode)),
+      h("span", {}, modeBadge(isTailnetHost(r.invite.host))),
     );
     inviteHint.className = "hint hint-ok";
-    inviteHint.replaceChildren(t(r.invite.mode === "public" ? "join_ok_public" : "join_ok_private"));
+    inviteHint.replaceChildren(t(isTailnetHost(r.invite.host) ? "join_ok_private" : "join_ok_public"));
   } else {
     invitePreview.hidden = true;
     inviteInput.setAttribute("aria-invalid", "true");
@@ -217,6 +229,18 @@ function updateUsernameFeedback(): void {
   else usernameHint.replaceChildren(tk(`reg_check_${check}`));
   if (check !== "ok" && state.username.length > 0) usernameInput.setAttribute("aria-invalid", "true");
   else usernameInput.removeAttribute("aria-invalid");
+  // Signing in takes any existing username (or the email of an older account): no live check.
+  if (state.signIn) {
+    usernameHint.className = "hint";
+    usernameHint.replaceChildren();
+    usernameInput.removeAttribute("aria-invalid");
+  }
+}
+
+function updatePasswordFeedback(): void {
+  const ok = isValidPassword(state.password);
+  passwordHint.className = state.signIn || state.password.length === 0 ? "hint" : ok ? "hint hint-ok" : "hint hint-bad";
+  passwordHint.replaceChildren(state.signIn ? "" : ok ? t("reg_password_ok") : t("reg_password_rule"));
 }
 
 // ------------------------------------------------------------------ streamer mode
@@ -309,8 +333,11 @@ function open(target: ExternalTarget): void {
 
 function errorText(e: LauncherError): string {
   switch (e.code) {
-    case 'account_banned':
-      return `You are banned from this server. Reason: ${e.detail || 'Contact support for details.'} You can appeal in Discord.`;
+    case "account_banned":
+      return e.detail ? `${t("err_account_banned")} ${e.detail}` : t("err_account_banned");
+    case "bad_request":
+      // The server's own explanation ("Password must be at least 8 characters.") is the useful part.
+      return e.detail ? e.detail : t("err_bad_request");
     case "invite_invalid_format":
       return e.detail ? tk(`invite_err_${e.detail}`) : t("err_invite_invalid_format");
     case "username_invalid":
@@ -320,10 +347,11 @@ function errorText(e: LauncherError): string {
     case "relay_port_busy":
       return t("err_relay_port_busy", { port: e.detail && /^\d+$/.test(e.detail) ? e.detail : "61000" });
     case "server_unreachable":
-      return t(state.snap?.server?.mode === "public" ? "err_server_unreachable_public" : "err_server_unreachable");
-    case 'launch_failed':
-    case 'windows_runtime_missing':
-      return `${tk(`err_${e.code}`)}${e.detail ? ` ${e.detail}` : ''}`;
+      return t(state.snap?.server?.tailnet ? "err_server_unreachable" : "err_server_unreachable_public");
+    case "launch_failed":
+    case "runtime_failed":
+    case "manifest_mismatch":
+      return `${tk(`err_${e.code}`)}${e.detail ? ` ${e.detail}` : ""}`;
 
     default:
       return tk(`err_${e.code}`);
@@ -332,22 +360,8 @@ function errorText(e: LauncherError): string {
 
 // ------------------------------------------------------------------ play view
 
-function vcWarning(snap: Snapshot): HTMLElement | null {
-  const vc = snap.install.vcRuntimeMissing;
-  const dx = snap.install.directXMissing ?? [];
-  if (!vc.length && !dx.length) return null;
-  return card('card-warn',
-    ...(vc.length ? [h('h3', {class:'card-title'}, icon('warning'), t('vc_title')),
-      h('p', {class:'card-text'}, t('vc_text', {files:vc.join(', ')})),
-      linkButton(t('vc_button'), () => open('vc_redist'), {icon:'external',fk:'vc'})] : []),
-    ...(dx.length ? [h('h3', {class:'card-title'}, icon('warning'), t('dx_title')),
-      h('p', {class:'card-text'}, t('dx_text', {files:dx.join(', ')})),
-      linkButton(t('dx_button'), () => open('directx_runtime'), {icon:'external',fk:'directx'})] : []),
-  );
-}
-
 function eyebrow(snap: Snapshot): HTMLElement {
-  return h("div", { class: "eyebrow" }, snap.server ? serverName() : t("join_eyebrow"), snap.server ? modeBadge(snap.server.mode) : null);
+  return h("div", { class: "eyebrow" }, snap.server ? serverName() : t("join_eyebrow"), snap.server ? modeBadge(snap.server.tailnet) : null);
 }
 
 function heading(title: string, text: string | null): HTMLElement[] {
@@ -388,7 +402,7 @@ function savedServersCard(snap: Snapshot): HTMLElement | null {
       h(
         "div",
         { class: "settings-row-text" },
-        h("span", { class: "settings-row-title" }, sv.name, " ", modeBadge(sv.mode)),
+        h("span", { class: "settings-row-title" }, sv.name, " ", modeBadge(isTailnetHost(sv.host))),
         h("span", { class: "settings-row-sub mono" }, savedServerSub(sv)),
       ),
       h(
@@ -419,7 +433,7 @@ function playJoin(snap: Snapshot): HTMLElement[] {
 function playConnect(snap: Snapshot): HTMLElement[] {
   const sv = snap.server!;
   const name = serverName();
-  const pub = sv.mode === "public";
+  const pub = !sv.tailnet;
   const lastChecked = snap.connect.lastCheckedAt ? t("connect_last_checked", { time: new Date(snap.connect.lastCheckedAt).toLocaleTimeString(TIME_LOCALES[state.lang]) }) : null;
   const foot = h("div", { class: "card-row" }, lastChecked ? h("span", { class: "hint" }, lastChecked) : null, leaveLink(snap));
   if (snap.connect.checking || (snap.connect.problem === null && snap.connect.lastCheckedAt === null)) {
@@ -436,11 +450,7 @@ function playConnect(snap: Snapshot): HTMLElement[] {
             "ol",
             { class: "steps-list" },
             h("li", {}, h("div", {}, h("div", {}, t("connect_step_install")), linkButton(t("connect_btn_install_ts"), () => open("tailscale_download"), { icon: "external", fk: "ts-dl" }))),
-            h(
-              "li",
-              {},
-              h("div", {}, h("div", {}, t(sv.hasShare ? "connect_step_accept" : "connect_step_accept_nolink")), sv.hasShare ? linkButton(t("connect_btn_accept"), () => open("tailscale_share"), { icon: "external", fk: "ts-share" }) : null),
-            ),
+            h("li", {}, h("div", {}, h("div", {}, t("connect_step_accept_nolink")))),
             h("li", {}, t("connect_step_retry")),
           ),
         ),
@@ -479,22 +489,17 @@ function playConnect(snap: Snapshot): HTMLElement[] {
   }
 }
 
-async function useKey(): Promise<void> {
-  const key = extractAccountKey(keyInput.value);
-  if (!key) {
-    state.localError = { code: "key_invalid" };
-    renderBanners();
-    return;
-  }
-  const r = await api.useExistingKey(key);
-  if (r.ok) {
-    keyInput.value = "";
-    state.keyFormOpen = false;
-    state.localError = null;
-  } else if (!state.snap?.lastError) {
-    state.localError = r.error;
-  }
-  renderAll();
+// Switches the account page between "Create account" and "Sign in". The typed name stays.
+function toggleSignIn(): void {
+  state.signIn = !state.signIn;
+  state.password = "";
+  passwordInput.value = "";
+  passwordInput.setAttribute("autocomplete", state.signIn ? "current-password" : "new-password");
+  updateUsernameFeedback();
+  updatePasswordFeedback();
+  renderPlay();
+  renderActionBar();
+  usernameInput.focus();
 }
 
 async function useExistingPath(): Promise<void> {
@@ -546,58 +551,50 @@ function existingGameCard(snap: Snapshot): HTMLElement {
   );
 }
 
+// Create an account (with the invite code) or sign in to one made before.
 function playRegister(snap: Snapshot): HTMLElement[] {
   const name = serverName();
-  const out: HTMLElement[] = [eyebrow(snap), ...heading(t("reg_title"), t("reg_text", { name }))];
-  if (snap.lastError?.code === "key_rejected") {
+  const out: HTMLElement[] = [eyebrow(snap), ...heading(t(state.signIn ? "signin_title" : "reg_title"), t(state.signIn ? "signin_text" : "reg_text", { name }))];
+  if (snap.lastError?.code === "session_expired") {
     out.push(card("card-warn", h("h3", { class: "card-title" }, icon("key"), t("reg_rejected_title")), h("p", { class: "card-text" }, t("reg_rejected", { name }))));
   }
-  if (snap.status?.registration === "NONE") {
-    out.push(card("card-warn", h("h3", { class: "card-title" }, icon("warning"), t("reg_closed_title")), h("p", { class: "card-text" }, t("reg_closed"))));
+  if (snap.lastError?.code === "approval_pending") {
+    out.push(card("card-warn", h("h3", { class: "card-title" }, icon("info"), t("reg_pending_title")), h("p", { class: "card-text" }, t("reg_pending", { name }))));
   }
-  const keyForm = state.keyFormOpen
-    ? h(
-        "div",
-        { class: "field" },
-        h("label", { class: "field-label", for: "key-input" }, t("reg_key_label")),
-        keyInput,
-        h("div", { class: "card-row" }, button(t("reg_key_use"), () => void useKey(), { cls: "btn-primary", icon: "key", fk: "key-use", disabled: snap.busy }), button(t("reg_key_file"), () => void api.importKeyFile(), { icon: "folder", fk: "key-file", disabled: snap.busy })),
-        h("p", { class: "small-print" }, t("reg_key_note")),
-      )
-    : null;
   out.push(
     card(
       "",
       h(
         "div",
         { class: "field" },
-        h("label", { class: "field-label", for: "username-input" }, t("reg_label")),
+        h("label", { class: "field-label", for: "username-input" }, t(state.signIn ? "signin_label" : "reg_label")),
         usernameInput,
         usernameHint,
       ),
       h(
-        "p",
-        { class: `small-print reg-invite${snap.server?.hasPendingInvite ? " included" : ""}` },
-        icon(snap.server?.hasPendingInvite ? "check" : "info"),
-        snap.server?.hasPendingInvite ? t("reg_invite_included") : t("reg_invite_missing"),
+        "div",
+        { class: "field" },
+        h("label", { class: "field-label", for: "password-input" }, t("reg_password_label")),
+        passwordInput,
+        passwordHint,
       ),
+      state.signIn
+        ? null
+        : h(
+            "p",
+            { class: `small-print reg-invite${snap.server?.hasPendingInvite ? " included" : ""}` },
+            icon(snap.server?.hasPendingInvite ? "check" : "info"),
+            snap.server?.hasPendingInvite ? t("reg_invite_included") : t("reg_invite_missing"),
+          ),
     ),
-    card(
-      "",
-      linkButton(state.keyFormOpen ? t("reg_have_key_hide") : t("reg_have_key"), () => {
-        state.keyFormOpen = !state.keyFormOpen;
-        renderPlay();
-        if (state.keyFormOpen) keyInput.focus();
-      }, { icon: "key", fk: "key-toggle" }),
-      keyForm,
-    ),
+    card("", linkButton(t(state.signIn ? "reg_need_account" : "reg_have_account"), toggleSignIn, { icon: "key", fk: "signin-toggle" })),
   );
   return out;
 }
 
 function playInstall(snap: Snapshot): HTMLElement[] {
   const name = serverName();
-  const pub = snap.server?.mode === "public";
+  const pub = snap.server?.tailnet !== true;
   const low = snap.install.freeBytes !== null && snap.install.freeBytes < snap.install.requiredBytes;
   const out: HTMLElement[] = [eyebrow(snap), ...heading(t("install_title"), t(pub ? "install_text_public" : "install_text", { name }))];
   out.push(
@@ -620,15 +617,13 @@ function playInstall(snap: Snapshot): HTMLElement[] {
     ),
   );
   if (!snap.install.contentAvailable) out.push(card("card-warn", h("h3", { class: "card-title" }, icon("warning"), t("install_no_content_title")), h("p", { class: "card-text" }, t("install_no_content"))));
-  const vc = vcWarning(snap);
-  if (vc) out.push(vc);
   out.push(existingGameCard(snap));
   return out;
 }
 
 function playInstalling(snap: Snapshot): HTMLElement[] {
   const kind = state.task?.kind ?? snap.task?.kind ?? "verify";
-  const title = kind === "download" ? t("installing_download_title") : kind === "dlls" ? t("task_dlls") : t("installing_verify_title");
+  const title = kind === "download" ? t("installing_download_title") : kind === "runtime" ? t("task_dlls") : t("installing_verify_title");
   return [eyebrow(snap), ...heading(title, t("task_note"))];
 }
 
@@ -636,8 +631,6 @@ function playUpdate(snap: Snapshot): HTMLElement[] {
   const reason = updateReason(snap);
   const text = reason === "missing" ? t("update_missing", { n: snap.install.missingFiles }) : reason === "unverified" ? t("update_unverified") : t("update_dlls");
   const out: HTMLElement[] = [eyebrow(snap), ...heading(t("update_title"), text)];
-  const vc = vcWarning(snap);
-  if (vc) out.push(vc);
   out.push(existingGameCard(snap));
   return out;
 }
@@ -665,28 +658,16 @@ function newsDock(): HTMLElement | null {
 
 function playReady(snap: Snapshot): HTMLElement[] {
   const user = snap.account.username;
-  const out: HTMLElement[] = [eyebrow(snap), ...heading(user ? t("ready_title", { user }) : t("ready_title_nouser"), t("ready_text"))];
-  if (snap.account.offerBackup) {
-    out.push(
-      card(
-        "card-accent",
-        h("h3", { class: "card-title" }, t("backup_title")),
-        h("p", { class: "card-text" }, t("backup_text")),
-        h("div", { class: "card-row" }, button(t("backup_save"), () => void api.saveKeyBackup(), { cls: "btn-primary", icon: "key", fk: "backup-save" }), button(t("backup_later"), () => void api.dismissBackupOffer(), { fk: "backup-later" })),
-      ),
-    );
-  }
-  const vc = vcWarning(snap);
-  if (vc) out.push(vc);
-  return out;
+  return [eyebrow(snap), ...heading(user ? t("ready_title", { user }) : t("ready_title_nouser"), t("ready_text"))];
 }
 
 function playRunning(snap: Snapshot): HTMLElement[] {
-  const out: HTMLElement[] = [eyebrow(snap), ...heading(t("running_title"), t("running_text"))];
-  if (snap.server?.mode === "public") {
-    out.push(card("card-accent", h("h3", { class: "card-title" }, t("running_public_title")), h("p", { class: "card-text" }, t("running_public_text"))));
-  }
-  return out;
+  // The game always talks to the server through the launcher's relay: keep the launcher open.
+  return [
+    eyebrow(snap),
+    ...heading(t("running_title"), t("running_text")),
+    card("card-accent", h("h3", { class: "card-title" }, t("running_public_title")), h("p", { class: "card-text" }, t("running_public_text"))),
+  ];
 }
 
 function renderPlay(): void {
@@ -707,8 +688,8 @@ function renderPlay(): void {
     snap.settings,
     snap.status?.registration ?? null,
     snap.status?.name ?? null,
-    snap.lastError?.code === "key_rejected",
-    state.keyFormOpen,
+    snap.lastError?.code === "session_expired" || snap.lastError?.code === "approval_pending" ? snap.lastError.code : null,
+    state.signIn,
     state.existingFormOpen,
     state.news.slice(0, 2).map((n) => n.title),
     snap.phase === "installing" ? state.task?.kind ?? snap.task?.kind : null,
@@ -784,7 +765,7 @@ function renderProgress(task: TaskProgress): void {
   const meta: Node[] = [];
   for (const b of bits) if (b) meta.push(h("span", {}, b));
   p.meta.replaceChildren(...meta);
-  p.file.textContent = current && task.kind !== "dlls" ? t("task_current", { file: current }) : "";
+  p.file.textContent = current && task.kind !== "runtime" ? t("task_current", { file: current }) : "";
   p.cancel.textContent = t("task_cancel");
 }
 
@@ -898,10 +879,15 @@ async function onPrimary(): Promise<void> {
       showModal({ kind: "leave" });
       return;
     case "register":
-      result = await api.register(state.username.trim());
+      result = state.signIn ? await api.signIn(state.username.trim(), state.password) : await api.register(state.username.trim(), state.password);
+      // The password leaves the page either way: it is never kept after the attempt.
+      state.password = "";
+      passwordInput.value = "";
+      updatePasswordFeedback();
       if (result.ok) {
         state.username = "";
         usernameInput.value = "";
+        state.signIn = false;
         updateUsernameFeedback();
       }
       break;
@@ -1003,7 +989,7 @@ function renderPanel(): void {
       { class: "sp-head" },
       h("span", { class: "sp-kicker" }, t("sp_title")),
       h("span", { class: "sp-name" }, serverName()),
-      h("div", { class: "sp-state" }, h("span", { class: `dot ${online ? "online" : "offline"}`, "aria-hidden": "true" }), online ? t("sp_online") : t("sp_offline"), modeBadge(snap.server.mode)),
+      h("div", { class: "sp-state" }, h("span", { class: `dot ${online ? "online" : "offline"}`, "aria-hidden": "true" }), online ? t("sp_online") : t("sp_offline"), modeBadge(snap.server.tailnet)),
     );
     // Not reachable, or refused for its certificate: say so instead of "waiting", and do not show
     // an old player list as if it were live.
@@ -1108,49 +1094,6 @@ function renderNews(): void {
   });
 }
 
-// ------------------------------------------------------------------ mods page
-
-// The optional client mods (client-mods/ in the repository, by ZFXSTATIC): what each one does.
-// Information only; the launcher installs them and the in-game Mod Menu switches them.
-const MODS: readonly { icon: IconName; name: StringKey; text: StringKey; use: StringKey }[] = [
-  { icon: "puzzle", name: "mod_cst_name", text: "mod_cst_text", use: "mod_cst_use" },
-  { icon: "heart", name: "mod_bhb_name", text: "mod_bhb_text", use: "mod_bhb_use" },
-  { icon: "hunt", name: "mod_trk_name", text: "mod_trk_text", use: "mod_trk_use" },
-  { icon: "settings", name: "mod_menu_name", text: "mod_menu_text", use: "mod_menu_use" },
-];
-
-function renderMods(): void {
-  renderRegion($("#view-mods"), state.lang, () => [
-    h("div", { class: "page mods-page" },
-      h("h1", { class: "page-title", id: "mods-title" }, t("nav_mods")),
-      h("p", { class: "page-sub" }, t("mods_subtitle")),
-      card(
-        "mods-author",
-        h("span", { class: "badge mods-badge" }, t("mods_badge")),
-        h("h2", { class: "mods-title" }, t("mods_title")),
-        h("p", { class: "card-text mods-intro" }, t("mods_intro")),
-        h("div", { class: "mods-grid" },
-          ...MODS.map((m) =>
-            h("div", { class: "mod-card" },
-              h("span", { class: "mod-by" }, t("mods_by")),
-              h("strong", { class: "mod-name" }, icon(m.icon), t(m.name)),
-              h("span", { class: "mod-text" }, t(m.text)),
-              h("span", { class: "mod-use" }, t(m.use)),
-            ),
-          ),
-        ),
-      ),
-      card("",
-        h("h2", { class: "card-title" }, icon("info"), t("mods_notes_title")),
-        h("p", { class: "card-text" }, t("mods_note_local")),
-        h("p", { class: "card-text" }, t("mods_note_settings")),
-        h("p", { class: "small-print" }, t("mods_note_windows")),
-      ),
-      h("p", { class: "small-print mods-credit" }, t("mods_credit")),
-    ),
-  ]);
-}
-
 // ------------------------------------------------------------------ server page
 
 function renderServer(): void {
@@ -1166,9 +1109,9 @@ function renderServer(): void {
     const status = snap.status;
     const rows: [string, Node | string][] = [
       [t("server_address"), secret(`${sv.host}:${sv.port}`, "server-address", "mono")],
-      [t("server_connection"), sv.mode === "public" ? t("server_connection_public") : t("server_connection_private")],
+      [t("server_connection"), sv.tailnet ? t("server_connection_private") : t("server_connection_public")],
+      [t("server_fingerprint"), secret(groupedFingerprint(sv.fingerprint), "server-fp", "fingerprint")],
     ];
-    if (sv.fingerprint) rows.push([t("server_fingerprint"), secret(groupedFingerprint(sv.fingerprint), "server-fp", "fingerprint")]);
     if (status) {
       rows.push([t("server_registration"), status.registration ? tk(`reg_mode_${status.registration}`) : "–"]);
       rows.push([t("server_version"), [status.version, status.commit].filter(Boolean).join(" · ") || "–"]);
@@ -1335,54 +1278,19 @@ function renderSettings(): void {
   renderRegion(container, sig, () => {
     const busy = snap.busy || snap.task !== null || snap.game.running;
 
-    const select = dropdown<GraphicsPreset>({
-      id: "gfx-select",
-      fk: "gfx",
-      value: snap.settings.graphics,
-      options: GRAPHICS_PRESETS.map((g) => ({ value: g, label: t(graphicsKey(g)) })),
-      onChange: (graphics) => void api.setSettings({ graphics }),
-    });
-
-    // Auto exposure (roadmap 4.17): "game" by default; "basic" is the opt-in experiment for the airship.
-    const exposure = dropdown<ExposureMode>({
-      id: "exposure-select",
-      fk: "exposure",
-      value: snap.settings.exposure,
-      options: EXPOSURE_MODES.map((m) => ({ value: m, label: t(exposureKey(m)) })),
-      onChange: (exposure) => void api.setSettings({ exposure }),
-    });
-
     const windowed = h("button", { type: "button", class: "switch", role: "switch", "aria-checked": snap.settings.windowed ? "true" : "false", "aria-labelledby": "windowed-label", "data-fk": "windowed" });
     onToggle(windowed, (on) => void api.setSettings({ windowed: on }));
-
-    type HuntRegion = 'auto' | 'main' | 'aus' | 'ger' | 'us';
-    const huntRegion = dropdown<HuntRegion>({
-      id: 'hunt-region',
-      fk: 'hunt-region',
-      value: snap.settings.huntRegion ?? 'auto',
-      options: [{ value: 'auto', label: t('region_auto') }, { value: 'main', label: t('region_main') }, { value: 'aus', label: t('region_aus') }, { value: 'ger', label: t('region_ger') }, { value: 'us', label: t('region_us') }],
-      onChange: (huntRegion) => void api.setSettings({ huntRegion }),
-      disabled: busy,
-    });
 
     const game = card(
       "settings-section",
       h("h2", { class: "card-title" }, t("set_game")),
-      infoRow(h("label", { class: "settings-row-title", for: "hunt-region" }, t("set_region")), t("set_region_text"), huntRegion),
       settingsRow(
         t("set_folder"),
         secret(snap.install.dir, "install-dir"),
         button(t("set_change_folder"), () => void api.chooseInstallDir(), { icon: "folder", fk: "set-dir", disabled: busy }),
         button(t("set_open_folder"), () => void api.openGameFolder(), { fk: "set-open" }),
       ),
-      settingsRow(t("set_repair"), t("set_repair_text"), button(t("set_repair_button"), () => void api.repair(), { icon: "refresh", fk: "set-repair", disabled: busy || !snap.server || !snap.account.hasKey })),
-    );
-
-    const graphics = card(
-      "settings-section",
-      h("h2", { class: "card-title" }, t("set_graphics")),
-      infoRow(h("label", { class: "settings-row-title", for: "gfx-select" }, t("set_graphics_level")), t("set_graphics_text"), select),
-      infoRow(h("label", { class: "settings-row-title", for: "exposure-select" }, t("set_exposure")), t("set_exposure_text"), exposure),
+      settingsRow(t("set_repair"), t("set_repair_text"), button(t("set_repair_button"), () => void api.repair(), { icon: "refresh", fk: "set-repair", disabled: busy || !snap.server || !snap.account.signedIn })),
       infoRow(h("span", { class: "settings-row-title", id: "windowed-label" }, t("set_windowed")), t("set_windowed_help"), windowed),
     );
 
@@ -1392,7 +1300,7 @@ function renderSettings(): void {
       b.addEventListener("click", () => void api.setSettings({ language: l }));
       langRow.appendChild(b);
     }
-    // The game's own text language: every language the 1.4.4 client has text for, by its own name.
+    // The game's own text language, by its own name.
     const gameLanguage = dropdown<GameLanguage>({
       id: "game-language-select",
       fk: "game-language",
@@ -1411,25 +1319,16 @@ function renderSettings(): void {
     const account = card(
       "settings-section",
       h("h2", { class: "card-title" }, t("set_account")),
-      snap.server && snap.account.hasKey
+      snap.server && snap.account.signedIn
         ? settingsRow(
             t("set_signed_in", { user: snap.account.username ?? "?", name: serverName() }),
             t("set_key_note"),
-            button(t("set_backup"), () => void api.saveKeyBackup(), { icon: "key", fk: "set-backup" }),
             button(t("set_logout"), () => showModal({ kind: "logout" }), { cls: "btn-danger", fk: "set-logout", disabled: busy }),
           )
         : settingsRow(t("set_not_signed"), null),
       snap.server ? settingsRow(t("set_server_current"), h("span", {}, `${serverName()} (`, secret(`${snap.server.host}:${snap.server.port}`, "server-address"), ")"), button(t("set_add_server"), () => showModal({ kind: "leave" }), { fk: "set-leave", disabled: busy })) : null,
     );
 
-    // The DLL keeps its log window hidden; players who troubleshoot can bring it back.
-    const showConsole = h("button", { type: "button", class: "switch", role: "switch", "aria-checked": snap.settings.showConsole ? "true" : "false", "aria-labelledby": "console-label", "data-fk": "show-console" });
-    onToggle(showConsole, (on) => void api.setSettings({ showConsole: on }));
-    const troubleshooting = card(
-      "settings-section",
-      h("h2", { class: "card-title" }, t("set_troubleshooting")),
-      infoRow(h("span", { class: "settings-row-title", id: "console-label" }, t("set_show_console")), t("set_show_console_text"), showConsole),
-    );
     // Other servers joined before: switch to one, or take it off the list (its key stays on this PC).
     const otherServers = snap.savedServers.some((sv) => !sv.current)
       ? card(
@@ -1474,8 +1373,8 @@ function renderSettings(): void {
       snap.app.updateReady ? h("div", { class: "card-row" }, button(t("update_restart"), () => void api.installUpdate(), { cls: "btn-primary", fk: "about-update", disabled: snap.game.running })) : null,
     );
 
-    // One scrolling drawer: game, graphics, account, then the launcher's own options.
-    return [h("div", { class: "page page-wide" }, h("h1", { class: "page-title", id: "settings-title" }, t("set_title")), h("div", { class: "settings-layout" }, h("div", { class: "settings-panel", id: "settings-panel" }, game, graphics, account, otherServers, language, troubleshooting, streaming, about)))];
+    // One scrolling drawer: game, account, then the launcher's own options.
+    return [h("div", { class: "page page-wide" }, h("h1", { class: "page-title", id: "settings-title" }, t("set_title")), h("div", { class: "settings-layout" }, h("div", { class: "settings-panel", id: "settings-panel" }, game, account, otherServers, language, streaming, about)))];
   });
 }
 
@@ -1626,7 +1525,7 @@ function renderCredits(): void {
 function renderBanners(): void {
   const container = $("#banners");
   const snap = state.snap;
-  const error = snap?.lastError && snap.lastError.code !== "cancelled" && !(snap.phase === "register" && snap.lastError.code === "key_rejected") ? snap.lastError : state.localError;
+  const error = snap?.lastError && snap.lastError.code !== "cancelled" && !(snap.phase === "register" && (snap.lastError.code === "session_expired" || snap.lastError.code === "approval_pending")) ? snap.lastError : state.localError;
   const sig = JSON.stringify([state.lang, error, snap?.notice ?? null, snap?.app.updateReady ?? false, snap?.game.running ?? false]);
   renderRegion(container, sig, () => {
     const out: HTMLElement[] = [];
@@ -1677,7 +1576,6 @@ function renderBanners(): void {
 const NAV: { view: View; icon: IconName; key: StringKey }[] = [
   { view: "news", icon: "news", key: "nav_news" },
   { view: "server", icon: "server", key: "nav_server" },
-  { view: "mods", icon: "puzzle", key: "nav_mods" },
 ];
 
 function menuAction(label: string, onClick: () => void, fk: string, disabled = false): HTMLButtonElement {
@@ -1708,7 +1606,7 @@ function renderRail(): void {
     }),
   );
   const chip = $("#account-chip");
-  const user = snap?.account.hasKey ? snap.account.username : null;
+  const user = snap?.account.signedIn ? snap.account.username : null;
   // With other servers saved, the chip is also the server switcher: a click lists them, one more click joins.
   const others = snap?.savedServers.filter((sv) => !sv.current) ?? [];
   const locked = !snap || snap.busy || snap.task !== null || snap.game.running;
@@ -1803,7 +1701,7 @@ function applyStaticI18n(): void {
   for (const el of Array.from(document.querySelectorAll<HTMLImageElement>("img[data-i18n-alt]"))) el.alt = tk(el.dataset.i18nAlt ?? "");
   inviteInput.placeholder = t("join_placeholder");
   usernameInput.placeholder = t("reg_placeholder");
-  keyInput.placeholder = t("reg_key_placeholder");
+  passwordInput.placeholder = t("reg_password_placeholder");
   existingGameInput.placeholder = t("install_existing_placeholder");
   $("#win-max").setAttribute("aria-label", t(state.maximized ? "window_restore" : "window_maximize"));
   $("#github-btn").title = t("github_link");
@@ -1820,7 +1718,6 @@ function renderAll(): void {
   if (state.view === "server") renderServer();
   if (state.view === "settings") renderSettings();
   if (state.view === "credits") renderCredits();
-  if (state.view === "mods") renderMods();
   renderActionBar();
   renderPanel();
   renderHeroStatus();
@@ -1864,8 +1761,8 @@ function renderModal(): void {
   switch (m.kind) {
     case "invite":
       title = t("link_title", { name: m.name });
-      text = [h("p", { class: "modal-text" }, t("link_text", { name: m.name, host: hideText(m.host) })), h("div", {}, modeBadge(m.mode))];
-      if (m.fp) text.push(h("p", { class: "modal-text mono" }, t("link_fingerprint", { fp: hideText(shortFingerprint(m.fp)) })));
+      text = [h("p", { class: "modal-text" }, t("link_text", { name: m.name, host: hideText(m.host) })), h("div", {}, modeBadge(m.tailnet))];
+      text.push(h("p", { class: "modal-text mono" }, t("link_fingerprint", { fp: hideText(shortFingerprint(m.fp)) })));
       if (state.snap?.server) text.push(h("p", { class: "modal-text" }, t("link_switch_note")));
       confirmLabel = t("link_join");
       onConfirm = async () => {
@@ -2013,10 +1910,10 @@ async function inviteModal(link: string): Promise<Modal | null> {
   if (!r.ok) return null;
   const inv = r.invite;
   const check = await api.checkInvite(link);
-  if (check.ok && check.certificateChanged && inv.fp) {
+  if (check.ok && check.certificateChanged) {
     return { kind: "cert_changed", link, name: inv.name, host: inv.host, oldFp: check.previousFingerprint, newFp: inv.fp };
   }
-  return { kind: "invite", link, name: inv.name, host: inv.host, mode: inv.mode, fp: inv.fp };
+  return { kind: "invite", link, name: inv.name, host: inv.host, tailnet: isTailnetHost(inv.host), fp: inv.fp };
 }
 
 async function checkInviteLink(): Promise<void> {
@@ -2073,7 +1970,7 @@ function startArt(): void {
 
 async function loadExtras(snap: Snapshot): Promise<void> {
   if (!snap.server || snap.phase === "join" || snap.phase === "connect") return;
-  const key = `${snap.server.mode}|${snap.server.host}:${snap.server.port}`;
+  const key = `${snap.server.host}:${snap.server.port}`;
   const empty = state.news.length === 0 && state.branding.backgrounds.length === 0;
   if (key === state.extrasFor && !(empty && Date.now() - state.extrasAt > 5000)) return;
   const changedServer = key !== state.extrasFor;

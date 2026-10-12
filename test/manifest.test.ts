@@ -41,7 +41,9 @@ test("rejects broken manifests", () => {
     { ...base, files: [{ path: "a", size: -1, sha256: "a".repeat(64) }], totalBytes: -1 },
     { ...base, files: [{ path: "a", size: 1.5, sha256: "a".repeat(64) }], totalBytes: 1.5 },
     { ...base, files: [{ path: "a", size: 1, sha256: "A".repeat(64) }], totalBytes: 1 },
-    { ...base, files: [{ path: "Archon/Binaries/Win64/dxgi.dll", size: 1, sha256: "a".repeat(64) }], totalBytes: 1 },
+    // The server's runtime files are never game files.
+    { ...base, files: [{ path: "Archon/Binaries/Win64/MysticParadox.dll", size: 1, sha256: "a".repeat(64) }], totalBytes: 1 },
+    { ...base, files: [{ path: "Archon/Binaries/Win64/winmm.dll", size: 1, sha256: "a".repeat(64) }], totalBytes: 1 },
   ];
   for (const c of cases) assert.equal(validateManifest(c, TEST_BUILD, false).ok, false, JSON.stringify(c)?.slice(0, 100));
 });

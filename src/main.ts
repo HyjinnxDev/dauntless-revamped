@@ -1,4 +1,4 @@
-// Dauntless Forever Launcher - Electron main process.
+// Dauntless Forever 1.14.7 Launcher - Electron main process.
 //
 // Security model: the renderer is sandboxed, has no Node access and no network access at all
 // (every request is made here, in the main process, and only to the host from the invite). It can
@@ -13,17 +13,10 @@ import { updateElectronApp, UpdateSourceType } from "update-electron-app";
 import { Controller, type Platform } from "./main/controller";
 import { GAME_MANIFEST, GAME_MANIFEST_FINGERPRINT, GAME_MANIFEST_PROBLEM } from "./main/game-manifest";
 import { findRunningClients } from "./main/launch";
-import { LinuxRuntimeMissingError, prepareLinuxGameLaunch } from "./main/linux-runtime";
-import {
-  linuxDependencyInstallPlan,
-  repairLinuxDesktopEnvironment,
-  runLinuxDependencyInstall,
-} from "./main/linux-dependencies";
-import { findLinuxUpdate, installLinuxUpdate, type LinuxUpdate } from "./main/linux-updater";
 import { findTailscale } from "./main/system";
 import { describeError, log, logToFile } from "./main/log";
 import { boundedString, externalTarget, isTrustedPageUrl, relayPortOverride, settingsPatch } from "./main/ipc-validate";
-import { INVITE_SCHEME, LEGACY_INVITE_SCHEME, parseInvite } from "./shared/invite";
+import { INVITE_SCHEME, parseInvite } from "./shared/invite";
 import { IPC, type Snapshot, type TaskProgress } from "./shared/types";
 import { systemLanguage, translate } from "./shared/i18n";
 import { APP_ID, SQUIRREL_NAME, UPDATE_FEED_URL } from "./main/constants";
@@ -31,22 +24,11 @@ import { APP_ID, SQUIRREL_NAME, UPDATE_FEED_URL } from "./main/constants";
 // Squirrel install / update / uninstall events: create or remove shortcuts, then quit.
 if (started) app.quit();
 
-// Repair a stripped desktop environment (for example when launched by a helper) before Chromium
-// chooses its Linux password-store backend. GNOME-family desktops use Secret Service/libsecret.
-const linuxDesktop = repairLinuxDesktopEnvironment();
-if (
-  process.platform === "linux" &&
-  linuxDesktop.forceGnomeLibsecret &&
-  !process.argv.some((arg) => arg.startsWith("--password-store="))
-) {
-  app.commandLine.appendSwitch("password-store", "gnome-libsecret");
-}
-
 // Every renderer runs in the Chromium sandbox, whatever a window's own options say.
 app.enableSandbox();
 if (process.argv.includes("--safe-mode")) app.disableHardwareAcceleration();
 nativeTheme.themeSource = "dark";
-app.setAppUserModelId(process.platform === "win32" && app.isPackaged ? `com.squirrel.${SQUIRREL_NAME}.${SQUIRREL_NAME}` : APP_ID);
+app.setAppUserModelId(app.isPackaged ? `com.squirrel.${SQUIRREL_NAME}.${SQUIRREL_NAME}` : APP_ID);
 
 // Art from the host's art pack is served to the renderer through this app-internal scheme.
 protocol.registerSchemesAsPrivileged([{ scheme: "dr-art", privileges: { standard: true, secure: true } }]);
@@ -64,45 +46,16 @@ let mainWindow: BrowserWindow | null = null;
 let controller: Controller | null = null;
 let pendingInviteLink: string | null = null;
 let quitting = false;
-let linuxUpdate: LinuxUpdate | null = null;
 
 function resourcesDir(): string {
   return app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), "assets");
-}
-
-async function ensureLinuxSecureStorageDependency(): Promise<boolean> {
-  if (process.platform !== "linux" || safeStorage.isEncryptionAvailable()) return false;
-  const backend = safeStorage.getSelectedStorageBackend();
-  log.warn(`secure storage unavailable (backend ${backend})`);
-  if (
-    !app.isPackaged ||
-    process.env.DAUNTLESS_REVIVED_AUTO_INSTALL === "0" ||
-    process.env.DAUNTLESS_REVIVED_STORAGE_BOOTSTRAPPED === "1"
-  ) {
-    return false;
-  }
-
-  const plan = linuxDependencyInstallPlan("secure-storage");
-  if (!plan) return false;
-  log.info(`installing Linux secure-storage dependencies with ${plan.name}`);
-  try {
-    await runLinuxDependencyInstall(plan);
-    log.info("Linux secure-storage dependencies installed; restarting launcher");
-    process.env.DAUNTLESS_REVIVED_STORAGE_BOOTSTRAPPED = "1";
-    app.relaunch();
-    app.exit(0);
-    return true;
-  } catch (e) {
-    log.error(`secure-storage dependency install failed: ${describeError(e)}`);
-    return false;
-  }
 }
 
 // ------------------------------------------------------------------ invite links
 
 function inviteFromArgv(argv: string[]): string | null {
   for (const arg of argv) {
-    if (typeof arg === "string" && [INVITE_SCHEME, LEGACY_INVITE_SCHEME].some((scheme) => arg.toLowerCase().startsWith(`${scheme}:`))) {
+    if (typeof arg === "string" && arg.toLowerCase().startsWith(`${INVITE_SCHEME}:`)) {
       return parseInvite(arg).ok ? arg.trim() : null;
     }
   }
@@ -117,9 +70,9 @@ function deliverInviteLink(link: string | null): void {
 
 function registerProtocolClient(): void {
   if (!app.isPackaged) return; // a dev build must not take over the scheme
-  // Squirrel keeps a stub exe one folder up that always starts the newest version on Windows.
+  // Squirrel keeps a stub exe one folder up that always starts the newest version.
   const stub = path.resolve(path.dirname(process.execPath), "..", path.basename(process.execPath));
-  const target = process.platform === "win32" && existsSync(stub) ? stub : process.execPath;
+  const target = existsSync(stub) ? stub : process.execPath;
   if (!app.setAsDefaultProtocolClient(INVITE_SCHEME, target, [])) log.warn("could not register the invite link handler");
 }
 
@@ -167,16 +120,16 @@ function createWindow(): void {
   window.webContents.on("render-process-gone", (_event, details) => {
     log.error(`launcher renderer stopped: ${details.reason}`);
     if (!process.argv.includes("--safe-mode") && !controller?.relayActive) {
-      app.relaunch({args: [...process.argv.slice(1), "--safe-mode"]});
+      app.relaunch({ args: [...process.argv.slice(1), "--safe-mode"] });
       app.exit(0);
     } else {
-      dialog.showErrorBox("Dauntless Forever could not open", "The launcher renderer stopped. Reinstall the latest launcher and send the launcher logs to support.");
+      dialog.showErrorBox("Dauntless Forever could not open", "The launcher renderer stopped. Reinstall the latest launcher and send the launcher logs to your host.");
     }
   });
   mainWindow.on("maximize", () => mainWindow?.webContents.send(IPC.windowState, true));
   mainWindow.on("unmaximize", () => mainWindow?.webContents.send(IPC.windowState, false));
 
-  // In public mode the launcher carries the game's connection. Closing it would cut the game off,
+  // The launcher carries the game's connection to the server. Closing it would cut the game off,
   // so ask first.
   mainWindow.on("close", (event) => {
     if (quitting || !controller?.relayActive || !mainWindow) return;
@@ -204,7 +157,7 @@ function createWindow(): void {
   const loaded = DEV_SERVER_URL ? mainWindow.loadURL(DEV_SERVER_URL) : mainWindow.loadFile(RENDERER_INDEX);
   void loaded.catch((error) => {
     log.error(`launcher page failed: ${describeError(error)}`);
-    dialog.showErrorBox("Dauntless Forever could not open", "The launcher page could not load. Reinstall the latest launcher. Your account and game files are kept.");
+    dialog.showErrorBox("Dauntless Forever could not open", "The launcher page could not load. Reinstall the latest launcher. Your sign-in and game files are kept.");
   });
 }
 
@@ -299,17 +252,16 @@ function registerIpc(c: Controller): void {
   handle(IPC.forgetServer, () => c.forgetServer());
   handle(IPC.switchServer, (_e, id) => (typeof id === "string" && /^[0-9a-f]{24}$/.test(id) ? c.switchServer(id) : { ok: false, error: { code: "invite_invalid_format" } }));
   handle(IPC.removeSavedServer, (_e, id) => (typeof id === "string" && /^[0-9a-f]{24}$/.test(id) ? c.removeSavedServer(id) : { ok: false, error: { code: "invite_invalid_format" } }));
-  handle(IPC.register, (_e, username) => {
-    const s = boundedString(username, 32);
-    return s === null ? { ok: false, error: { code: "username_invalid" } } : c.register(s);
+  handle(IPC.register, (_e, username, password) => {
+    const u = boundedString(username, 32);
+    const p = boundedString(password, 256);
+    return u === null || p === null ? { ok: false, error: { code: "username_invalid" } } : c.register(u, p);
   });
-  handle(IPC.useExistingKey, (_e, text) => {
-    const s = boundedString(text, 8192);
-    return s === null ? { ok: false, error: { code: "key_invalid" } } : c.useExistingKey(s);
+  handle(IPC.signIn, (_e, identifier, password) => {
+    const u = boundedString(identifier, 254);
+    const p = boundedString(password, 256);
+    return u === null || p === null ? { ok: false, error: { code: "login_failed" } } : c.signIn(u, p);
   });
-  handle(IPC.importKeyFile, () => c.importKeyFile());
-  handle(IPC.saveKeyBackup, () => c.saveKeyBackup());
-  handle(IPC.dismissBackupOffer, () => c.dismissBackupOffer());
   handle(IPC.chooseInstallDir, () => c.chooseInstallDir());
   handle(IPC.useExistingGameFolder, () => c.useExistingGameFolder());
   handle(IPC.useExistingGamePath, (_e, value) => {
@@ -363,16 +315,11 @@ function makePlatform(): Platform {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
   };
   const localAppData = process.env.LOCALAPPDATA ?? path.join(app.getPath("home"), "AppData", "Local");
-  const defaultInstallDir =
-    process.platform === "linux" ? path.join(app.getPath("home"), "Games", "DauntlessForever") : path.join(localAppData, "DauntlessForever", "Game");
-  const relayPort = relayPortOverride(process.env.DAUNTLESS_REVIVED_RELAY_PORT);
+  const relayPort = relayPortOverride(process.env.DAUNTLESS_FOREVER_RELAY_PORT);
   if (relayPort !== undefined) log.warn(`relay port overridden to ${relayPort}`);
   return {
     userDataDir: app.getPath("userData"),
-    documentsDir: app.getPath("documents"),
-    resourcesDir: resourcesDir(),
-    defaultInstallDir,
-    hostPlatform: process.platform,
+    defaultInstallDir: path.join(localAppData, "DauntlessForever1147", "Game"),
     appVersion: app.getVersion(),
     packaged: app.isPackaged,
     defaultLanguage: systemLanguage(app.getLocale()),
@@ -394,23 +341,6 @@ function makePlatform(): Platform {
       });
       return r.canceled || r.filePaths.length !== 1 ? null : r.filePaths[0];
     },
-    chooseSaveFile: async (defaultName) => {
-      if (!mainWindow) return null;
-      const r = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: path.join(app.getPath("documents"), defaultName),
-        filters: [{ name: "Text", extensions: ["txt"] }],
-        properties: ["dontAddToRecent", "showOverwriteConfirmation"],
-      });
-      return r.canceled || !r.filePath ? null : r.filePath;
-    },
-    chooseOpenFile: async () => {
-      if (!mainWindow) return null;
-      const r = await dialog.showOpenDialog(mainWindow, {
-        filters: [{ name: "Text", extensions: ["txt"] }],
-        properties: ["openFile", "dontAddToRecent"],
-      });
-      return r.canceled || r.filePaths.length !== 1 ? null : r.filePaths[0];
-    },
     openExternal: (url) => shell.openExternal(url),
     openPath: async (dir) => {
       await shell.openPath(dir);
@@ -419,28 +349,10 @@ function makePlatform(): Platform {
     emitProgress: (p) => send(IPC.progress, p),
     findTailscale: () => findTailscale(process.env, existsSync, process.platform),
     findRunningClients: () => findRunningClients(process.platform),
-    prepareGameLaunch:
-      process.platform === "linux"
-        ? async () => {
-            try {
-              return await prepareLinuxGameLaunch(
-                app.getPath("userData"),
-                process.env,
-                app.getPath("home"),
-                { autoInstallRuntime: app.isPackaged },
-              );
-            } catch (e) {
-              if (e instanceof LinuxRuntimeMissingError) return null;
-              throw e;
-            }
-          }
-        : undefined,
     installUpdate: () => {
-      if (app.isPackaged && process.platform === "win32") {
+      if (app.isPackaged) {
         quitting = true;
         autoUpdater.quitAndInstall();
-      } else if (app.isPackaged && process.platform === "linux" && linuxUpdate) {
-        void installLinuxUpdate(linuxUpdate).then(() => { quitting = true; app.quit(); }).catch((e) => log.error(`update: Linux install failed: ${describeError(e)}`));
       }
     },
   };
@@ -466,13 +378,7 @@ if (!started) {
     app.whenReady().then(async () => {
       Menu.setApplicationMenu(null);
       logToFile(path.join(app.getPath("userData"), "logs"));
-      log.info(`Dauntless Forever Launcher ${app.getVersion()} starting`);
-      if (process.platform === "linux") {
-        log.info(
-          `secure storage backend ${safeStorage.getSelectedStorageBackend()}, encryption ${safeStorage.isEncryptionAvailable() ? "available" : "unavailable"}`,
-        );
-        if (await ensureLinuxSecureStorageDependency()) return;
-      }
+      log.info(`Dauntless Forever 1.14.7 Launcher ${app.getVersion()} starting`);
       if (GAME_MANIFEST) log.info(`game manifest ${GAME_MANIFEST.files.length} files, fingerprint ${GAME_MANIFEST_FINGERPRINT}`);
       else log.error(`compiled-in game manifest is not usable: ${GAME_MANIFEST_PROBLEM}`);
 
@@ -483,20 +389,7 @@ if (!started) {
       createWindow();
       await controller.init();
 
-      if (app.isPackaged && process.platform === "linux") {
-        const check = async () => {
-          try {
-            linuxUpdate = await findLinuxUpdate();
-            if (linuxUpdate) controller?.setUpdateReady();
-          } catch (e) {
-            log.warn(`update: Linux check failed: ${describeError(e)}`);
-          }
-        };
-        void check();
-        setInterval(() => void check(), 60 * 60 * 1000).unref();
-      }
-
-      if (app.isPackaged && process.platform === "win32") {
+      if (app.isPackaged && process.platform === "win32" && UPDATE_FEED_URL) {
         updateElectronApp({
           updateSource: { type: UpdateSourceType.StaticStorage, baseUrl: UPDATE_FEED_URL },
           updateInterval: "1 hour",
@@ -507,7 +400,7 @@ if (!started) {
       }
     }).catch((error) => {
       log.error(`launcher startup failed: ${describeError(error)}`);
-      dialog.showErrorBox("Dauntless Forever could not open", `Startup failed. Send the launcher logs to support.\n${describeError(error)}`);
+      dialog.showErrorBox("Dauntless Forever could not open", `Startup failed. Send the launcher logs to your host.\n${describeError(error)}`);
       app.exit(1);
     });
 

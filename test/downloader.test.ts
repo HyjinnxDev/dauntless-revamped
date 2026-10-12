@@ -1,4 +1,4 @@
-// Download / verify / resume against a local fake content server on 127.0.0.1:62012.
+// Download / verify / resume against a local fake content server on 127.0.0.1:62012 (pinned TLS).
 import { test, before, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -8,15 +8,17 @@ import { DownloadError, DownloadJob, fileUrlPath, SpeedMeter, type DownloadProgr
 import { validateManifest, type GameManifest } from "../src/main/manifest";
 import { verifyInstall, VerifiedCache } from "../src/main/verify";
 import { CONTENT_PORT, FakeContentServer, makeFiles, manifestFor, TEST_BUILD, type FakeFile } from "./fakes";
+import { makeTestCert, type TestCert } from "./certs";
 
-const KEY = "UUK_" + "c".repeat(48);
+const KEY = "acc-download-test";
+const cert: TestCert = makeTestCert();
 const files = makeFiles();
 const manifest: GameManifest = (() => {
   const r = validateManifest(manifestFor(files), TEST_BUILD, false);
   if (!r.ok) throw new Error(r.reason);
   return r.manifest;
 })();
-const endpoint = { host: "127.0.0.1", port: CONTENT_PORT, pin: null };
+const endpoint = { host: "127.0.0.1", port: CONTENT_PORT, pin: cert.fingerprint };
 let server: FakeContentServer;
 let dir: string;
 
@@ -29,7 +31,7 @@ function target(p: string): string {
 }
 
 function job(extra: Partial<ConstructorParameters<typeof DownloadJob>[0]> = {}) {
-  return new DownloadJob({ endpoint, key: KEY, installDir: dir, files: manifest.files, backoffMs: () => 20, progressIntervalMs: 20, ...extra });
+  return new DownloadJob({ endpoint, auth: async () => KEY, installDir: dir, files: manifest.files, backoffMs: () => 20, progressIntervalMs: 20, ...extra });
 }
 
 function assertInstalled(): void {
@@ -42,11 +44,12 @@ function assertInstalled(): void {
 
 before(async () => {
   server = new FakeContentServer({ key: KEY, files });
-  await server.start();
+  await server.start(CONTENT_PORT, { cert: cert.certPem, key: cert.keyPem });
 });
 
 after(async () => {
   await server.stop();
+  cert.cleanup();
 });
 
 beforeEach(() => {
@@ -209,10 +212,10 @@ test("a server that ignores Range still works (the file restarts from zero)", as
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("a wrong key stops everything with key_rejected", async () => {
+test("a refused token stops everything with session_expired", async () => {
   await assert.rejects(
-    new DownloadJob({ endpoint, key: "UUK_" + "d".repeat(48), installDir: dir, files: manifest.files, backoffMs: () => 10 }).run(),
-    (e: unknown) => e instanceof DownloadError && e.code === "key_rejected",
+    new DownloadJob({ endpoint, auth: async () => "acc-wrong", installDir: dir, files: manifest.files, backoffMs: () => 10 }).run(),
+    (e: unknown) => e instanceof DownloadError && e.code === "session_expired",
   );
   rmSync(dir, { recursive: true, force: true });
 });

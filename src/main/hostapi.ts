@@ -1,162 +1,245 @@
-// Calls to the host's metagame (contracts 2 and 3) and content server (contract 4).
-// The account key is sent only in the x-undaunted-user-api-key header, only to the invite's host
-// (in public mode only over the TLS connection pinned to the invite's certificate fingerprint):
-// GetUserInfo, ServerStatus (for the player list) and the content downloads.
+// Calls to the invite's server: the Mystic Paradox backend's launcher API (/launcher/v1/*) and its
+// content routes (/content/v1/*). Every request goes over the TLS connection pinned to the invite's
+// certificate (http.ts). Passwords, refresh tokens and access tokens go nowhere else.
 
 import { Endpoint, HttpError, HttpResponse, parseJsonBody, request } from "./http";
-import { parseServerStatus, ServerStatus, cleanText } from "../shared/status";
-import { isPlausibleAccountKey } from "../shared/username";
+import { cleanText } from "../shared/status";
 import type { ErrorCode, NewsItem } from "../shared/types";
-import { CONNECT_TIMEOUT_MS } from "./constants";
+import { CONNECT_TIMEOUT_MS, TARGET_CHANGELIST } from "./constants";
 import { UNSAFE_CHARS_MULTILINE } from "../shared/text";
-import { isPrivateModeHost } from "../shared/invite";
-
-const KEY_HEADER = "x-undaunted-user-api-key";
-
-export async function saveHuntRegion(ep: Endpoint, key: string, region: 'main' | 'aus' | 'ger' | 'us'): Promise<boolean> {
-  const res = await request(ep, '/undaunted/api/HuntRegion', {
-    method:'POST', headers:statusHeaders(ep,key), body:JSON.stringify({region}), timeoutMs:10000,maxBytes:4096
-  });
-  const body = parseJsonBody(res);
-  return res.status === 200 && isObject(body) && body.region === region;
-}
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-// ---------------------------------------------------------------- ServerStatus
-
-export type StatusResult =
-  | { kind: "ok"; status: ServerStatus }
-  | { kind: "unsupported" } // reachable Dauntless Revived / Undaunted server without ServerStatus
-  | { kind: "bad_answer" }
-  | { kind: "cert_mismatch" } // public mode: the certificate is not the one from the invite
-  | { kind: "unreachable" };
-
 function isPin(e: unknown): boolean {
   return e instanceof HttpError && e.kind === "pin";
 }
 
-export interface StatusOptions {
-  // The account key for this server. The server lists who is online only for a registered player;
-  // without a key (or with one it does not accept) it answers the same status with "limited": true.
-  key?: string | null;
-  timeoutMs?: number;
+const bearer = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
+
+// ---------------------------------------------------------------- errors
+
+export type ApiFailure = { ok: false; error: ErrorCode; detail?: string };
+
+// The backend answers errors as { error: { code, message } } (security/launcherErrors.ts).
+const CODE_MAP: Record<string, ErrorCode> = {
+  AUTH_INVALID_CREDENTIALS: "login_failed",
+  AUTH_DISPLAY_NAME_TAKEN: "username_taken",
+  AUTH_EMAIL_TAKEN: "email_taken",
+  AUTH_INVITE_INVALID: "invite_invalid",
+  AUTH_VALIDATION_FAILED: "bad_request",
+  AUTH_RATE_LIMITED: "rate_limited",
+  AUTH_ACCOUNT_BANNED: "account_banned",
+  AUTH_ACCOUNT_DISABLED: "account_banned",
+  AUTH_APPROVAL_PENDING: "approval_pending",
+  AUTH_APPROVAL_REJECTED: "account_banned",
+  AUTH_REFRESH_INVALID: "session_expired",
+  AUTH_UNAUTHORIZED: "session_expired",
+  GAME_BUILD_UNSUPPORTED: "game_files_invalid",
+  RUNTIME_BUILD_UNSUPPORTED: "runtime_rejected",
+  AUTH_CHANNEL_MISMATCH: "runtime_rejected",
+  AUTH_TESTER_REQUIRED: "runtime_rejected",
+};
+
+export function apiFailure(res: HttpResponse): ApiFailure {
+  const body = parseJsonBody(res);
+  const e = isObject(body) && isObject(body.error) ? body.error : null;
+  const code = e && typeof e.code === "string" ? CODE_MAP[e.code] : undefined;
+  const detail = e ? cleanText(e.message, 200) ?? undefined : undefined;
+  if (code) return { ok: false, error: code, detail };
+  if (res.status === 429) return { ok: false, error: "rate_limited" };
+  return { ok: false, error: "server_error", detail };
 }
 
-// The key goes only where every other key-carrying request goes: to the invite's host, over the TLS
-// connection pinned to the invite's certificate (public mode) or plain HTTP inside the tailnet or
-// to this PC (private mode, which request() enforces as well). Never to the legacy fallback below.
-function statusHeaders(ep: Endpoint, key: string | null | undefined): Record<string, string> {
-  if (!isPlausibleAccountKey(key)) return {};
-  if (ep.pin === null && !isPrivateModeHost(ep.host)) return {};
-  return { [KEY_HEADER]: key };
+function networkFailure(e: unknown): ApiFailure {
+  return { ok: false, error: isPin(e) ? "cert_mismatch" : "server_unreachable" };
 }
 
-export async function fetchServerStatus(ep: Endpoint, opts: StatusOptions = {}): Promise<StatusResult> {
-  const timeoutMs = opts.timeoutMs ?? CONNECT_TIMEOUT_MS;
+// ---------------------------------------------------------------- status
+
+export type StatusResult =
+  | { kind: "ok" } // a Mystic Paradox backend for this game build
+  | { kind: "bad_answer" }
+  | { kind: "cert_mismatch" } // the certificate is not the one from the invite
+  | { kind: "unreachable" };
+
+export async function fetchServerStatus(ep: Endpoint, timeoutMs = CONNECT_TIMEOUT_MS): Promise<StatusResult> {
   let res: HttpResponse;
   try {
-    res = await request(ep, "/undaunted/api/ServerStatus", { headers: statusHeaders(ep, opts.key), timeoutMs, maxBytes: 1024 * 1024 });
+    res = await request(ep, "/launcher/v1/status", { timeoutMs, maxBytes: 64 * 1024 });
   } catch (e) {
     return isPin(e) ? { kind: "cert_mismatch" } : { kind: "unreachable" };
   }
-  if (res.status === 200) {
-    const status = parseServerStatus(parseJsonBody(res));
-    return status ? { kind: "ok", status } : { kind: "bad_answer" };
-  }
-  if (res.status === 404) {
-    // An older metagame: still a real server if /dauntless-status answers like one.
-    try {
-      const legacy = await request(ep, "/dauntless-status", { timeoutMs, maxBytes: 64 * 1024 });
-      const body = parseJsonBody(legacy);
-      if (legacy.status === 200 && isObject(body) && "show-status" in body) return { kind: "unsupported" };
-    } catch (e) {
-      return isPin(e) ? { kind: "cert_mismatch" } : { kind: "unreachable" };
-    }
-  }
-  return { kind: "bad_answer" };
+  const body = parseJsonBody(res);
+  if (res.status !== 200 || !isObject(body) || body.supportedBuildChangelist !== TARGET_CHANGELIST) return { kind: "bad_answer" };
+  // online:false = the server's database is down: reachable, but nothing will work yet.
+  return body.online === true ? { kind: "ok" } : { kind: "unreachable" };
 }
 
-// ---------------------------------------------------------------- Register / GetUserInfo
+// ---------------------------------------------------------------- accounts
 
-export type RegisterResult = { ok: true; key: string } | { ok: false; error: ErrorCode; message?: string };
+export interface Device {
+  deviceId: string;
+  deviceName: string;
+}
 
-export async function registerAccount(ep: Endpoint, username: string, inviteCode: string): Promise<RegisterResult> {
+export interface Session {
+  accessToken: string;
+  refreshToken: string;
+  userId: string;
+  username: string;
+}
+
+export type SessionResult = { ok: true; session: Session } | ApiFailure;
+
+function parseSession(res: HttpResponse): SessionResult {
+  const body = parseJsonBody(res);
+  if (!isObject(body) || typeof body.accessToken !== "string" || typeof body.refreshToken !== "string" || !isObject(body.account)) {
+    return { ok: false, error: "server_error" };
+  }
+  const { displayName, userId } = body.account;
+  if (typeof displayName !== "string" || !/^[A-Za-z0-9]{3,16}$/.test(displayName)) return { ok: false, error: "server_error" };
+  if (typeof userId !== "string" || !/^[A-Za-z0-9-]{1,64}$/.test(userId)) return { ok: false, error: "server_error" };
+  if (body.accessToken.length > 4096 || !/^[0-9a-f]{64}$/.test(body.refreshToken)) return { ok: false, error: "server_error" };
+  return { ok: true, session: { accessToken: body.accessToken, refreshToken: body.refreshToken, userId, username: displayName } };
+}
+
+async function postSession(ep: Endpoint, path: string, body: Record<string, unknown>): Promise<SessionResult> {
   let res: HttpResponse;
   try {
-    res = await request(ep, "/undaunted/api/Register", {
+    res = await request(ep, path, { method: "POST", body: JSON.stringify(body), timeoutMs: 20000, maxBytes: 64 * 1024 });
+  } catch (e) {
+    return networkFailure(e);
+  }
+  // 202 = registered but waiting for the host's approval (no invite code, or none accepted).
+  if (res.status === 202) return { ok: false, error: "approval_pending" };
+  return res.status === 200 ? parseSession(res) : apiFailure(res);
+}
+
+export function registerAccount(ep: Endpoint, a: { username: string; password: string; inviteCode: string | null } & Device): Promise<SessionResult> {
+  return postSession(ep, "/launcher/v1/auth/register", {
+    displayName: a.username,
+    password: a.password,
+    ...(a.inviteCode ? { inviteCode: a.inviteCode } : {}),
+    deviceId: a.deviceId,
+    deviceName: a.deviceName,
+  });
+}
+
+// identifier: a username, or the email of an account made with one.
+export function login(ep: Endpoint, a: { identifier: string; password: string } & Device): Promise<SessionResult> {
+  return postSession(ep, "/launcher/v1/auth/login", { email: a.identifier, password: a.password, deviceId: a.deviceId, deviceName: a.deviceName });
+}
+
+// Refresh tokens rotate: the answer carries a new one, and the old one is dead from then on.
+export function refreshSession(ep: Endpoint, refreshToken: string, device: Device): Promise<SessionResult> {
+  return postSession(ep, "/launcher/v1/auth/refresh", { refreshToken, ...device });
+}
+
+export async function logout(ep: Endpoint, accessToken: string): Promise<void> {
+  await request(ep, "/launcher/v1/auth/logout", { method: "POST", headers: bearer(accessToken), body: "{}", timeoutMs: 5000, maxBytes: 4096 }).catch(() => undefined);
+}
+
+// ---------------------------------------------------------------- game session
+
+export interface RuntimeArtifact {
+  name: string;
+  sha256: string;
+}
+
+export type ExchangeResult = { ok: true; exchangeCode: string } | ApiFailure;
+
+// A one-time code (60 s) the game trades for its game token. The server checks the exe hash and the
+// exact runtime release this launcher installed.
+export async function requestGameSession(
+  ep: Endpoint,
+  accessToken: string,
+  g: { executableSha256: string; runtimeVersion: string; runtimeArtifacts: RuntimeArtifact[] },
+): Promise<ExchangeResult> {
+  let res: HttpResponse;
+  try {
+    res = await request(ep, "/launcher/v1/game-sessions", {
       method: "POST",
-      body: JSON.stringify({ Username: username, InviteCode: inviteCode }),
-      timeoutMs: 20000,
+      headers: bearer(accessToken),
+      body: JSON.stringify({
+        buildChangelist: TARGET_CHANGELIST,
+        executableSha256: g.executableSha256,
+        runtimeChannel: "stable",
+        runtimeManifestVersion: g.runtimeVersion,
+        runtimeArtifacts: g.runtimeArtifacts,
+      }),
+      timeoutMs: 15000,
       maxBytes: 64 * 1024,
     });
   } catch (e) {
-    return { ok: false, error: isPin(e) ? "cert_mismatch" : "server_unreachable" };
+    return networkFailure(e);
   }
+  if (res.status !== 200) return apiFailure(res);
   const body = parseJsonBody(res);
-  const serverError = isObject(body) && typeof body.error === "string" ? body.error : null;
-  const message = isObject(body) ? cleanText(body.message, 200) ?? undefined : undefined;
-  switch (res.status) {
-    case 200: {
-      const key = isObject(body) ? body.UUK : undefined;
-      if (!isPlausibleAccountKey(key)) return { ok: false, error: "server_error" };
-      return { ok: true, key };
-    }
-    case 400:
-      if (serverError === "username_invalid" || serverError === "registration_closed" || serverError === "bad_request") {
-        return { ok: false, error: serverError, message };
-      }
-      return { ok: false, error: "bad_request", message };
-    case 401:
-      return { ok: false, error: "invite_invalid" };
-    case 409:
-      return { ok: false, error: "username_taken" };
-    case 413:
-    case 429:
-      return { ok: false, error: "rate_limited" };
-    default:
-      return { ok: false, error: "server_error" };
-  }
+  const code = isObject(body) && typeof body.exchangeCode === "string" ? body.exchangeCode : "";
+  return /^[A-Za-z0-9_-]{16,256}$/.test(code) ? { ok: true, exchangeCode: code } : { ok: false, error: "server_error" };
 }
 
-export interface UserInfo {
-  userId: string;
-  username: string;
-  isAdmin: boolean;
+// ---------------------------------------------------------------- runtime (MysticParadox.dll + winmm.dll)
+
+export interface RuntimeFile {
+  name: string;
+  sha256: string;
+  path: string; // where to download it on this server
 }
 
-export type UserInfoResult =
-  | { ok: true; info: UserInfo }
-  | { ok: false; error: "account_banned" | "key_rejected" | "server_unreachable" | "server_error" | "cert_mismatch" | "rate_limited"; detail?: string };
+export interface RuntimeRelease {
+  version: string;
+  files: RuntimeFile[];
+}
 
-export async function fetchUserInfo(ep: Endpoint, key: string): Promise<UserInfoResult> {
-  if (!isPlausibleAccountKey(key)) return { ok: false, error: "key_rejected" };
+const RUNTIME_BASE = "/launcher/v1/runtime/client/stable/windows-x86_64";
+const SAFE_NAME = /^[A-Za-z0-9._-]{1,96}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+
+// The published runtime release (ParadoxLauncher/scripts/publish-runtime-update.mjs). Only the core
+// pair is installed; the server accepts that set without the optional co-op files.
+// ponytail: trusts the release over the pinned connection and checks each file's SHA-256 against it;
+// the Ed25519 signature is not checked (it needs the host's public key in the invite). Add it if
+// runtime files ever come from somewhere other than the invite's own server.
+export function parseRuntimeRelease(raw: unknown): RuntimeRelease | null {
+  if (!isObject(raw) || typeof raw.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version)) return null;
+  if (Number(raw.targetChangelist) !== TARGET_CHANGELIST || typeof raw.sha256 !== "string" || !SHA256.test(raw.sha256)) return null;
+  const files: RuntimeFile[] = [{ name: "MysticParadox.dll", sha256: raw.sha256, path: `${RUNTIME_BASE}/download` }];
+  if (!Array.isArray(raw.extraFiles)) return null;
+  const winmm = raw.extraFiles.find((e) => isObject(e) && typeof e.name === "string" && e.name.toLowerCase() === "winmm.dll");
+  if (!isObject(winmm) || typeof winmm.sha256 !== "string" || !SHA256.test(winmm.sha256) || !SAFE_NAME.test(winmm.name as string)) return null;
+  files.push({ name: "winmm.dll", sha256: winmm.sha256, path: `${RUNTIME_BASE}/extra/winmm.dll` });
+  return { version: raw.version, files };
+}
+
+export async function fetchRuntimeRelease(ep: Endpoint): Promise<RuntimeRelease | ApiFailure> {
   let res: HttpResponse;
   try {
-    res = await request(ep, "/undaunted/api/GetUserInfo", { headers: { [KEY_HEADER]: key }, timeoutMs: 10000, maxBytes: 64 * 1024 });
+    res = await request(ep, RUNTIME_BASE, { timeoutMs: 15000, maxBytes: 256 * 1024 });
   } catch (e) {
-    return { ok: false, error: isPin(e) ? "cert_mismatch" : "server_unreachable" };
+    return networkFailure(e);
   }
-  if (res.status === 403) {
-    const body = parseJsonBody(res);
-    if(isObject(body) && body.error === 'account_banned') return {ok:false,error:'account_banned',detail:cleanText(body.reason,500) ?? 'Contact support for details.'};
-  }
-  if (res.status === 401 || res.status === 403) return { ok: false, error: "key_rejected" };
-  if (res.status === 429) return { ok: false, error: "rate_limited" };
-  if (res.status !== 200) return { ok: false, error: "server_error" };
-  const body = parseJsonBody(res);
-  if (!isObject(body)) return { ok: false, error: "server_error" };
-  const userId = cleanText(body.UserId, 128);
-  const username = cleanText(body.Username, 32);
-  if (userId === null || username === null) return { ok: false, error: "server_error" };
-  return { ok: true, info: { userId, username, isAdmin: body.IsAdmin === true } };
+  if (res.status !== 200) return { ok: false, error: "runtime_unavailable" };
+  return parseRuntimeRelease(parseJsonBody(res)) ?? { ok: false, error: "runtime_unavailable" };
 }
 
-// ---------------------------------------------------------------- Content server
+export const MAX_RUNTIME_BYTES = 64 * 1024 * 1024;
 
-// Public mode: is the host's content server behind the gateway? (HEAD /content/v1/manifest)
+export async function downloadRuntimeFile(ep: Endpoint, file: RuntimeFile): Promise<Buffer | ApiFailure> {
+  let res: HttpResponse;
+  try {
+    res = await request(ep, file.path, { timeoutMs: 120000, maxBytes: MAX_RUNTIME_BYTES });
+  } catch (e) {
+    return networkFailure(e);
+  }
+  return res.status === 200 ? res.body : { ok: false, error: "runtime_unavailable" };
+}
+
+// ---------------------------------------------------------------- content server
+
+// Is game-file download switched on? (HEAD /content/v1/manifest)
 export async function probeContent(ep: Endpoint): Promise<boolean> {
   try {
     const res = await request(ep, "/content/v1/manifest", { method: "HEAD", timeoutMs: 8000, maxBytes: 1024 });
@@ -260,8 +343,4 @@ export async function fetchBrandingImage(ep: Endpoint, urlPath: string): Promise
   } catch {
     return null;
   }
-}
-
-export async function endPlaying(ep:Endpoint,key:string):Promise<void> {
-  await request(ep,'/undaunted/api/PlayingEnded',{method:'POST',headers:statusHeaders(ep,key),timeoutMs:5000,maxBytes:4096});
 }

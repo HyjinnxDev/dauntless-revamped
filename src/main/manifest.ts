@@ -1,12 +1,12 @@
-// The game manifest (shared contract 4): the exact list of Dauntless 1.4.4 files, their sizes and
-// SHA-256 hashes. A copy is compiled into the launcher; the launcher only ever writes files that are
-// in it, and refuses a content server whose manifest is not identical.
+// The game manifest: the exact list of Dauntless 1.14.7 files, their sizes and SHA-256 hashes
+// (scripts/make-game-manifest.mjs). A copy is compiled into the launcher; the launcher only ever
+// writes files that are in it, and refuses a content server whose manifest is not identical.
 
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { EXE_RELATIVE_PATH, PINNED_EXE_SHA256, PINNED_EXE_SIZE, DLL_RELATIVE_PATHS } from "./constants";
+import { EXE_RELATIVE_PATH, PINNED_EXE_SHA256, PINNED_EXE_SIZE, RUNTIME_RELATIVE_PATHS } from "./constants";
 
-export const EXPECTED_BUILD = "dauntless_rel-1.4.4_Shipping_2020-10-28_20-11-15_239827";
+export const EXPECTED_BUILD = "dauntless_rel-1.14.7_Shipping_2024-04-01_14-59-21_647472";
 
 export interface ManifestFile {
   path: string;
@@ -70,7 +70,7 @@ export function validateManifest(raw: unknown, expectedBuild: string = EXPECTED_
     const key = f.path.toLowerCase(); // Windows file names are case-insensitive
     if (seen.has(key)) return { ok: false, reason: `duplicate: ${f.path}` };
     seen.add(key);
-    if (DLL_RELATIVE_PATHS.some((d) => d.toLowerCase() === key)) return { ok: false, reason: `pinned DLL listed: ${f.path}` };
+    if (RUNTIME_RELATIVE_PATHS.some((d) => d.toLowerCase() === key)) return { ok: false, reason: `runtime file listed: ${f.path}` };
     files.push({ path: f.path, size: f.size as number, sha256: f.sha256 });
     sum += f.size as number;
   }
@@ -79,7 +79,7 @@ export function validateManifest(raw: unknown, expectedBuild: string = EXPECTED_
   if (requireGameExe) {
     const exe = files.find((f) => f.path === EXE_RELATIVE_PATH);
     if (!exe || exe.sha256 !== PINNED_EXE_SHA256 || exe.size !== PINNED_EXE_SIZE) {
-      return { ok: false, reason: "game executable is not the pinned 1.4.4 build" };
+      return { ok: false, reason: "game executable is not the pinned 1.14.7 build" };
     }
   }
 

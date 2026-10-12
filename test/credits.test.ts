@@ -165,9 +165,6 @@ test("the credits hold no links and no e-mail addresses", () => {
 test("the page opens links by name only, and community/source controls are in the rail", () => {
   const TARGETS: Record<ExternalTarget, true> = {
     tailscale_download: true,
-    tailscale_share: true,
-    vc_redist: true,
-    directx_runtime: true,
     server_source: true,
     project_source: true,
     project_license: true,
@@ -176,6 +173,7 @@ test("the page opens links by name only, and community/source controls are in th
     revived_contributors: true,
     upstream_source: true,
     upstream_contributors: true,
+    mystic_source: true,
     discord: true,
   };
   const dir = path.join(ROOT, "src", "renderer");

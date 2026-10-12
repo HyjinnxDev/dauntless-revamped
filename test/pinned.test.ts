@@ -1,30 +1,30 @@
-// Public mode without the relay: ServerStatus, Register, GetUserInfo, the content probe and the
-// downloads all go straight to the gateway over TLS pinned to the invite's fingerprint.
-// Ports: 62420 fake metagame (TLS), 62421 fake content server (TLS), 62422 an older metagame
-// (plain HTTP on loopback).
+// Every call to the server goes over TLS pinned to the invite's fingerprint: status, accounts, the
+// runtime release, the content probe and the downloads.
+// Ports: 62420 fake backend (TLS), 62421 fake content server (TLS).
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
-import http from "node:http";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import http from "node:http";
 import { CertificatePinError, pinnedConnect } from "../src/main/pinned";
 import { request, HttpError, type Endpoint } from "../src/main/http";
-import { fetchServerStatus, fetchUserInfo, probeContent, registerAccount } from "../src/main/hostapi";
+import { fetchRuntimeRelease, fetchServerStatus, login, parseRuntimeRelease, probeContent, refreshSession, registerAccount } from "../src/main/hostapi";
 import { DownloadError, DownloadJob } from "../src/main/downloader";
 import { validateManifest, type GameManifest } from "../src/main/manifest";
-import { FakeContentServer, FakeMetagame, makeFiles, manifestFor, TEST_BUILD } from "./fakes";
+import { createServer, FakeContentServer, FakeMystic, makeFiles, manifestFor, TEST_BUILD } from "./fakes";
 import { makeTestCert, type TestCert } from "./certs";
 
 const META_PORT = 62420;
 const CONTENT_TLS_PORT = 62421;
-const LEGACY_PORT = 62422;
-const KEY = "UUK_" + "e".repeat(48);
+const TOKEN = "acc-test";
+const DEVICE = { deviceId: "11111111-1111-4111-8111-111111111111", deviceName: "test" };
 
 let cert: TestCert;
 let other: TestCert;
-let meta: FakeMetagame;
+let mystic: FakeMystic;
+let backend: http.Server;
 let content: FakeContentServer;
 const files = makeFiles();
 const manifest: GameManifest = (() => {
@@ -39,14 +39,17 @@ const contentEp = (pin?: string): Endpoint => ({ host: "127.0.0.1", port: CONTEN
 before(async () => {
   cert = makeTestCert();
   other = makeTestCert();
-  meta = new FakeMetagame({ validCodes: new Set(["GOOD-CODE"]), existingUsers: new Map([["aurora", KEY]]) });
-  await meta.start(META_PORT, { cert: cert.certPem, key: cert.keyPem });
-  content = new FakeContentServer({ key: KEY, files });
+  mystic = new FakeMystic({ inviteCodes: new Set(["GOOD-CODE"]) });
+  mystic.addAccount("Aurora", "aurora-password");
+  backend = createServer((req, res) => mystic.handle(req, res), { cert: cert.certPem, key: cert.keyPem });
+  await new Promise<void>((resolve) => backend.listen(META_PORT, "127.0.0.1", resolve));
+  content = new FakeContentServer({ key: TOKEN, files });
   await content.start(CONTENT_TLS_PORT, { cert: cert.certPem, key: cert.keyPem });
 });
 
 after(async () => {
-  await meta.stop();
+  backend.closeAllConnections();
+  await new Promise<void>((resolve) => backend.close(() => resolve()));
   await content.stop();
   cert.cleanup();
   other.cleanup();
@@ -62,103 +65,66 @@ test("pinnedConnect accepts the pinned certificate and refuses any other", async
   );
 });
 
-test("plain requests over the pin; a mismatch is an HttpError of kind pin", async () => {
-  const res = await request(metaEp(), "/dauntless-status", { timeoutMs: 5000, maxBytes: 65536 });
+test("requests over the pin; a mismatch is an HttpError of kind pin; no pin is no request", async () => {
+  const res = await request(metaEp(), "/launcher/v1/status", { timeoutMs: 5000, maxBytes: 65536 });
   assert.equal(res.status, 200);
   await assert.rejects(
-    request({ ...metaEp(), pin: other.fingerprint }, "/dauntless-status", { timeoutMs: 5000, maxBytes: 65536 }),
+    request({ ...metaEp(), pin: other.fingerprint }, "/launcher/v1/status", { timeoutMs: 5000, maxBytes: 65536 }),
     (e: unknown) => e instanceof HttpError && e.kind === "pin",
   );
-  // A plain-HTTP request to a TLS port is not mistaken for a pin failure.
-  await assert.rejects(request({ ...metaEp(), pin: null }, "/dauntless-status", { timeoutMs: 3000, maxBytes: 65536 }), (e: unknown) => e instanceof HttpError && e.kind !== "pin");
+  await assert.rejects(request({ ...metaEp(), pin: "" }, "/launcher/v1/status", { timeoutMs: 3000, maxBytes: 65536 }), (e: unknown) => e instanceof HttpError && e.kind === "bad_url");
 });
 
-test("ServerStatus: ok over the pin, cert_mismatch with another fingerprint", async () => {
-  const ok = await fetchServerStatus(metaEp());
-  assert.equal(ok.kind, "ok");
-  if (ok.kind === "ok") assert.equal(ok.status.name, "Test Server");
-  const bad = await fetchServerStatus({ ...metaEp(), pin: other.fingerprint });
-  assert.equal(bad.kind, "cert_mismatch");
-  const down = await fetchServerStatus({ host: "127.0.0.1", port: 62429, pin: cert.fingerprint }, { timeoutMs: 2000 });
-  assert.equal(down.kind, "unreachable");
-});
-
-test("ServerStatus: the account key goes along over the pin (full list), never to a mismatching server, never in a malformed shape", async () => {
-  const start = meta.statusCalls.length;
-  const anonymous = await fetchServerStatus(metaEp());
-  assert.ok(anonymous.kind === "ok" && anonymous.status.limited === true && anonymous.status.players.length === 0);
-
-  const full = await fetchServerStatus(metaEp(), { key: KEY });
-  assert.ok(full.kind === "ok");
-  if (full.kind === "ok") {
-    assert.equal(full.status.limited, false);
-    assert.deepEqual(full.status.players.map((p) => p.name), ["Aurora", "Borealis"]);
-    assert.equal(full.status.instances.length, 2);
-  }
-
-  // A key the server does not know: the limited status, not an error.
-  const unknown = await fetchServerStatus(metaEp(), { key: "UUK_" + "1".repeat(48) });
-  assert.ok(unknown.kind === "ok" && unknown.status.limited === true);
-
-  // Not a plausible key: not sent at all.
-  const junk = await fetchServerStatus(metaEp(), { key: "has space\r\nx-evil: 1" });
-  assert.ok(junk.kind === "ok" && junk.status.limited === true);
-
-  assert.deepEqual(meta.statusCalls.slice(start), [
-    { withKey: false, registered: false },
-    { withKey: true, registered: true },
-    { withKey: true, registered: false },
-    { withKey: false, registered: false },
-  ]);
-
-  // Another certificate: refused before any request, so the key never left.
-  const before = meta.statusCalls.length;
-  assert.deepEqual(await fetchServerStatus({ ...metaEp(), pin: other.fingerprint }, { key: KEY }), { kind: "cert_mismatch" });
-  assert.equal(meta.statusCalls.length, before);
-
-  // Plain HTTP to a public address is refused before connecting (a public server is only ever pinned TLS).
-  assert.deepEqual(await fetchServerStatus({ host: "203.0.113.10", port: META_PORT, pin: null }, { key: KEY, timeoutMs: 2000 }), { kind: "unreachable" });
-});
-
-test("ServerStatus: an older server (404) is recognised through /dauntless-status, which never gets the key", async () => {
-  const seen: { url: string; key: unknown }[] = [];
-  const legacy = http.createServer((req, res) => {
-    seen.push({ url: req.url ?? "", key: req.headers["x-undaunted-user-api-key"] });
-    if (req.url === "/dauntless-status") {
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ "show-status": true }));
-      return;
-    }
-    res.writeHead(404);
-    res.end();
-  });
-  await new Promise<void>((resolve) => legacy.listen(LEGACY_PORT, "127.0.0.1", resolve));
+test("status: ok for this game build, cert_mismatch with another fingerprint, bad_answer for another build", async () => {
+  assert.deepEqual(await fetchServerStatus(metaEp()), { kind: "ok" });
+  assert.deepEqual(await fetchServerStatus({ ...metaEp(), pin: other.fingerprint }), { kind: "cert_mismatch" });
+  assert.deepEqual(await fetchServerStatus({ host: "127.0.0.1", port: 62429, pin: cert.fingerprint }, 2000), { kind: "unreachable" });
+  mystic.opts.changelist = 392819;
   try {
-    const r = await fetchServerStatus({ host: "127.0.0.1", port: LEGACY_PORT, pin: null }, { key: KEY });
-    assert.deepEqual(r, { kind: "unsupported" });
-    assert.deepEqual(seen, [
-      { url: "/undaunted/api/ServerStatus", key: KEY },
-      { url: "/dauntless-status", key: undefined },
-    ]);
+    assert.deepEqual(await fetchServerStatus(metaEp()), { kind: "bad_answer" });
   } finally {
-    legacy.closeAllConnections();
-    await new Promise<void>((resolve) => legacy.close(() => resolve()));
+    mystic.opts.changelist = undefined;
   }
 });
 
-test("Register and GetUserInfo over the pin; nothing is sent to a mismatching server", async () => {
-  const before = meta.registrations.length;
-  const refused = await registerAccount({ ...metaEp(), pin: other.fingerprint }, "Borealis", "GOOD-CODE");
+test("register, login and refresh over the pin; nothing is sent to a mismatching server", async () => {
+  const before = mystic.calls.length;
+  const refused = await registerAccount({ ...metaEp(), pin: other.fingerprint }, { username: "Borealis", password: "password123", inviteCode: "GOOD-CODE", ...DEVICE });
   assert.deepEqual(refused, { ok: false, error: "cert_mismatch" });
-  assert.equal(meta.registrations.length, before, "the mismatching server never saw the registration");
-  const r = await registerAccount(metaEp(), "Borealis", "GOOD-CODE");
-  assert.equal(r.ok, true);
+  assert.equal(mystic.calls.length, before, "the mismatching server never saw the password");
+
+  const r = await registerAccount(metaEp(), { username: "Borealis", password: "password123", inviteCode: "GOOD-CODE", ...DEVICE });
+  assert.ok(r.ok);
   if (!r.ok) return;
-  const info = await fetchUserInfo(metaEp(), r.key);
-  assert.equal(info.ok, true);
-  if (info.ok) assert.equal(info.info.username, "Borealis");
-  const wrong = await fetchUserInfo({ ...metaEp(), pin: other.fingerprint }, r.key);
-  assert.deepEqual(wrong, { ok: false, error: "cert_mismatch" });
+  assert.equal(r.session.username, "Borealis");
+  assert.deepEqual(await registerAccount(metaEp(), { username: "borealis", password: "password123", inviteCode: "GOOD-CODE", ...DEVICE }), { ok: false, error: "username_taken", detail: "AUTH_DISPLAY_NAME_TAKEN" });
+  assert.deepEqual(await registerAccount(metaEp(), { username: "Nocode", password: "password123", inviteCode: null, ...DEVICE }), { ok: false, error: "approval_pending" });
+
+  const l = await login(metaEp(), { identifier: "aurora", password: "aurora-password", ...DEVICE });
+  assert.ok(l.ok && l.session.username === "Aurora");
+  assert.deepEqual(await login(metaEp(), { identifier: "aurora", password: "nope", ...DEVICE }), { ok: false, error: "login_failed", detail: "AUTH_INVALID_CREDENTIALS" });
+
+  // A refresh token works once; the same one again is refused (and the server revokes the family).
+  if (!l.ok) return;
+  const r1 = await refreshSession(metaEp(), l.session.refreshToken, DEVICE);
+  assert.ok(r1.ok && r1.session.refreshToken !== l.session.refreshToken);
+  assert.equal((await refreshSession(metaEp(), l.session.refreshToken, DEVICE)).ok, false);
+});
+
+test("the runtime release: only the core pair, downloaded from this server whatever URL the manifest names", async () => {
+  const release = await fetchRuntimeRelease(metaEp());
+  assert.ok("files" in release);
+  if (!("files" in release)) return;
+  assert.equal(release.version, "1.2.3");
+  assert.deepEqual(release.files.map((f) => [f.name, f.path]), [
+    ["MysticParadox.dll", "/launcher/v1/runtime/client/stable/windows-x86_64/download"],
+    ["winmm.dll", "/launcher/v1/runtime/client/stable/windows-x86_64/extra/winmm.dll"],
+  ]);
+  const good = { version: "1.0.0", targetChangelist: 647472, sha256: "a".repeat(64), extraFiles: [{ name: "winmm.dll", sha256: "b".repeat(64) }] };
+  assert.ok(parseRuntimeRelease(good));
+  assert.equal(parseRuntimeRelease({ ...good, targetChangelist: 392819 }), null, "a runtime for another game build");
+  assert.equal(parseRuntimeRelease({ ...good, extraFiles: [] }), null, "no loader");
+  assert.equal(parseRuntimeRelease({ ...good, sha256: "zz" }), null);
 });
 
 test("content probe over the pin", async () => {
@@ -167,7 +133,7 @@ test("content probe over the pin", async () => {
 });
 
 test("downloads over the pin: full install, resume with Range, then verify", async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "dr-dl-tls-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "df-dl-tls-"));
   try {
     content.requests.length = 0;
     const big = "Archon/Content/Paks/pakchunk0-WindowsNoEditor.pak";
@@ -175,7 +141,7 @@ test("downloads over the pin: full install, resume with Range, then verify", asy
     const target = path.join(dir, ...big.split("/"));
     mkdirSync(path.dirname(target), { recursive: true });
     writeFileSync(target + ".part", data.subarray(0, 123_456));
-    await new DownloadJob({ endpoint: contentEp(), key: KEY, installDir: dir, files: manifest.files, backoffMs: () => 20 }).run();
+    await new DownloadJob({ endpoint: contentEp(), auth: async () => TOKEN, installDir: dir, files: manifest.files, backoffMs: () => 20 }).run();
     for (const f of files) {
       const p = path.join(dir, ...f.path.split("/"));
       assert.ok(readFileSync(p).equals(f.data), f.path);
@@ -190,15 +156,32 @@ test("downloads over the pin: full install, resume with Range, then verify", asy
   }
 });
 
+test("downloads stop with session_expired when the sign-in is gone or refused", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "df-dl-tls-"));
+  try {
+    await assert.rejects(
+      new DownloadJob({ endpoint: contentEp(), auth: async () => null, installDir: dir, files: manifest.files, backoffMs: () => 10 }).run(),
+      (e: unknown) => e instanceof DownloadError && e.code === "session_expired",
+    );
+    await assert.rejects(
+      new DownloadJob({ endpoint: contentEp(), auth: async () => "acc-wrong", installDir: dir, files: manifest.files, backoffMs: () => 10 }).run(),
+      (e: unknown) => e instanceof DownloadError && e.code === "session_expired",
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("downloads refuse a server whose certificate does not match, before any request", async () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "dr-dl-tls-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "df-dl-tls-"));
   try {
     content.requests.length = 0;
     await assert.rejects(
-      new DownloadJob({ endpoint: contentEp(other.fingerprint), key: KEY, installDir: dir, files: manifest.files, backoffMs: () => 10 }).run(),
+      new DownloadJob({ endpoint: contentEp(other.fingerprint), auth: async () => TOKEN, installDir: dir, files: manifest.files, backoffMs: () => 10 }).run(),
       (e: unknown) => e instanceof DownloadError && e.code === "cert_mismatch",
     );
-    assert.equal(content.requests.length, 0, "the key never reached the server");
+    // Only requests with this job's valid token count: the previous test's refused requests may still land.
+    assert.equal(content.requests.filter((r) => r.hadKey).length, 0, "the token never reached the server");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

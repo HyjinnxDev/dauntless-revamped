@@ -6,7 +6,7 @@ import path from "node:path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@game-manifest": path.resolve(__dirname, "../UndauntedContent/data/dauntless-1.4.4.json"),
+      "@game-manifest": path.resolve(__dirname, "data/dauntless-1.14.7.json"),
     },
   },
 });

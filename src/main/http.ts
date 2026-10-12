@@ -1,18 +1,16 @@
 // Requests to the host from the invite, and nowhere else. Redirects are never followed, so a
-// request that carries the account key cannot be bounced to another address.
-//
-// Private mode (invite v1): plain HTTP over Tailscale, which encrypts the traffic itself.
-// Public mode (invite v2): HTTP/1.1 over TLS to the server's gateway, pinned to the certificate
-// fingerprint from the invite (see pinned.ts).
+// request that carries the account's credentials cannot be bounced to another address.
+// Always HTTP/1.1 over TLS to the server's backend, pinned to the certificate fingerprint from
+// the invite (see pinned.ts).
 
 import http from "node:http";
-import { isPrivateModeHost, isValidFingerprint, isValidHost } from "../shared/invite";
+import { isValidFingerprint, isValidHost } from "../shared/invite";
 import { isPinError, pinnedCreateConnection, type PinnedTarget } from "./pinned";
 
 export interface Endpoint {
   host: string;
   port: number;
-  pin: string | null; // certificate fingerprint for public mode, null for plain HTTP
+  pin: string; // the certificate fingerprint from the invite
 }
 
 export class HttpError extends Error {
@@ -44,9 +42,7 @@ export function checkEndpoint(ep: Endpoint): void {
   if (!isValidHost(ep.host) || !Number.isInteger(ep.port) || ep.port < 1 || ep.port > 65535) {
     throw new HttpError("bad_url", "invalid endpoint");
   }
-  if (ep.pin !== null && !isValidFingerprint(ep.pin)) throw new HttpError("bad_url", "invalid certificate fingerprint");
-  // Plain HTTP (private mode) only into the tailnet or to this PC; anything else must be pinned TLS.
-  if (ep.pin === null && !isPrivateModeHost(ep.host)) throw new HttpError("bad_url", "plain HTTP only to Tailscale or loopback");
+  if (!isValidFingerprint(ep.pin)) throw new HttpError("bad_url", "invalid certificate fingerprint");
 }
 
 // The URL handed to http.request. For pinned endpoints the TLS socket comes from pinned.ts, so the
@@ -58,14 +54,15 @@ export function endpointUrl(ep: Endpoint, pathAndQuery: string): string {
 }
 
 export function hostHeader(ep: Endpoint): string {
-  return ep.pin !== null && ep.port === 443 ? ep.host : `${ep.host}:${ep.port}`;
+  return ep.port === 443 ? ep.host : `${ep.host}:${ep.port}`;
 }
 
-export function pinnedTarget(ep: Endpoint): PinnedTarget | null {
-  return ep.pin === null ? null : { host: ep.host, port: ep.port, fingerprint: ep.pin };
+export function pinnedTarget(ep: Endpoint): PinnedTarget {
+  return { host: ep.host, port: ep.port, fingerprint: ep.pin };
 }
 
-export function request(ep: Endpoint, pathAndQuery: string, opts: RequestOptions): Promise<HttpResponse> {
+// async: a bad endpoint rejects like any other failure instead of throwing at the call.
+export async function request(ep: Endpoint, pathAndQuery: string, opts: RequestOptions): Promise<HttpResponse> {
   const url = endpointUrl(ep, pathAndQuery);
   const target = pinnedTarget(ep);
   return new Promise((resolve, reject) => {
@@ -82,9 +79,7 @@ export function request(ep: Endpoint, pathAndQuery: string, opts: RequestOptions
       headers["content-type"] = "application/json";
       headers["content-length"] = String(Buffer.byteLength(opts.body));
     }
-    const req = target
-      ? http.request(url, { method: opts.method ?? "GET", headers, createConnection: pinnedCreateConnection(target, opts.timeoutMs) as never })
-      : http.request(url, { method: opts.method ?? "GET", headers, agent: false });
+    const req = http.request(url, { method: opts.method ?? "GET", headers, createConnection: pinnedCreateConnection(target, opts.timeoutMs) as never });
     const timer = setTimeout(() => {
       req.destroy();
       done(() => reject(new HttpError("timeout", "request timed out")));

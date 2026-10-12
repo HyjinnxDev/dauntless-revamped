@@ -1,48 +1,34 @@
 // Fixed values: pinned hashes, file locations and the few public URLs the launcher may open.
 
-export const APP_ID = "io.github.hyjinnxdev.dauntlessforever";
-export const SQUIRREL_NAME = "DauntlessForeverLauncher";
-// Dauntless Forever lives in this fork. When the repository is renamed, change these four lines (GitHub
-// redirects the old name meanwhile).
+export const APP_ID = "io.github.hyjinnxdev.dauntlessforever1147";
+export const SQUIRREL_NAME = "DauntlessForever1147Launcher";
 export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revived";
 export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt";
 export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors";
-// Dauntless Revived, the project Dauntless Forever is a modified version of (AGPL-3.0).
+// Dauntless Revived, the project the Dauntless Forever launcher is a modified version of (AGPL-3.0).
 export const REVIVED_URL = "https://github.com/mixutin/dauntless-revived";
 export const REVIVED_CONTRIBUTORS_URL = "https://github.com/mixutin/dauntless-revived/graphs/contributors";
 // Undaunted, the project Dauntless Revived is in turn a modified version of.
 export const UPSTREAM_URL = "https://github.com/SyST3MDeV/Undaunted";
 export const UPSTREAM_CONTRIBUTORS_URL = "https://github.com/SyST3MDeV/Undaunted/graphs/contributors";
+// Mystic Paradox, the 1.14.7 server and runtime this launcher plays on.
+export const MYSTIC_PARADOX_URL = "https://github.com/pranav158/Mystic-Paradox";
 export const TAILSCALE_DOWNLOAD_URL = "https://tailscale.com/download";
 export const VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
-// Self-update feed: a rolling GitHub release that the release workflow keeps current
-// (update.electronjs.org only reads plain semver tags, and launcher releases are tagged launcher-v*).
-export const UPDATE_FEED_URL = "https://github.com/HyjinnxDev/dauntless-revived/releases/download/launcher-updates";
+// Self-update feed. ponytail: no 1.14.7 release feed exists yet; set this when releases are published.
+export const UPDATE_FEED_URL = "";
 
-// Game layout (paths relative to the folder that contains Archon/).
+// Dauntless 1.14.7 (rel-1.14.7-Archon, CL 647472). Paths are relative to the folder that contains Archon/.
+export const TARGET_CHANGELIST = 647472;
 export const WIN64_RELATIVE_DIR = "Archon/Binaries/Win64";
 export const EXE_NAME = "Dauntless-Win64-Shipping.exe";
 export const EXE_RELATIVE_PATH = `${WIN64_RELATIVE_DIR}/${EXE_NAME}`;
-export const PINNED_EXE_SHA256 = "d3d41e614908d2befd518b27046d9822d6130ef12ba3504babbdb786bef9cff4";
-export const PINNED_EXE_SIZE = 103673520;
+export const PINNED_EXE_SHA256 = "f3f95fbf22709ef077a11632ed95d675b7209b7e0172d9ecb9ba7d02a1fbb66b";
+export const PINNED_EXE_SIZE = 121407264;
 
-export interface PinnedDll {
-  name: string;
-  sha256: string;
-}
-
-// Same pins as friend-kit/play.ps1. The files ship in the launcher's resources.
-export const PINNED_DLLS: readonly PinnedDll[] = [
-  { name: "dxgi.dll", sha256: "9a431d7b6fd20c43fa92bebd91c3bc023ec7a3fcbc52871c41f4df293d4b0d1f" },
-  { name: "UndauntedInternalServer.dll", sha256: "a090e8b25044647ce409b313525501da578d632d3fcb9eb351f020ca94fa64fb" },
-];
-export const DLL_RELATIVE_PATHS = PINNED_DLLS.map((d) => `${WIN64_RELATIVE_DIR}/${d.name}`);
-
-// The server DLL needs the Visual C++ 2015-2022 runtime (x64).
-export const VC_RUNTIME_FILES = ["MSVCP140.dll", "VCRUNTIME140_1.dll"];
-
-// Chat and presence (XMPP): pointed at the host instead of Epic, like friend-kit/play.ps1.
-export const XMPP_PORT = 61099;
+// The Mystic Paradox runtime pair, downloaded from the server (never in the game manifest).
+export const RUNTIME_FILE_NAMES = ["MysticParadox.dll", "winmm.dll"];
+export const RUNTIME_RELATIVE_PATHS = RUNTIME_FILE_NAMES.map((n) => `${WIN64_RELATIVE_DIR}/${n}`);
 
 export const CONNECT_TIMEOUT_MS = 5000;
 export const STATUS_POLL_MS = 15000;

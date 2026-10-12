@@ -13,23 +13,25 @@ import { validateManifest, manifestFingerprint } from "../src/main/manifest";
 import type { InviteError } from "../src/shared/invite";
 import type { UsernameCheck } from "../src/shared/username";
 import type { ErrorCode, NoticeCode, Snapshot } from "../src/shared/types";
-import { EXPOSURE_MODES, LANGUAGES } from "../src/shared/types";
+import { LANGUAGES } from "../src/shared/types";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
 // Records over the union types: the compiler fails this file if a new code is added without text.
 const ERROR_CODES: Record<ErrorCode, true> = {
   account_banned: true,
+  approval_pending: true,
   invite_invalid_format: true,
   invite_invalid: true,
   username_invalid: true,
   username_taken: true,
-  registration_closed: true,
+  email_taken: true,
+  password_invalid: true,
+  login_failed: true,
+  session_expired: true,
   bad_request: true,
   server_unreachable: true,
   server_error: true,
-  key_invalid: true,
-  key_rejected: true,
   key_storage_unavailable: true,
   no_content_server: true,
   manifest_mismatch: true,
@@ -42,13 +44,12 @@ const ERROR_CODES: Record<ErrorCode, true> = {
   file_missing_on_server: true,
   file_different_on_server: true,
   verify_failed: true,
-  dll_failed: true,
+  runtime_unavailable: true,
+  runtime_failed: true,
+  runtime_rejected: true,
   game_files_invalid: true,
   already_running: true,
   launch_failed: true,
-  windows_runtime_missing: true,
-  compat_runtime_missing: true,
-  config_failed: true,
   busy: true,
   cancelled: true,
   cert_mismatch: true,
@@ -64,16 +65,14 @@ const INVITE_ERRORS: Record<InviteError, true> = {
   not_invite: true,
   version: true,
   params: true,
-  mode: true,
   host: true,
   port: true,
   fp: true,
   code: true,
   name: true,
-  share: true,
 };
 const USERNAME_CHECKS: Record<UsernameCheck, true> = { ok: true, empty: true, too_short: true, too_long: true, bad_chars: true };
-const NOTICES: Record<NoticeCode, true> = { keep_open: true, backup_saved: true, repair_done: true, install_done: true };
+const NOTICES: Record<NoticeCode, true> = { keep_open: true, repair_done: true, install_done: true };
 
 function placeholders(text: string): string[] {
   return (text.match(/\{[a-z]+\}/g) ?? []).sort();
@@ -107,8 +106,6 @@ test("every dynamic key family is complete", () => {
   for (const n of Object.keys(NOTICES)) assert.ok(isStringKey(`notice_${n}`), `notice_${n}`);
   for (const m of ["OPEN", "INVITECODE", "NONE"]) assert.ok(isStringKey(`reg_mode_${m}`));
   for (const w of ["menu", "city", "hunt", "dojo", "tutorial", "unknown"]) assert.ok(isStringKey(`where_${w}`));
-  for (const g of ["menu", "0", "1", "2", "3", "4"]) assert.ok(isStringKey(`gfx_${g}`));
-  for (const m of EXPOSURE_MODES) assert.ok(isStringKey(`exposure_${m}`), `exposure_${m}`);
   for (const k of ["city", "hunt", "dojo", "tutorial"]) assert.ok(isStringKey(`kind_${k}`));
 });
 
@@ -156,13 +153,13 @@ function snap(over: Partial<Snapshot>): Snapshot {
     phase: "ready",
     busy: false,
     savedServers: [],
-    server: { mode: "public", host: "203.0.113.10", port: 443, name: "S", hasShare: false, hasPendingInvite: false, loopback: false, fingerprint: "a".repeat(64) },
+    server: { host: "203.0.113.10", port: 443, name: "S", hasPendingInvite: false, tailnet: false, loopback: false, fingerprint: "a".repeat(64) },
     connect: { checking: false, problem: null, tailscaleInstalled: false, lastCheckedAt: null },
-    account: { username: "U", hasKey: true, offerBackup: false },
-    install: { dir: "C:\\g", defaultDir: "C:\\g", installed: true, missingFiles: 0, verified: true, dllsOk: true, freeBytes: 5e10, requiredBytes: 1e9, totalBytes: 1e10, vcRuntimeMissing: [], contentAvailable: true },
+    account: { username: "U", signedIn: true },
+    install: { dir: "C:\\g", defaultDir: "C:\\g", installed: true, missingFiles: 0, verified: true, runtimeOk: true, freeBytes: 5e10, requiredBytes: 1e9, totalBytes: 1e10, contentAvailable: true },
     task: null,
     game: { running: false, relayPort: null },
-    settings: { graphics: 4, exposure: "game", windowed: false, language: "en", gameLanguage: "auto", showConsole: false },
+    settings: { windowed: false, language: "en", gameLanguage: "auto" },
     app: { version: "0", packaged: false, updateReady: false },
     status: null,
     statusUnsupported: false,
@@ -173,13 +170,15 @@ function snap(over: Partial<Snapshot>): Snapshot {
 }
 
 test("the big button in every phase", () => {
-  const form = { inviteValid: false, usernameValid: false };
+  const form = { inviteValid: false, usernameValid: false, passwordValid: false, signIn: false };
   assert.deepEqual(primaryButton(snap({ phase: "join", server: null }), form), { labelKey: "btn_join", action: "join", disabled: true });
   assert.equal(primaryButton(snap({ phase: "join", server: null }), { ...form, inviteValid: true }).disabled, false);
   assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: true, problem: null, tailscaleInstalled: false, lastCheckedAt: null } }), form).action, "none");
   assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: false, problem: "cert_mismatch", tailscaleInstalled: false, lastCheckedAt: null } }), form).action, "new_invite");
   assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: false, problem: "unreachable", tailscaleInstalled: false, lastCheckedAt: null } }), form).action, "retry");
-  assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true }).disabled, false);
+  assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true }).disabled, true, "a password is needed too");
+  assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true, passwordValid: true }).disabled, false);
+  assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true, passwordValid: true, signIn: true }).labelKey, "btn_sign_in");
   assert.equal(primaryButton(snap({ phase: "register" }), form).disabled, true);
   const install = snap({ phase: "install" });
   assert.equal(primaryButton(install, form).action, "install");
@@ -194,15 +193,15 @@ test("the big button in every phase", () => {
   assert.deepEqual(["join", "register", "install", "ready"].map((p) => stepIndex(p as Snapshot["phase"])), [0, 1, 2, 3]);
 });
 
-test("the compiled-in game manifest is the verified 1.4.4 list", () => {
-  const file = path.join(ROOT, "..", "UndauntedContent", "data", "dauntless-1.4.4.json");
+test("the compiled-in game manifest is the verified 1.14.7 list", () => {
+  const file = path.join(ROOT, "data", "dauntless-1.14.7.json");
   const bytes = readFileSync(file);
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "05cf8c6aa58f98c4f4ef078a6d6229d2c40becd6d99c78fedb4eb5eeba6f8938");
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "1aba92df064c876128549897476479c1b41cdf251a2b48f9c549e8ec5599602c");
   const r = validateManifest(JSON.parse(bytes.toString("utf8")));
   assert.equal(r.ok, true, r.ok ? "" : r.reason);
   if (!r.ok) return;
-  assert.equal(r.manifest.files.length, 410);
-  assert.equal(r.manifest.totalBytes, 10_893_512_875);
+  assert.equal(r.manifest.files.length, 609);
+  assert.equal(r.manifest.totalBytes, 16_521_432_324);
   assert.match(manifestFingerprint(r.manifest), /^[0-9a-f]{64}$/);
 });
 

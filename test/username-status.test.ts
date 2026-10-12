@@ -1,12 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkUsername, extractAccountKey, isPlausibleAccountKey } from "../src/shared/username";
+import { checkUsername, isValidPassword } from "../src/shared/username";
 import { limitedView, parseServerStatus, sortInstances } from "../src/shared/status";
 import { parseBranding, parseNews, sniffImage } from "../src/main/hostapi";
 import { BELL, RLO } from "../src/shared/text";
 
-test("username rules (roadmap 1.6)", () => {
-  assert.equal(checkUsername("Slayer_01"), "ok");
+test("username rules (the Mystic Paradox backend's: letters and digits, 3-16)", () => {
+  assert.equal(checkUsername("Slayer01"), "ok");
+  assert.equal(checkUsername("Slayer_01"), "bad_chars");
   assert.equal(checkUsername("abc"), "ok");
   assert.equal(checkUsername("a".repeat(16)), "ok");
   assert.equal(checkUsername(""), "empty");
@@ -20,15 +21,11 @@ test("username rules (roadmap 1.6)", () => {
   assert.equal(checkUsername(123), "empty");
 });
 
-test("account keys", () => {
-  const key = "UUK_" + "ab".repeat(24);
-  assert.equal(isPlausibleAccountKey(key), true);
-  assert.equal(isPlausibleAccountKey("short"), false);
-  assert.equal(isPlausibleAccountKey("UUK_has space"), false);
-  assert.equal(isPlausibleAccountKey('UUK_"quote"'), false);
-  assert.equal(extractAccountKey(`  ${key}\r\n`), key);
-  assert.equal(extractAccountKey(`Dauntless Revived account key\r\n\r\nServer: X\r\nKey: ${key}\r\n\r\nKeep this file private.`), key);
-  assert.equal(extractAccountKey("not a key at all"), null);
+test("passwords: 8 to 256 characters", () => {
+  assert.equal(isValidPassword("12345678"), true);
+  assert.equal(isValidPassword("1234567"), false);
+  assert.equal(isValidPassword("x".repeat(257)), false);
+  assert.equal(isValidPassword(undefined), false);
 });
 
 const fullStatus = {

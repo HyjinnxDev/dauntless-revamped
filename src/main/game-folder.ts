@@ -1,8 +1,8 @@
-// "I already have the game files": finds an existing Dauntless 1.4.4 game from a folder the player
+// "I already have the game files": finds an existing Dauntless 1.14.7 game from a folder the player
 // pasted or picked (Vvoidddd, pull request #8). Only these layouts are tried; nothing is searched:
 //
 //   <folder>                    the game root, the folder that holds Archon\
-//   <folder>\Dauntless          BaseGame144, the folder the 1.4.4 zip unpacks to
+//   <folder>\Dauntless          the usual install folder name
 //   the folder above <folder>   when <folder> is Archon
 //   three folders up            when <folder> is Archon\Binaries\Win64
 //

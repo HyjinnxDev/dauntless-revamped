@@ -1,6 +1,6 @@
 // The only bridge between the page and the main process: a fixed list of typed calls.
-// There is no generic send/invoke passthrough, and the account key never crosses this bridge
-// towards the page.
+// There is no generic send/invoke passthrough, and no token ever crosses this bridge towards the
+// page. The password goes the other way once, for register or sign in, and is never stored.
 
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC } from "./shared/types";
@@ -26,11 +26,8 @@ const api = {
   forgetServer: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.forgetServer),
   switchServer: (id: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.switchServer, String(id)),
   removeSavedServer: (id: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.removeSavedServer, String(id)),
-  register: (username: string): Promise<RegisterOutcome> => ipcRenderer.invoke(IPC.register, String(username)),
-  useExistingKey: (text: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.useExistingKey, String(text)),
-  importKeyFile: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.importKeyFile),
-  saveKeyBackup: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.saveKeyBackup),
-  dismissBackupOffer: (): Promise<void> => ipcRenderer.invoke(IPC.dismissBackupOffer),
+  register: (username: string, password: string): Promise<RegisterOutcome> => ipcRenderer.invoke(IPC.register, String(username), String(password)),
+  signIn: (identifier: string, password: string): Promise<RegisterOutcome> => ipcRenderer.invoke(IPC.signIn, String(identifier), String(password)),
   chooseInstallDir: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.chooseInstallDir),
   useExistingGameFolder: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.useExistingGameFolder),
   useExistingGamePath: (gamePath: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.useExistingGamePath, String(gamePath)),
@@ -42,12 +39,8 @@ const api = {
   play: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.play),
   setSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke(IPC.setSettings, {
-      ...(patch.graphics !== undefined ? { graphics: patch.graphics } : {}),
-      ...(patch.exposure !== undefined ? { exposure: patch.exposure } : {}),
       ...(patch.windowed !== undefined ? { windowed: patch.windowed } : {}),
       ...(patch.streamerMode !== undefined ? { streamerMode: patch.streamerMode } : {}),
-      ...(patch.showConsole !== undefined ? { showConsole: patch.showConsole } : {}),
-      ...(patch.huntRegion !== undefined ? { huntRegion: patch.huntRegion } : {}),
       ...(patch.language !== undefined ? { language: patch.language } : {}),
       ...(patch.gameLanguage !== undefined ? { gameLanguage: patch.gameLanguage } : {}),
     }),

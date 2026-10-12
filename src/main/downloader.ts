@@ -17,7 +17,7 @@ import { isPinError, PinnedAgent } from "./pinned";
 import { resolveInside, type ManifestFile } from "./manifest";
 
 export type DownloadErrorCode =
-  | "key_rejected"
+  | "session_expired"
   | "file_missing_on_server"
   | "file_different_on_server"
   | "download_failed"
@@ -79,7 +79,9 @@ export interface DownloadProgress {
 export interface DownloadOptions {
   endpoint: Endpoint;
   downloadBaseUrl?: string;
-  key: string;
+  // A current access token for the server (Bearer), or null when the sign-in is gone. Asked for each
+  // request, because the backend's tokens last 12 minutes and a full download takes longer.
+  auth: () => Promise<string | null>;
   installDir: string;
   files: ManifestFile[];
   concurrency?: number;
@@ -433,7 +435,9 @@ export class DownloadJob {
     if (offset > 0) await hashExisting(part, hash, signal);
 
     if (offset < file.size) {
-      offset = await this.fetchInto(file, part, offset, hash, slot, (h) => (hash = h));
+      const token = this.downloadBaseUrl === undefined ? await this.opts.auth() : "";
+      if (token === null) throw new AttemptError(false, "signed out", new DownloadError("session_expired", file.path));
+      offset = await this.fetchInto(file, part, offset, hash, slot, (h) => (hash = h), token);
     }
 
     const st = await fsp.stat(part);
@@ -453,6 +457,7 @@ export class DownloadJob {
     hash: Hash,
     slot: { bytes: number; controller: AbortController },
     replaceHash: (h: Hash) => void,
+    token: string,
   ): Promise<number> {
     const signal = slot.controller.signal;
     const cdn = this.downloadBaseUrl !== undefined;
@@ -461,7 +466,7 @@ export class DownloadJob {
       : endpointUrl(this.opts.endpoint, fileUrlPath(file.path));
     const headers: Record<string, string> = {
       // Never send account credentials or the gateway Host header to the CDN.
-      ...(cdn ? {} : { host: hostHeader(this.opts.endpoint), "x-undaunted-user-api-key": this.opts.key }),
+      ...(cdn ? {} : { host: hostHeader(this.opts.endpoint), authorization: `Bearer ${token}` }),
       "accept-encoding": "identity",
     };
     if (offset > 0) {
@@ -500,7 +505,7 @@ export class DownloadJob {
         const status = res.statusCode ?? 0;
         if (status === 401 || status === 403) {
           res.resume();
-          return finish(new AttemptError(false, "key rejected", new DownloadError("key_rejected", file.path)));
+          return finish(new AttemptError(false, "sign-in rejected", new DownloadError("session_expired", file.path)));
         }
         if (status === 404) {
           res.resume();

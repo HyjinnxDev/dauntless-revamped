@@ -1,13 +1,12 @@
-// Local stand-ins for the host's content server (contract 4) and metagame (contracts 2 and 3),
-// used by the unit tests. They listen on 127.0.0.1 only, on the spare test ports.
+// Local stand-ins for a Mystic Paradox backend (/launcher/v1/*) and its content routes
+// (/content/v1/*), used by the unit tests. They listen on 127.0.0.1 only, on the spare test ports.
 
 import http from "node:http";
 import https from "node:https";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
 export const CONTENT_PORT = 62012;
-export const METAGAME_PORT = 62013;
 
 export interface TlsOptions {
   cert: string;
@@ -17,7 +16,7 @@ export interface TlsOptions {
 export function createServer(handler: http.RequestListener, tls?: TlsOptions): http.Server {
   return tls ? https.createServer({ cert: tls.cert, key: tls.key }, handler) : http.createServer(handler);
 }
-export const TEST_BUILD = "dauntless_rel-1.4.4_Shipping_2020-10-28_20-11-15_239827";
+export const TEST_BUILD = "dauntless_rel-1.14.7_Shipping_2024-04-01_14-59-21_647472";
 
 export interface FakeFile {
   path: string;
@@ -59,7 +58,9 @@ export interface RequestLog {
 }
 
 export interface ContentOptions {
-  key: string;
+  // Whether a request's Authorization header may download (default: Bearer <key>).
+  key?: string;
+  authorized?: (authorization: string | undefined) => boolean;
   files: FakeFile[];
   corruptOnce?: Set<string>; // first GET of these paths sends flipped bytes (correct length and ETag)
   chunkSize?: number; // throttling: bytes per tick
@@ -107,7 +108,7 @@ export class FakeContentServer {
     const url = new URL(req.url ?? "/", "http://x");
     if (url.pathname === "/content/v1/manifest") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(this.opts.manifestOverride ?? this.manifest));
+      res.end(req.method === "HEAD" ? undefined : JSON.stringify(this.opts.manifestOverride ?? this.manifest));
       return;
     }
     if (url.pathname === "/content/v1/news") {
@@ -139,10 +140,11 @@ export class FakeContentServer {
       .split("/")
       .map(decodeURIComponent)
       .join("/");
-    const key = req.headers["x-undaunted-user-api-key"];
-    const log: RequestLog = { path: rel, range: req.headers.range, hadKey: key === this.opts.key, status: 0 };
+    const auth = req.headers.authorization;
+    const ok = this.opts.authorized ? this.opts.authorized(auth) : auth === `Bearer ${this.opts.key}`;
+    const log: RequestLog = { path: rel, range: req.headers.range, hadKey: ok, status: 0 };
     this.requests.push(log);
-    if (key !== this.opts.key) {
+    if (!ok) {
       log.status = 401;
       res.writeHead(401).end();
       return;
@@ -212,55 +214,54 @@ export class FakeContentServer {
   }
 }
 
-export interface MetagameOptions {
-  name?: string;
-  contentPort?: number | null;
-  registration?: "OPEN" | "INVITECODE" | "NONE";
-  validCodes?: Set<string>;
-  existingUsers?: Map<string, string>; // lower-case username -> key
-  statusMissing?: boolean; // behave like an older metagame without ServerStatus
-  statusForEveryone?: boolean; // behave like a metagame that lists everyone to anyone (no "limited" field)
-  sourceUrl?: string; // the host's own source link in ServerStatus (default: the project's repository)
+// ---------------------------------------------------------------- Mystic Paradox backend
+
+export const RUNTIME_DLL = Buffer.from("fake MysticParadox.dll");
+export const RUNTIME_WINMM = Buffer.from("fake winmm.dll");
+
+export interface MysticOptions {
+  inviteCodes?: Set<string>;
+  online?: boolean;
+  changelist?: number;
+  runtime?: boolean; // publish a runtime release (default true)
 }
 
-export class FakeMetagame {
-  readonly registrations: { username: string; code: string }[] = [];
-  // Every ServerStatus request: did it carry a key header, and was it a known account's key?
-  readonly statusCalls: { withKey: boolean; registered: boolean }[] = [];
-  readonly users = new Map<string, { username: string; id: string }>(); // key -> user
-  private server: http.Server | null = null;
+interface FakeAccount {
+  userId: string;
+  username: string;
+  password: string;
+  approved: boolean;
+}
+
+export class FakeMystic {
+  readonly accounts = new Map<string, FakeAccount>(); // lower-case username -> account
+  readonly calls: { method: string; path: string; body: Record<string, unknown> | null; auth: string | undefined }[] = [];
+  readonly refreshTokens = new Map<string, { userId: string; family: string; used: boolean }>();
+  readonly accessTokens = new Map<string, string>(); // token -> userId
+  readonly revokedFamilies = new Set<string>();
+  readonly exchangeCodes: string[] = [];
   private counter = 0;
-  private held: { arrived: () => void; gate: Promise<void> } | null = null;
 
-  // The next ServerStatus request is answered (as of its arrival: key checked, list chosen) only
-  // after release(): for a launcher action that overtakes a status request on its way.
-  holdNextStatus(): { arrived: Promise<void>; release: () => void } {
-    let arrived!: () => void;
-    let release!: () => void;
-    const arrivedP = new Promise<void>((r) => (arrived = r));
-    const gate = new Promise<void>((r) => (release = r));
-    this.held = { arrived, gate };
-    return { arrived: arrivedP, release };
+  constructor(public opts: MysticOptions = {}) {}
+
+  addAccount(username: string, password: string, approved = true): FakeAccount {
+    const a = { userId: `00000000-0000-4000-8000-${String(++this.counter).padStart(12, "0")}`, username, password, approved };
+    this.accounts.set(username.toLowerCase(), a);
+    return a;
   }
 
-  constructor(public opts: MetagameOptions) {
-    for (const [lower, key] of opts.existingUsers ?? []) this.users.set(key, { username: lower, id: `UID-${lower}` });
+  userFor(auth: string | undefined): FakeAccount | undefined {
+    const token = auth?.replace(/^Bearer /, "") ?? "";
+    const id = this.accessTokens.get(token);
+    return [...this.accounts.values()].find((a) => a.userId === id);
   }
 
-  start(port = METAGAME_PORT, tls?: TlsOptions): Promise<number> {
-    return new Promise((resolve, reject) => {
-      this.server = createServer((req, res) => this.handle(req, res), tls);
-      this.server.on("error", reject);
-      this.server.listen(port, "127.0.0.1", () => resolve((this.server!.address() as AddressInfo).port));
-    });
-  }
-
-  stop(): Promise<void> {
-    return new Promise((resolve) => {
-      if (!this.server) return resolve();
-      this.server.closeAllConnections();
-      this.server.close(() => resolve());
-    });
+  private session(a: FakeAccount, family = randomBytes(8).toString("hex")) {
+    const accessToken = `acc-${++this.counter}`;
+    const refreshToken = randomBytes(32).toString("hex");
+    this.accessTokens.set(accessToken, a.userId);
+    this.refreshTokens.set(refreshToken, { userId: a.userId, family, used: false });
+    return { accessToken, refreshToken, account: { userId: a.userId, displayName: a.username, email: "", approvalStatus: a.approved ? "approved" : "pending" } };
   }
 
   private json(res: http.ServerResponse, status: number, body: unknown): void {
@@ -268,82 +269,85 @@ export class FakeMetagame {
     res.end(JSON.stringify(body));
   }
 
+  private error(res: http.ServerResponse, status: number, code: string, message = code): void {
+    this.json(res, status, { error: { code, message, requestId: "test" } });
+  }
+
   handle(req: http.IncomingMessage, res: http.ServerResponse): void {
-    const url = new URL(req.url ?? "/", "http://x");
-    if (url.pathname === "/dauntless-status") return this.json(res, 200, { "show-status": true, en: "Welcome to Dauntless Revived!" });
-    if (url.pathname === "/undaunted/api/ServerStatus") {
-      if (this.opts.statusMissing) return this.json(res, 404, {});
-      // Like the metagame: the player list only for a known account key, never a 401.
-      const key = req.headers["x-undaunted-user-api-key"];
-      const registered = typeof key === "string" && this.users.has(key);
-      this.statusCalls.push({ withKey: key !== undefined, registered });
-      const full = registered || this.opts.statusForEveryone === true;
-      const held = this.held;
-      this.held = null;
-      const answer = () => this.json(res, 200, {
-        name: this.opts.name ?? "Test Server",
-        online: true,
-        version: "1.0.0",
-        commit: "abc1234",
-        sourceUrl: this.opts.sourceUrl ?? "https://github.com/mixutin/dauntless-revived",
-        registration: this.opts.registration ?? "INVITECODE",
-        playersOnline: full ? 2 : 0,
-        players: full
-          ? [
-              { name: "Aurora", where: "city", instance: "ramsgate" },
-              { name: "Borealis", where: "hunt", instance: "hunt-1" },
-            ]
-          : [],
-        instances: full
-          ? [
-              { id: "ramsgate", kind: "city", title: "Ramsgate", map: "Hub", behemoth: null, players: 1, maxPlayers: 60, startedAt: new Date(Date.now() - 3600_000).toISOString() },
-              { id: "hunt-1", kind: "hunt", title: "Hunt: Shrike", map: "Island", behemoth: "Shrike", players: 1, maxPlayers: 4, startedAt: new Date().toISOString() },
-            ]
-          : [],
-        contentPort: this.opts.contentPort === undefined ? CONTENT_PORT : this.opts.contentPort,
-        uptimeSeconds: 7200,
-        ...(this.opts.statusForEveryone === true ? {} : { limited: !full }),
-      });
-      if (!held) return answer();
-      held.arrived();
-      void held.gate.then(answer);
-      return;
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      let body: Record<string, unknown> | null = null;
+      try {
+        body = raw ? JSON.parse(raw) : null;
+      } catch {
+        return this.error(res, 400, "AUTH_VALIDATION_FAILED");
+      }
+      const url = new URL(req.url ?? "/", "http://x");
+      this.calls.push({ method: req.method ?? "", path: url.pathname, body, auth: req.headers.authorization });
+      this.route(req, res, url.pathname, body ?? {});
+    });
+  }
+
+  private route(req: http.IncomingMessage, res: http.ServerResponse, p: string, body: Record<string, unknown>): void {
+    if (p === "/launcher/v1/status") {
+      return this.json(res, 200, { online: this.opts.online ?? true, supportedBuildChangelist: this.opts.changelist ?? 647472 });
     }
-    if (url.pathname === "/undaunted/api/GetUserInfo") {
-      const key = req.headers["x-undaunted-user-api-key"];
-      const user = typeof key === "string" ? this.users.get(key) : undefined;
-      if (!user) return this.json(res, 401, {});
-      return this.json(res, 200, { UserId: user.id, Username: user.username, IsAdmin: false });
+    if (p === "/launcher/v1/auth/register" && req.method === "POST") {
+      const name = String(body.displayName ?? "");
+      if (!/^[A-Za-z0-9]{3,16}$/.test(name)) return this.error(res, 400, "AUTH_VALIDATION_FAILED", "Username can only contain letters and numbers.");
+      if (typeof body.password !== "string" || body.password.length < 8) return this.error(res, 400, "AUTH_VALIDATION_FAILED", "Password must be at least 8 characters.");
+      if (this.accounts.has(name.toLowerCase())) return this.error(res, 409, "AUTH_DISPLAY_NAME_TAKEN");
+      const invited = body.inviteCode !== undefined;
+      if (invited && !this.opts.inviteCodes?.has(String(body.inviteCode))) return this.error(res, 401, "AUTH_INVITE_INVALID");
+      const a = this.addAccount(name, body.password, invited);
+      if (!invited) return this.json(res, 202, { approvalRequired: true, account: { userId: a.userId, displayName: a.username } });
+      return this.json(res, 200, { approvalRequired: false, ...this.session(a) });
     }
-    if (url.pathname === "/undaunted/api/Register" && req.method === "POST") {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        let parsed: { Username?: unknown; InviteCode?: unknown };
-        try {
-          parsed = JSON.parse(body);
-        } catch {
-          return this.json(res, 400, { error: "bad_request", message: "bad json" });
-        }
-        const username = parsed.Username;
-        const code = parsed.InviteCode;
-        if (this.opts.registration === "NONE") return this.json(res, 400, { error: "registration_closed", message: "closed" });
-        if (typeof username !== "string" || !/^[A-Za-z0-9_]{3,16}$/.test(username)) {
-          return this.json(res, 400, { error: "username_invalid", message: "bad name" });
-        }
-        for (const u of this.users.values()) {
-          if (u.username.toLowerCase() === username.toLowerCase()) return this.json(res, 409, { error: "username_taken" });
-        }
-        if ((this.opts.registration ?? "INVITECODE") === "INVITECODE") {
-          if (typeof code !== "string" || !this.opts.validCodes?.has(code)) return this.json(res, 401, { error: "invite_invalid" });
-          this.opts.validCodes.delete(code);
-        }
-        this.registrations.push({ username, code: String(code) });
-        const key = `UUK_${(++this.counter).toString(16).padStart(48, "0")}`;
-        this.users.set(key, { username, id: `UID-${this.counter}` });
-        return this.json(res, 200, { UUK: key });
-      });
-      return;
+    if (p === "/launcher/v1/auth/login" && req.method === "POST") {
+      const id = String(body.email ?? "").toLowerCase();
+      const a = this.accounts.get(id);
+      if (!a || a.password !== body.password) return this.error(res, 401, "AUTH_INVALID_CREDENTIALS");
+      if (!a.approved) return this.error(res, 403, "AUTH_APPROVAL_PENDING");
+      return this.json(res, 200, this.session(a));
+    }
+    if (p === "/launcher/v1/auth/refresh" && req.method === "POST") {
+      const r = this.refreshTokens.get(String(body.refreshToken ?? ""));
+      if (!r || this.revokedFamilies.has(r.family)) return this.error(res, 401, "AUTH_REFRESH_INVALID");
+      // Like the backend: an already-rotated token coming back revokes the whole family.
+      if (r.used) {
+        this.revokedFamilies.add(r.family);
+        return this.error(res, 401, "AUTH_REFRESH_INVALID");
+      }
+      r.used = true;
+      const a = [...this.accounts.values()].find((x) => x.userId === r.userId)!;
+      return this.json(res, 200, this.session(a, r.family));
+    }
+    if (p === "/launcher/v1/auth/logout" && req.method === "POST") return this.json(res, 200, {});
+    if (p === "/launcher/v1/game-sessions" && req.method === "POST") {
+      if (!this.userFor(req.headers.authorization)) return this.error(res, 401, "AUTH_UNAUTHORIZED");
+      if (body.buildChangelist !== 647472 || typeof body.executableSha256 !== "string") return this.error(res, 400, "AUTH_VALIDATION_FAILED");
+      const artifacts = body.runtimeArtifacts as { name: string; sha256: string }[];
+      const want = [{ name: "MysticParadox.dll", sha256: sha256(RUNTIME_DLL) }, { name: "winmm.dll", sha256: sha256(RUNTIME_WINMM) }];
+      if (body.runtimeManifestVersion !== "1.2.3" || JSON.stringify(artifacts) !== JSON.stringify(want)) return this.error(res, 403, "RUNTIME_BUILD_UNSUPPORTED");
+      const code = randomBytes(32).toString("hex");
+      this.exchangeCodes.push(code);
+      return this.json(res, 200, { exchangeCode: code, expiresInSeconds: 60 });
+    }
+    const base = "/launcher/v1/runtime/client/stable/windows-x86_64";
+    if (this.opts.runtime !== false) {
+      if (p === base) {
+        return this.json(res, 200, {
+          version: "1.2.3",
+          targetChangelist: 647472,
+          sha256: sha256(RUNTIME_DLL),
+          signature: "unused",
+          url: `https://elsewhere.example${base}/download`,
+          extraFiles: [{ name: "winmm.dll", sha256: sha256(RUNTIME_WINMM), signature: "unused", url: "https://elsewhere.example/x" }],
+        });
+      }
+      if (p === `${base}/download`) return void res.writeHead(200).end(RUNTIME_DLL);
+      if (p === `${base}/extra/winmm.dll`) return void res.writeHead(200).end(RUNTIME_WINMM);
     }
     res.writeHead(404).end();
   }

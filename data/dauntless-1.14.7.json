@@ -1,0 +1,3051 @@
+{
+ "build": "dauntless_rel-1.14.7_Shipping_2024-04-01_14-59-21_647472",
+ "totalBytes": 16521432324,
+ "files": [
+  {
+   "path": "Archon/Binaries/Win64/Dauntless-Win64-Shipping.exe",
+   "size": 121407264,
+   "sha256": "f3f95fbf22709ef077a11632ed95d675b7209b7e0172d9ecb9ba7d02a1fbb66b"
+  },
+  {
+   "path": "Archon/Binaries/Win64/EOSSDK-Win64-Shipping.dll",
+   "size": 18682320,
+   "sha256": "cbc0e5c922ceb88a9fa99121008ae9cd76244b17753701d9d25c6b596ea2fbfc"
+  },
+  {
+   "path": "Archon/Binaries/Win64/X3DAudio1_7.dll",
+   "size": 24920,
+   "sha256": "9460709339701ad471a5cabe6365355f4d586dc4fcb86507c1331839dc555446"
+  },
+  {
+   "path": "Archon/Binaries/Win64/XAPOFX1_5.dll",
+   "size": 77656,
+   "sha256": "e47dcf74d50403b376c562e4121e359e5886e42fcc60b3fa8ba53e6826854c49"
+  },
+  {
+   "path": "Archon/Binaries/Win64/XAudio2_7.dll",
+   "size": 518488,
+   "sha256": "f8636ccc37bbfc84107992b60e4226eb7237417112267ed64b08f72983ac4314"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-console-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "89384f8f64a9b7f67c8deccaa721e2d76b8a17026d8083630859ed0cd1a9b58b"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-console-l1-2-0.dll",
+   "size": 21024,
+   "sha256": "f901b0bc8c00b3afc80e151e6f54b18f7672f932602c304fbfeedd5aa3ad63c8"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-datetime-l1-1-0.dll",
+   "size": 20512,
+   "sha256": "12d801992bbb09d43bb90330bb96e77bf12e669c325dda4b5235942221c301c8"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-debug-l1-1-0.dll",
+   "size": 20544,
+   "sha256": "64a9ac181fd91b79270bf01759749394f57be171436ed46f43d165325bb82067"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-errorhandling-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "44822ae123a3d6c3a8bdf9a4d65a4dc89eb31004c72fcfcefa1dc3a53ff3eab0"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-file-l1-1-0.dll",
+   "size": 24104,
+   "sha256": "c15dacec228f40ce4c5b9d69bba5e6627bc484c6e9d6550a76db6f332e9f7734"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-file-l1-2-0.dll",
+   "size": 20520,
+   "sha256": "27878021c6d48fb669f1822821b5934f5a2904740bebb340b6849e7635490cb7"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-file-l2-1-0.dll",
+   "size": 20520,
+   "sha256": "c55eb043454ac2d460f86ea26f934ecb16bdb1d05294c168193a05090bf1c56c"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-handle-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "6dcbdab7fa8cf66f4a05d1f5166bed33cd88bee1d37af6128f18184e6c301709"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-heap-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "2e00c0176952d7c009b93c40949f91f0ab367a1b274ee78b736bf563f0344da3"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-interlocked-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "d4d86e560a22d833fcdf0ba165d3bd3f6059e69830f4d2f9748af08905b2d4c8"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-libraryloader-l1-1-0.dll",
+   "size": 21568,
+   "sha256": "655bade7ff61f01a803e7532082b14ae354442b0f65ef8164f824d0cfa033e6f"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-localization-l1-2-0.dll",
+   "size": 23080,
+   "sha256": "646b28a20208be68439d73efa21be59e12ed0a5fe9e63e5d3057ca7b84bc6641"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-memory-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "13ae84007249d532f326a00ad62e5c1f463581f30701e662bb1b3658c4c32a07"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-namedpipe-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "84cec1a1aaf344a93581b0f0c293623cd07652982a9f54f2fc879092512c4d92"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-processenvironment-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "c6e8472ffc639ccd9c07e7f6954da9ae94779cb9a81acb11ed3588cdca1182b0"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-processthreads-l1-1-0.dll",
+   "size": 22560,
+   "sha256": "a1a413de3c85658d1672aa4c6aa77056e1a4884ab9ed5bb572cad991c9b348db"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-processthreads-l1-1-1.dll",
+   "size": 21056,
+   "sha256": "51a73fbfa2afe5e45962031618ec347aaa0857b11f3cf273f4c218354bfe70cb"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-profile-l1-1-0.dll",
+   "size": 20008,
+   "sha256": "9518b9399ac4d459122e428173b2baaccd92c02e585a13e58a7812fad7012381"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-rtlsupport-l1-1-0.dll",
+   "size": 21056,
+   "sha256": "197a57651e3014f9f3cf21fbcaa718de63f0a76f222a3ad08f287bfedc101bfa"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-string-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "3c2c4d10c8397a38d6a1407c4606907df5781b1339893c3861605094d8a69053"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-synch-l1-1-0.dll",
+   "size": 22568,
+   "sha256": "bf32d8aea6faebe41b1454e4b80b5a3639ba2cd35a9715de25acd7f28bf6d4de"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-synch-l1-2-0.dll",
+   "size": 21032,
+   "sha256": "80fbae0acceb55364437bdd862d454db5acaa797ad0367931aef7677c7e84e7b"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-sysinfo-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "96a594b5a57303ae1e1dce14724a46500edc38d2c5cca0f52f0c77e3ebc916b1"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-timezone-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "d7ab47157bff1b2347e7ae945517b4fc256425939ba7b6288ff85a51931568a7"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-core-util-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "598c5cfc2b5ce7f9c874c85e47f7571f6127590a52b46e0a8f576a603dfefa94"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-conio-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "762ca8dd14f8ff603d06811ba904c973a684022202476bca45e9dc1345151ac4"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-convert-l1-1-0.dll",
+   "size": 24616,
+   "sha256": "983f4d4c7b7330e7f5f091080c1e81905575ebccd97e11dff8a064979ec8d9b8"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-environment-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "67bbb287b2e9057bf8b412ad2faa266321ac28c6e6ba5f22169e2517a3ead248"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-filesystem-l1-1-0.dll",
+   "size": 22568,
+   "sha256": "ab2158fe6b354fb429f57f374ca25105b44e97edcbdc1b752650d895dadd6fd1"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-heap-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "2ee3d52640d84ac4f7f7ddfe748f51baa6fd0d492286c781251222420e85ca97"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-locale-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "c36f5c0ac5d91a8417866dd4d8c670c2192ba83364693e7438282fb8678c3d1e"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-math-l1-1-0.dll",
+   "size": 29528,
+   "sha256": "7c3336c3a50bf3b4c5492c0d085519c040878243e9f7d3ea9f6a2e35c8f1f374"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-multibyte-l1-1-0.dll",
+   "size": 28736,
+   "sha256": "d0e566797a5861a745a8f46e1f79ff56185f7c64ce10623dad4700f8e410d94f"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-private-l1-1-0.dll",
+   "size": 73048,
+   "sha256": "e83b09c0e5acc8dc356c233908657380e756fad4f24748b8d33ac9b50992c11f"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-process-l1-1-0.dll",
+   "size": 21568,
+   "sha256": "12bb3f480ec115d5f9447414525c5dcd236ed48356d5a70650541c9499bc4d19"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-runtime-l1-1-0.dll",
+   "size": 25128,
+   "sha256": "57fe2bab2acb1184a468e45cebe7609a2986d5220bb2d82592b9ca6e22384f89"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-stdio-l1-1-0.dll",
+   "size": 26664,
+   "sha256": "e6a1ef1f7c1957c50a3d9c1d70c0f7b0d8badc7f279cd056eb179dc256bfefda"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-string-l1-1-0.dll",
+   "size": 26664,
+   "sha256": "e71d517e6b7039437e3fc449d8ad12eeeca0d5c8ed1c500555344fd90ddc3207"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-time-l1-1-0.dll",
+   "size": 23080,
+   "sha256": "c3a70153e1d0ecd1cbf95de033bfef5cfecabe7a8274cafe272cc2c14865cd8c"
+  },
+  {
+   "path": "Archon/Binaries/Win64/api-ms-win-crt-utility-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "af1e1b84f066ba05da20847bffd874d80a810b5407f8c6647b3ff9e8f7d37863"
+  },
+  {
+   "path": "Archon/Binaries/Win64/concrt140.dll",
+   "size": 333592,
+   "sha256": "dabdb0732b2fc14040cedbbfd369d9eb3c7a2e66b38a79892e1c05e6d6a8526d"
+  },
+  {
+   "path": "Archon/Binaries/Win64/dbgcore.dll",
+   "size": 166720,
+   "sha256": "99bbffd86ee8e2d911fa1b4fefb2e4c631ea98db6b41357d7f2a1ad218dc6e7d"
+  },
+  {
+   "path": "Archon/Binaries/Win64/dbgeng.dll",
+   "size": 6210368,
+   "sha256": "ac21e8e22eda8b77de8e8694e8240c2233fa6ae315fb4f9e657eb054a4f2899f"
+  },
+  {
+   "path": "Archon/Binaries/Win64/dbghelp.dll",
+   "size": 1643840,
+   "sha256": "c3ebc8c31e9eb99d22fe7b27a4c8f9d79aa50d44c32e07eadd21da6217bd93c7"
+  },
+  {
+   "path": "Archon/Binaries/Win64/libScePad.dll",
+   "size": 196384,
+   "sha256": "db1984784d156319c559cff9893c5cbb318a67770334004c22f0688c7edbd1c2"
+  },
+  {
+   "path": "Archon/Binaries/Win64/msvcp140.dll",
+   "size": 618264,
+   "sha256": "f87819ae8c6f7c90d3237a1abb9809e8cba9dcd0c80ac3f0969a5e68ef652ca4"
+  },
+  {
+   "path": "Archon/Binaries/Win64/msvcp140_1.dll",
+   "size": 31512,
+   "sha256": "b05f3dfd4e999c3e110219fb59151cbaa322757f4f3ce52b64dddc853e5c105c"
+  },
+  {
+   "path": "Archon/Binaries/Win64/msvcp140_2.dll",
+   "size": 203544,
+   "sha256": "7d5d180c8e41b1964835b2550191e2d9054d8f4beff898ade67b3d5dd25b5101"
+  },
+  {
+   "path": "Archon/Binaries/Win64/msvcp140_codecvt_ids.dll",
+   "size": 27416,
+   "sha256": "1e56cee876940affe9883aeccee9132280d03fd4282ab6552adf75fbeeed2bac"
+  },
+  {
+   "path": "Archon/Binaries/Win64/turbojpeg.dll",
+   "size": 736032,
+   "sha256": "e2381187bacb91f7f0e600e7398451179dcf2a9a2299d8311da1cb8b622b554d"
+  },
+  {
+   "path": "Archon/Binaries/Win64/ucrtbase.dll",
+   "size": 1026088,
+   "sha256": "eb89af5911a60d892a685181c397d32b72c61dc2ad77dd45b8cac0fbb7602b84"
+  },
+  {
+   "path": "Archon/Binaries/Win64/vccorlib140.dll",
+   "size": 366360,
+   "sha256": "41b6af9484c860804c69e00c9d7fee22efe5f769c51355936fc9de248221de94"
+  },
+  {
+   "path": "Archon/Binaries/Win64/vcruntime140.dll",
+   "size": 89880,
+   "sha256": "61832990e364dca5bfa2c61d930f00acaae6d1aaa3130392403455ae9a1125a5"
+  },
+  {
+   "path": "Archon/Binaries/Win64/vcruntime140_1.dll",
+   "size": 44312,
+   "sha256": "6cc4315daceb0522816c60678344466cb452426267f70c7faae925361674e774"
+  },
+  {
+   "path": "Archon/Binaries/Win64/xinput1_3.dll",
+   "size": 107368,
+   "sha256": "756cad002e1553cfa1a91ebe8c1b9380ffabe0b4b1916c4a4db802396ddfbef8"
+  },
+  {
+   "path": "Archon/Config/OSS/Live/Achievements.json",
+   "size": 1564,
+   "sha256": "95e92dcb9f8088326990f8ac65f8ab541917902c0f93a352557b0071a693a6c5"
+  },
+  {
+   "path": "Archon/Config/OSS/Live/Events.json",
+   "size": 54,
+   "sha256": "9ea715937c621fbdf3618ef5b211f76a7f577bbf2e8651a070f8205bbab52c24"
+  },
+  {
+   "path": "Archon/Content/Movies/Windows/EngineLoading.mp4",
+   "size": 354171,
+   "sha256": "043cd468d23b0ebb701f786d74b1bb51d66158968eba46963a727867774dd0ec"
+  },
+  {
+   "path": "Archon/Content/Movies/Windows/Logo.mp4",
+   "size": 8971676,
+   "sha256": "d466f26ae8d9f7b35ba073bec03d16b6e3c4bca44d4f327b7a36841dab5cb75b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_0-WindowsClient.pak",
+   "size": 97623060,
+   "sha256": "5532e87b6a3686921e336cab08400573e6d836057a856c83fbac1e1670f92b01"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_1-WindowsClient.pak",
+   "size": 127602891,
+   "sha256": "32e38c0ae4faedc57f3dad05b19cad86187f6a290339b30c2887b69e557889f2"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_10-WindowsClient.pak",
+   "size": 116655390,
+   "sha256": "5f9b106216af11e10ae42f5cfdc6bff21baa5d84fe673c91c15de65800dea757"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_11-WindowsClient.pak",
+   "size": 117628730,
+   "sha256": "2c50c395ddaceedf8f363269ed654f2a5f61e5b8066b8babde37c04bfe218024"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_12-WindowsClient.pak",
+   "size": 108356058,
+   "sha256": "c25c20a18db028b97d4bdd232f0a51b4b5301e635e2cb0cd90e87a633dff3067"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_13-WindowsClient.pak",
+   "size": 129552986,
+   "sha256": "bea6acc1cac556da023678ea7406a443b6fbdc15f924b55b4a1882b4b48c2fad"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_14-WindowsClient.pak",
+   "size": 123996893,
+   "sha256": "595588ca444264972fe1c81f197773b96ed970c18daa1793f935d7ea5070c81a"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_15-WindowsClient.pak",
+   "size": 118417181,
+   "sha256": "019433eeb4d191a6059f9f745f2fa97be092ac86e9fb4b8dce7130f38a01c33d"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_16-WindowsClient.pak",
+   "size": 106564685,
+   "sha256": "79b5cfd57aaeae26fa6ce6bc62fe841d2e246077e37cfe4d557807d067cbffe4"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_17-WindowsClient.pak",
+   "size": 107213461,
+   "sha256": "547d1fd4c44596a8970b25fb4245d2c696006756b60c78789c34ef1435021857"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_18-WindowsClient.pak",
+   "size": 110928923,
+   "sha256": "baf092da0779a5db1d258a0aa3d33c9baa3bbfe3b2408ddda5b1517a8b3e83f9"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_19-WindowsClient.pak",
+   "size": 108093764,
+   "sha256": "3db9d26c5ef713a2f565f88de864c32abae20e3d425dd9d9c0a20fb596a6828b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_2-WindowsClient.pak",
+   "size": 105911753,
+   "sha256": "c24d4f6b50d6cbe0dac9a9b045732a7231ae3d2d99e9edbfd91a2b49fa188713"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_20-WindowsClient.pak",
+   "size": 115958831,
+   "sha256": "5ab5a84b831a288d527f981d33794345505e224cd096f54377815745637145db"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_21-WindowsClient.pak",
+   "size": 122330616,
+   "sha256": "8a612ab28e8dedd9f04f276fd93ca92348ddec0da62f9c1dabcd6453eacacde2"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_22-WindowsClient.pak",
+   "size": 204228559,
+   "sha256": "154ae9eeed6d7793a80b919ec551d39a2bde0a81e251514e26a5cdf5d265f57f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_23-WindowsClient.pak",
+   "size": 185130291,
+   "sha256": "54a57a9fa8e875bff452b231439b61f02b5af1aafa8fbf5988dea9977de5c4c6"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_24-WindowsClient.pak",
+   "size": 68620832,
+   "sha256": "243b2bffcaf56f6fb85be8e7ce1e1841dcf45276a7cf69a550441555915f000a"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_25-WindowsClient.pak",
+   "size": 106557439,
+   "sha256": "f0be8c5153715a9a59a1cddb1ee79fb66d03bc931c7d5038c633523cee931bf4"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_26-WindowsClient.pak",
+   "size": 252702777,
+   "sha256": "42fd52d965ac91d00a6f013579f0579a949119e5180fc51c913c81dbfcc30d56"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_27-WindowsClient.pak",
+   "size": 261632183,
+   "sha256": "62f9afba2852fd515b36c1572fa6d19dd1bc2ebeccc0abb3cb6cadca75ec9eac"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_28-WindowsClient.pak",
+   "size": 124220761,
+   "sha256": "158853804e406a70d834cd56326543ed1b2cca07421b62b29cc9444f13346882"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_29-WindowsClient.pak",
+   "size": 120943933,
+   "sha256": "79f4cc8b1ede6e07079b4cdc98643958d7feaa4911b262ed507f959344151866"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_3-WindowsClient.pak",
+   "size": 63692643,
+   "sha256": "8d884ae5116568d06c9f885ba8a96c4170ff78c48486615b8cbeb59363501bc2"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_30-WindowsClient.pak",
+   "size": 139991611,
+   "sha256": "1353dbb2d9efe68b1adc876bc2494753b71e51154a6af694355ee7078149bf39"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_31-WindowsClient.pak",
+   "size": 145429097,
+   "sha256": "d86ca8bc2bc07b7a69c31d9782d4b83292823cf897dd44ce8a367103e271d1de"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_32-WindowsClient.pak",
+   "size": 132773803,
+   "sha256": "bec09bda674e8a15853b32de7c33464e5c32af67d36de5d95f49a4fdce540048"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_33-WindowsClient.pak",
+   "size": 114213679,
+   "sha256": "f3444e6b77ac889ed817a7fb0996d4ee0fd0fc2cb4e13c9c19825fc585f9bca1"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_34-WindowsClient.pak",
+   "size": 143320773,
+   "sha256": "22480ed6164841ca92d970423eef2272d7a3761c923fb01e092485a2db3c351c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_35-WindowsClient.pak",
+   "size": 106552436,
+   "sha256": "072d43a63c2fc6492456af5471e699f92752d22959db62dc7a0ce67f48666b3b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_36-WindowsClient.pak",
+   "size": 95298167,
+   "sha256": "3d02966258bd3cb4de7bcf2143af56f14138a6bcd0d5e3120a7f7b01c7b6b882"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_37-WindowsClient.pak",
+   "size": 132016984,
+   "sha256": "5459a69e9f7f2204a4c3e1d8c37b86fa43a7f4bb444c433955cf7211d6d90617"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_38-WindowsClient.pak",
+   "size": 112266016,
+   "sha256": "936d71c401c158b9308e46f5ab5bfadc3c8fce09ceb9759ea6eb18285199364f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_39-WindowsClient.pak",
+   "size": 130876032,
+   "sha256": "20530d76023e0b6b3d58599c766b6494c43bf90b8a3662efc544bba8e1a28f2e"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_4-WindowsClient.pak",
+   "size": 116343046,
+   "sha256": "7fec5a84e77c7279b040a409c30511027acac7dec0b6ede921ae6a689061ee57"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_40-WindowsClient.pak",
+   "size": 116424287,
+   "sha256": "9896a37f7e06363d605493843fd9d2d34e4d1b63a7dd33bc67ca13efb4ee6425"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_41-WindowsClient.pak",
+   "size": 142874458,
+   "sha256": "dcadb1e1b4a3140d944238c41d78c059a73ac144714c8de91e94fa1ca6c0c718"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_42-WindowsClient.pak",
+   "size": 104622366,
+   "sha256": "1a16596d999a29dc391c088b593c107826b110c6108cff2d8e5ee0e0de35cc5d"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_43-WindowsClient.pak",
+   "size": 118698390,
+   "sha256": "56c1504b8ae4dabef18a6036c9fa29bd3ee4a593a37f2fc00fa2036302d541da"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_44-WindowsClient.pak",
+   "size": 104814393,
+   "sha256": "5062d3cc57d24cb5dedb07412e5ec8da16c43c5102c2c51d366e9816f889fc50"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_45-WindowsClient.pak",
+   "size": 185529554,
+   "sha256": "4bd83f653c5315bfb3fa4b957f76d59a49441c8441af344924f1160a8b723a5b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_46-WindowsClient.pak",
+   "size": 94848005,
+   "sha256": "5b865333442dd64d1571637557a28cc2fb65b17ea7f1301c5a40b2894bbbd07b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_47-WindowsClient.pak",
+   "size": 111114914,
+   "sha256": "3b8d4962c7635313b8934b4bc703e42b1ed14317d58d84527de4744eab3ba94f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_48-WindowsClient.pak",
+   "size": 135442625,
+   "sha256": "f6260d3f0675a3ec0b8ac06b33087f397377b128160688f5afcc7a24ed57b830"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_49-WindowsClient.pak",
+   "size": 53329015,
+   "sha256": "2f6cd37af5183385fa107d2837ef557e18fe87e199d4cca96313e4461ccc2bbd"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_5-WindowsClient.pak",
+   "size": 107040390,
+   "sha256": "95691231e5638d66f727b4e80ee4855376ad28309fd55684fbf798c321cdff4f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_6-WindowsClient.pak",
+   "size": 120282590,
+   "sha256": "0929edf035a5015de33124d4f2b798c66d80894f938a658ccf1d9f866fa6e401"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_7-WindowsClient.pak",
+   "size": 112997225,
+   "sha256": "a0710686db0ed385185352450a1fd9a53f0c466f6dae19a10825ffbda6b8a874"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_8-WindowsClient.pak",
+   "size": 117336283,
+   "sha256": "b17e18ef35ff7e25a3d231d34b76d113cc6e9ea0e43295ad67e2e0d7519b06f0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_9-WindowsClient.pak",
+   "size": 100890099,
+   "sha256": "8d48b75255edca4151408a6ea02fbc5aa08caa14c1295a565929c05960523d8a"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_0-WindowsClient.pak",
+   "size": 111991029,
+   "sha256": "691c49da6a8161f7653f1226c1caaf51a80c70e740a39228a5c62597e8f9e8f2"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_1-WindowsClient.pak",
+   "size": 98260765,
+   "sha256": "91b3495fd130e9bfa2524d0a2a4bd6e58748fe1e3252117bc6d11d525cbe8cf3"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_2-WindowsClient.pak",
+   "size": 105492774,
+   "sha256": "1055b7e5d4552775602858f6aa9abc875ef5e5b611018f8f21de86fc41a48938"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_3-WindowsClient.pak",
+   "size": 79179258,
+   "sha256": "7bcb6e51cbe96a0680f4abc1e93ec5af4daf41c276aea2bf722e7ec153cf2178"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_4-WindowsClient.pak",
+   "size": 95298535,
+   "sha256": "10d07d958fe91ca32ca9ef7d7d09ef29ce425438a7904f8d6d99c496c7ae1a4a"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_5-WindowsClient.pak",
+   "size": 123446621,
+   "sha256": "f02f8bb24a0553240cb56b443cad1a7c8150a1eb954ce088fa4a5d80cdc4e70c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_6-WindowsClient.pak",
+   "size": 102710382,
+   "sha256": "b065638039d958cad2fd97cbd2df4dd92c16c33004aff64be3a24fe5e53829d9"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_7-WindowsClient.pak",
+   "size": 108791059,
+   "sha256": "7738e55fe5cd948343d9ff6d54d02567be9a00655f9601ce82be18b6c8b10075"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Architecture_8-WindowsClient.pak",
+   "size": 98842125,
+   "sha256": "e0c280fb8619937acf346ec7460c06dfc1d62b4f898cb510a96179663245b0d7"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_0-WindowsClient.pak",
+   "size": 97447808,
+   "sha256": "3404aa55f9522fe24fc1a14f303dfaf407c943fe555fc4876def9409d2bac149"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_1-WindowsClient.pak",
+   "size": 92547325,
+   "sha256": "0c73d8b5b8fec2a3c5b75afb55c84921829706e485dde32eb833d8ac6d6a29eb"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_2-WindowsClient.pak",
+   "size": 86022899,
+   "sha256": "619769b251c92f6b58d815a1c55c3722913bcf2c39636bddb270e9439a48d765"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_3-WindowsClient.pak",
+   "size": 89833513,
+   "sha256": "a681a0f69bd4a7674fb83af10784b3114c4d1e7d0dd491eae62afdaef026a850"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_4-WindowsClient.pak",
+   "size": 93708133,
+   "sha256": "f4bc3660361c72671e33b5175a6ee641d11880e7f10868a346400cd535a313c0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_5-WindowsClient.pak",
+   "size": 87394900,
+   "sha256": "1ac516f5fe41adf8a1382389059107e42a5cf4df6b10558cf82d24a560b6109b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_6-WindowsClient.pak",
+   "size": 96592050,
+   "sha256": "a3e22e9db882a8efc0fb931e5b06ca31fc9a2c14e482313a43819bd7c4f5f70a"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_7-WindowsClient.pak",
+   "size": 91408143,
+   "sha256": "607a6d31d477d0cf2f1852283ff0730ec7f18fc0d2652aa98fe178d5e3fffb67"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourA_8-WindowsClient.pak",
+   "size": 64713925,
+   "sha256": "72735a8a035bb5eb95135659c00df43d289b9a979dd7421ce096455f203adeb7"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourB_0-WindowsClient.pak",
+   "size": 102438049,
+   "sha256": "948d9fb96ddcd912fb6f23459be2f2fbb7fc99d983bc7fbf63c044e37221874f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourB_1-WindowsClient.pak",
+   "size": 27454779,
+   "sha256": "633d0dcc174bfdc4b96dee59a9cc9f5a33806f4249a5d5e3b95a8c7978e21b11"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_0-WindowsClient.pak",
+   "size": 72606480,
+   "sha256": "c59cb4f143c0067f3e96019df966a4a9da656e649672c4d1bc69a66dd86eb96c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_1-WindowsClient.pak",
+   "size": 104955017,
+   "sha256": "578aa5327ceb5de07c17d3098eb86f4c1e46b1ea901993ac979503563ba754bd"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_10-WindowsClient.pak",
+   "size": 75354199,
+   "sha256": "d0456e9b89590c624de1eca4c273fee0e45fe54a701f1b47c4a65fde9d902c36"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_11-WindowsClient.pak",
+   "size": 108414277,
+   "sha256": "e25cdd8e828f7193f27e0a2dd6c50558eb3360ce672588e09e8e437e5fa5754c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_12-WindowsClient.pak",
+   "size": 92525490,
+   "sha256": "93576f2cd85fdeadcc1214f4d9f0029774a49192b4cd12be94c15c2917bd2d26"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_13-WindowsClient.pak",
+   "size": 80629524,
+   "sha256": "cfd526de94364281aeea5d7be094477b65b96c152c0f25877c92d6f3060ebc66"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_14-WindowsClient.pak",
+   "size": 87967927,
+   "sha256": "fe91238e9febccdb6fad7461c821b14e24f1e11d8b65c132ce7dcfbe7a87bd30"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_15-WindowsClient.pak",
+   "size": 108662808,
+   "sha256": "917ebf6bda4d92b9f0d4d45ce8de5426ef2d1f098e93eb4f8723819373078044"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_16-WindowsClient.pak",
+   "size": 91689752,
+   "sha256": "371bb6e32e36fba5ec68ef1cfc9fd789338af60db136e4a98155ed38af478754"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_17-WindowsClient.pak",
+   "size": 110042740,
+   "sha256": "f2e357dff5cc701ab48449cffde2d841b64f6c7d5597a22f6e9560f829a21af3"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_18-WindowsClient.pak",
+   "size": 98958567,
+   "sha256": "e1eee1fecba3618d64c0a00bdcadebfa4efc6b8289b0dce661b50834d5ee0f0e"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_19-WindowsClient.pak",
+   "size": 108540627,
+   "sha256": "65f3596640a1e1f9a43391e7d24a3e8cdfbc08b204944eb3ad172caca8918f56"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_2-WindowsClient.pak",
+   "size": 88399499,
+   "sha256": "c47813af5bd5cc8cfe03e2e3c48959ce1b052a6e6e8493a0c51002fff9420931"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_20-WindowsClient.pak",
+   "size": 88703427,
+   "sha256": "d6668bef69c2ce224540862f588f809630d19a83d634b71545bf5b975661ef49"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_21-WindowsClient.pak",
+   "size": 62631751,
+   "sha256": "bb729e47ab72b04597dc4e00edaa2ed9e8f9e76335c864c1e657ef6ecd578414"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_22-WindowsClient.pak",
+   "size": 101582787,
+   "sha256": "eaaf69a775972c3ef2e6c01da3f2700177afbd62a0e7e6f4ceba6bfc73b989c5"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_23-WindowsClient.pak",
+   "size": 90065118,
+   "sha256": "19947663186625b5f22203f38e0ce55abf48ab726f7df0dc6e7e7f13c401cbc0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_24-WindowsClient.pak",
+   "size": 105606277,
+   "sha256": "8dbb5ac74d29bb8992129ff7509aceb5478ebce4ceb089d81136b660c3886cd6"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_25-WindowsClient.pak",
+   "size": 86084064,
+   "sha256": "0957aed4d16e24758dec9dbfab5afb5c93498be2e458de1e16af9b4458265d77"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_26-WindowsClient.pak",
+   "size": 94442725,
+   "sha256": "32c96ec633babf4c8a75da67ff89eb54317e7678c9716ce0765858358e4a141b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_27-WindowsClient.pak",
+   "size": 91976500,
+   "sha256": "005baa24a307815904babd55e27b36fb00df8e27cda73d479d8475711ff21a1b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_28-WindowsClient.pak",
+   "size": 97570486,
+   "sha256": "92911de16cc23067e926d734fc01b9ed5d49a7b16ccaae515bc56a95d081a898"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_29-WindowsClient.pak",
+   "size": 80511907,
+   "sha256": "ed2fa410a853de64559734a8f0075c0d464e4c4e9aa41b5a50e5df07962b969b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_3-WindowsClient.pak",
+   "size": 97799893,
+   "sha256": "f3cd7515b7581bdc37058d2de2c1d7e686bef5847c6941b684b96071cbb4facc"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_30-WindowsClient.pak",
+   "size": 91710703,
+   "sha256": "f1df3e302828edafc6f6a3cf192394b2dc3b30a809f30eb0dc49a937f9eaa83e"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_31-WindowsClient.pak",
+   "size": 99010256,
+   "sha256": "1eff6df523a6b60cd78a12cacb7f6e36aaf795e02c00700bba2b7f9c12d930e4"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_32-WindowsClient.pak",
+   "size": 93810647,
+   "sha256": "f430a14b1cd9623a410488866f1c5fb25b0fadb45a5f53297326ee659a945872"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_33-WindowsClient.pak",
+   "size": 88986697,
+   "sha256": "2fa0f713e1970f98143b68e48fca8615cb8ff6a41c2eab9e69cb3c79e02ec0cd"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_34-WindowsClient.pak",
+   "size": 108447727,
+   "sha256": "0a70a7f2e348f404f5c9780b55aac4fec03b57cb2c9f4f6bde32129e1983d56c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_35-WindowsClient.pak",
+   "size": 88483141,
+   "sha256": "9b398669ccd8a4a0d3cd005a728a097304883b3e5153168540aa8547c941faa1"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_36-WindowsClient.pak",
+   "size": 102339735,
+   "sha256": "a45c728a31a52a0df7ef1ca90c6eab57e350b3f17c7b73f64e6c424b958dee37"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_37-WindowsClient.pak",
+   "size": 104113571,
+   "sha256": "bbe3ab8e2ffd49cafe1140490d69b369692c5139dc63330fc4903df74268d7c2"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_38-WindowsClient.pak",
+   "size": 103291169,
+   "sha256": "3eb7972934009c5a1a60316ac31bcb08e45b6409eefe678efb43d4341864103a"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_39-WindowsClient.pak",
+   "size": 33500926,
+   "sha256": "1332a92e59155277eb774c0cb823107bd5050f17d185a11b02b4334cd292b436"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_4-WindowsClient.pak",
+   "size": 101604336,
+   "sha256": "431d7cee6058cab13badaec22964663de96db9a92ab74d8f7b83feed5cf7687e"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_5-WindowsClient.pak",
+   "size": 99645233,
+   "sha256": "001d202282a5b49af2e46cd522c633ef8603783352fb980e67eb63d634b6ece1"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_6-WindowsClient.pak",
+   "size": 88023108,
+   "sha256": "30b4765ba91558ef3572aa489b9f0c66b1195b064171a344e16709d835b3217b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_7-WindowsClient.pak",
+   "size": 91011455,
+   "sha256": "9a535571cbf2a7b2ee002db20ef3aabf3f9c2c1726da51f3896e08013494bfd0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_8-WindowsClient.pak",
+   "size": 98801019,
+   "sha256": "b54afd24280b91ecb4f62f11cf562364b6902992f8550aba9c974e76f1952881"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_ArmourC_9-WindowsClient.pak",
+   "size": 80144491,
+   "sha256": "ad96f60635bd8b2c314272b6a5801c8751d0985600bc907bcf388355b4aea767"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Atmospheres_0-WindowsClient.pak",
+   "size": 36549202,
+   "sha256": "3591e6a2a96622fc12903484aeaf7a158d9b5dbfa0ecd8a77b8cd021933035b3"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Audio_0-WindowsClient.pak",
+   "size": 268294133,
+   "sha256": "be704f69db16db5f7fbfcb18b773243e67b61f2dfbee93e8741cc9769c3634b4"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Audio_1-WindowsClient.pak",
+   "size": 270967865,
+   "sha256": "a86b98a9de59bf041aa32e138927adc3e80c16c44419c91694b5550673eb262e"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Audio_2-WindowsClient.pak",
+   "size": 270959056,
+   "sha256": "13521aa8a336985515e0188d45cffe3d9e2ccc3dd96c9ef9a2c020cf5a2e0161"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Audio_3-WindowsClient.pak",
+   "size": 261605870,
+   "sha256": "f192e494ebebf72af5d574ca2a6a552225015c27f4148e88d459d6b7492b7bf1"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Audio_4-WindowsClient.pak",
+   "size": 230100795,
+   "sha256": "62674a4770059c75166b28905f8d3283f4ebef4ef85ff891785e616552051287"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Effects_0-WindowsClient.pak",
+   "size": 65223345,
+   "sha256": "44f9dd286a9969870ce4d872e0ccbfc642ce40f8da62826bc23923ad0a902122"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Effects_1-WindowsClient.pak",
+   "size": 85491391,
+   "sha256": "2175cb48f8e1b9175956f94548b6dd4dbda02facb595eb05e91523993faf0d38"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Effects_2-WindowsClient.pak",
+   "size": 50794268,
+   "sha256": "8f1ade135e85852a28c783439a0d359feb4ba9ab64a6ed4d05ec1c7dbf9b2710"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Effects_3-WindowsClient.pak",
+   "size": 69603351,
+   "sha256": "9ef7bc0f97dc8c1f188ec6a07aae56b5d08b9d6797b5be6045ac0c5bddc877c3"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Effects_4-WindowsClient.pak",
+   "size": 15763955,
+   "sha256": "70891453c6b69a171a9f813a45ee12b8f9a11a56c81e02b2d2680811987a7bf6"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Engine_0-WindowsClient.pak",
+   "size": 26560222,
+   "sha256": "173f9fe6921d1f3280ab3ffffda2c27518ebb2fb2bebe09e64837311b6531046"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Intl_0-WindowsClient.pak",
+   "size": 55680776,
+   "sha256": "20d34f5cb42134cd928b9d26ac3f164fcf2a925d925d845717357dd74e057e7f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Landscape_0-WindowsClient.pak",
+   "size": 73293351,
+   "sha256": "46327ede8d622203421cb5ccd44d74b105a7677ca499ea7a35473333902c4a7b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Maps_0-WindowsClient.pak",
+   "size": 81800894,
+   "sha256": "5979defa6de1dd1fec3a5f93f278e629bb1b2d05615e7cc39d9cd9c94bae763d"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Maps_1-WindowsClient.pak",
+   "size": 48700872,
+   "sha256": "be61fa1aec1ecb3159478184de68856908dca460224335d462d8ffc4fc7da2c0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Maps_2-WindowsClient.pak",
+   "size": 41989422,
+   "sha256": "9a5745ca9d118213588541d7c722f30d6062766ebfccd6f01a4ff28c20be684e"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_MoviesHP_0-WindowsClient.pak",
+   "size": 4015,
+   "sha256": "c7cf5d9b4d5e3a0423660cfb50d70698c8b1762879b55bb58884bf8186241ff9"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_NPCs_0-WindowsClient.pak",
+   "size": 104434712,
+   "sha256": "f53b8d1b82371ccd1809506592ccaefaf9108b675f10156c5c9593291c795ff6"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_NPCs_1-WindowsClient.pak",
+   "size": 115855609,
+   "sha256": "f17e67398adfb3711f898770159e3ba50f77ede6360edcf5f25d2c9c2e371575"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_NPCs_2-WindowsClient.pak",
+   "size": 118852843,
+   "sha256": "08714eacf375736434ba76bc40c8c02b71c528645a996d893d7d0df0dd3015d4"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_NPCs_3-WindowsClient.pak",
+   "size": 71205303,
+   "sha256": "6ec7cebdfffdb6a2fd3e25a49be3d95763d49159e21b2f056cc88b9e2ddab6e0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Player_0-WindowsClient.pak",
+   "size": 15421952,
+   "sha256": "2949a72a6ad8895e360d0c5e9ca0c3781397937ef1de95685ce179d5289cfd7f"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Player_1-WindowsClient.pak",
+   "size": 126450090,
+   "sha256": "7aac68648b5afe2e6a8c6dab6e1f364ee86405036a5bfd1b8a5a727cda9fb4db"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Player_2-WindowsClient.pak",
+   "size": 83161031,
+   "sha256": "9d5c5211f526dc28d336eadff544d4a2844a96bb0a39af4069821634ea99eb50"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Player_3-WindowsClient.pak",
+   "size": 56191965,
+   "sha256": "eebdc276d4a2846c084a0d89b8c7bdfb8ee193cc7ae59a02fafdfd7db38348c0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Rock_0-WindowsClient.pak",
+   "size": 107998371,
+   "sha256": "d6cae3832363a99a8726c5400f224203d51c88007a7f02282375b2746c1c9cc0"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Rock_1-WindowsClient.pak",
+   "size": 106375603,
+   "sha256": "b7af28eb3b95f0d9892933a1bb171ba6237333729c5874ea6bf459a996e5e014"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_0-WindowsClient.pak",
+   "size": 96306342,
+   "sha256": "82ca6e2cd218b39fccef238badc88c631afb58546dde0d8eb6f4e08e7fedff17"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_1-WindowsClient.pak",
+   "size": 118015911,
+   "sha256": "25cc0454ba5ff910223b7d590b13fc9488bf405006f732ac5172a7944d1079b9"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_10-WindowsClient.pak",
+   "size": 155890048,
+   "sha256": "1b03a31d98b1ac0101aebb2ec9fe69b2486dd6862be16c73e30654e61fa4007c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_2-WindowsClient.pak",
+   "size": 137249746,
+   "sha256": "ded0ef98ab2f0dc4508f1b24225f0f0c9327e1a295da62a68c739608cfb80f2c"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_3-WindowsClient.pak",
+   "size": 136583345,
+   "sha256": "0df9acb825d0b601c12d0574757a463b4aa573c5d8321f56ceea3f5b3d990695"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_4-WindowsClient.pak",
+   "size": 79805247,
+   "sha256": "97aa1626bbcbaaf7ff7c41731341d4438b926cfb7367aebfcd3e2586a7b94541"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_5-WindowsClient.pak",
+   "size": 91676483,
+   "sha256": "117d1c246396bffb1fbc2235263b873e6ca5e0d0290ab43462dbb8c03038ff0d"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_6-WindowsClient.pak",
+   "size": 121594794,
+   "sha256": "ed124a2b6fcb0badec9052b0a8af8a382ae6e92cebbb34eba4f299b6ed901042"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_7-WindowsClient.pak",
+   "size": 136154827,
+   "sha256": "9a2e4ddd427f0704e7f19b1f27e5da437d93898f75d988e819eef6fc0be3d269"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_8-WindowsClient.pak",
+   "size": 206574889,
+   "sha256": "50ae0643037e90e135a61d19dbbf875a5d1d7a0dd7db26666ea026ab93ff9f1b"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_UI_9-WindowsClient.pak",
+   "size": 212846342,
+   "sha256": "aa3095092e2ae12b21c067009393c2108d842a0b9ae4e637250c6a760fe37cdd"
+  },
+  {
+   "path": "Archon/Content/Paks/Archon_Water_0-WindowsClient.pak",
+   "size": 7334214,
+   "sha256": "b74a087b1758ea2c7707d140425654ee3abdf9631543ad9a6bac97ef65274d86"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Aether_ChromaLink.chroma",
+   "size": 586,
+   "sha256": "74dfab9166ffd8b81bc3d27611626939ade0374ccd60e6b04534273a880a240b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Aether_Headset.chroma",
+   "size": 586,
+   "sha256": "afa9ff418de0017b6a461972faa16ab51ba86819b8aaa1775aff4152471ec926"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Aether_Keyboard.chroma",
+   "size": 12778,
+   "sha256": "19139913985f01d114af764a2dfe8ec07914fd03bd2dc8e1146a11efd770e67c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Aether_Keypad.chroma",
+   "size": 12778,
+   "sha256": "00b22b589b2645b1808905d41f03969ca4321c9f887166a6600938b9cb8f5207"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Aether_Mouse.chroma",
+   "size": 12778,
+   "sha256": "73fcb48df650686f936ddd7b359d51e249a1ffcf0f954866c5a7f6a9115c2a49"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Aether_Mousepad.chroma",
+   "size": 1546,
+   "sha256": "edb7f6065d2a755f56e193d2cea1d20968d468323c12aa3161831c991271fd96"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothDamaged_ChromaLink.chroma",
+   "size": 58,
+   "sha256": "987054b5d182ae421170cd57bf35a18a8391cacb668e0280dd6d598395f04db1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothDamaged_Headset.chroma",
+   "size": 58,
+   "sha256": "da66907f0ca98bcf3f9097533e429eb81bcfe683c4f968fa1e89447978cbc3b2"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothDamaged_Keyboard.chroma",
+   "size": 1074,
+   "sha256": "90bab0e1fa8c4daa1599823f30a809dde5dda7d0b3477d792d53a546ae045256"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothDamaged_Keypad.chroma",
+   "size": 178,
+   "sha256": "fba088cdb7338fc9fb23c9383a49c4f60f633c3a461f14c367b370918c08a8af"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothDamaged_Mouse.chroma",
+   "size": 522,
+   "sha256": "68252b3f0e63d58732458963043f8ed8b878590a0a7a8baac35c5d2d6d7cb57e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothDamaged_Mousepad.chroma",
+   "size": 138,
+   "sha256": "7a3aafcf54ed2ef7a2de98af1b8dc135cc1dfadc001e1be18e65bc2342bd4314"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothKilled_ChromaLink.chroma",
+   "size": 418,
+   "sha256": "dcedfd5b6b6e4d0999c932263f75b7fbfb1495eeca96ec652583a3f4611fdd67"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothKilled_Headset.chroma",
+   "size": 418,
+   "sha256": "8163ad6da53beaeef2cfa430c83a75a4635ffbb2787041f1e9be2c1fb3f94f69"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothKilled_Keyboard.chroma",
+   "size": 8522,
+   "sha256": "b3a124d39702069e9efe1ba22d77401f7d0fd2ba8e267612038a948806e0e658"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothKilled_Keypad.chroma",
+   "size": 1522,
+   "sha256": "d4df9b9d0522f18dd5a3446ac5d53230d4a8fe298aad19cdcdee98bf3849d36b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothKilled_Mouse.chroma",
+   "size": 4618,
+   "sha256": "5bf84e8763af390b793af057554e8eb7f42bdc1d3957373b6b4d2b90aa9ec9ed"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothKilled_Mousepad.chroma",
+   "size": 1098,
+   "sha256": "afc81f8905766166fe39543da79d811cfad17b633d3e5fa651b986b3d6675d59"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothSlain_ChromaLink.chroma",
+   "size": 418,
+   "sha256": "dcedfd5b6b6e4d0999c932263f75b7fbfb1495eeca96ec652583a3f4611fdd67"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothSlain_Headset.chroma",
+   "size": 418,
+   "sha256": "8163ad6da53beaeef2cfa430c83a75a4635ffbb2787041f1e9be2c1fb3f94f69"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothSlain_Keyboard.chroma",
+   "size": 8522,
+   "sha256": "b3a124d39702069e9efe1ba22d77401f7d0fd2ba8e267612038a948806e0e658"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothSlain_Keypad.chroma",
+   "size": 1522,
+   "sha256": "d4df9b9d0522f18dd5a3446ac5d53230d4a8fe298aad19cdcdee98bf3849d36b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothSlain_Mouse.chroma",
+   "size": 4618,
+   "sha256": "5bf84e8763af390b793af057554e8eb7f42bdc1d3957373b6b4d2b90aa9ec9ed"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/BehemothSlain_Mousepad.chroma",
+   "size": 1098,
+   "sha256": "afc81f8905766166fe39543da79d811cfad17b633d3e5fa651b986b3d6675d59"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Behemoth_Interrupted_ChromaLink.chroma",
+   "size": 154,
+   "sha256": "675cccedee273bb287b4615fead2fc1e3f2e0d41b69d63c29a930e7e17e533ac"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Behemoth_Interrupted_Headset.chroma",
+   "size": 154,
+   "sha256": "338ed6d7ee95c88140b696123bdd3d8fcc647d056324a1e1fdccd9534d4fff90"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Behemoth_Interrupted_Keyboard.chroma",
+   "size": 8522,
+   "sha256": "3d07f4eb406831822658b5bb81c93793c647abf4419c1244310831de66570012"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Behemoth_Interrupted_Mouse.chroma",
+   "size": 2058,
+   "sha256": "ec018d6d0656033f41c4d2647f46c6b806099b386cc8b17ed9039ffbfad83d90"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Behemoth_Interrupted_Mousepad.chroma",
+   "size": 1034,
+   "sha256": "2b770c9a4b4ab3144013da457c2e2a26b52166f281aa3c35aca2f1adda3c562f"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Blaze_ChromaLink.chroma",
+   "size": 610,
+   "sha256": "a07b50e5e4e38145d335dd8fae9fffbad54a9cfa5388bee373cb6b9c7cfe1edb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Blaze_Headset.chroma",
+   "size": 610,
+   "sha256": "42f6321d97893959a042610d400ffa4f6cbbf2a8acd8221fafd5b13482bc6a9a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Blaze_Keyboard.chroma",
+   "size": 13310,
+   "sha256": "c4f122a11084635d03521e5f7c3b1257fc6c06606edc53f81379c1c3c1f1f04f"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Blaze_Keypad.chroma",
+   "size": 13310,
+   "sha256": "e462a52105f287041b727fcad04b9f3eb4cb1fe49af4d763c616e9f5772c2989"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Blaze_Mouse.chroma",
+   "size": 13310,
+   "sha256": "b3ba34350e46655b906990f4f58036a9a1416bc392bed79fda1842d9b1f077f7"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Blaze_Mousepad.chroma",
+   "size": 1610,
+   "sha256": "eab88dcd5520288853fee945e6c129201400e99349de898aef142f044f02effd"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_AllyDown_ChromaLink.chroma",
+   "size": 34,
+   "sha256": "8998f9e2fafe3c63ad97ed42b181e5b36b68f3e112f5fcab808e2ff343e7be78"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_AllyDown_Headset.chroma",
+   "size": 34,
+   "sha256": "0f4d1e4a61533742d1f9172dee3a810c73ba0b4c187696f22273d44a7fe425fe"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_AllyDown_Keyboard.chroma",
+   "size": 12778,
+   "sha256": "ecb564ba58fbd885a873c4be38aa491927e89bf7a3824df5180e881f764943a4"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_AllyDown_Mouse.chroma",
+   "size": 266,
+   "sha256": "43bc841fa5f151731ed3758566b6fa5ff11df59ebc8d4564a3648a10c0ecddcb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_AllyDown_Mousepad.chroma",
+   "size": 74,
+   "sha256": "f092ac782a506f32f41d0ecd6a40eee34f5fa7af5bbf3ff9774ffbfca72febaa"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_LanternReady_ChromaLink.chroma",
+   "size": 34,
+   "sha256": "8998f9e2fafe3c63ad97ed42b181e5b36b68f3e112f5fcab808e2ff343e7be78"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_LanternReady_Headset.chroma",
+   "size": 34,
+   "sha256": "0f4d1e4a61533742d1f9172dee3a810c73ba0b4c187696f22273d44a7fe425fe"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_LanternReady_Keyboard.chroma",
+   "size": 12778,
+   "sha256": "d0a75059e35e8abb8fba035bd166c7fbcbc6f2b0678bfb1aecb3db41085556fe"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_LanternReady_Mouse.chroma",
+   "size": 266,
+   "sha256": "43bc841fa5f151731ed3758566b6fa5ff11df59ebc8d4564a3648a10c0ecddcb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_LanternReady_Mousepad.chroma",
+   "size": 74,
+   "sha256": "f092ac782a506f32f41d0ecd6a40eee34f5fa7af5bbf3ff9774ffbfca72febaa"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveReady_ChromaLink.chroma",
+   "size": 1210,
+   "sha256": "8a3ca6f8ee8a6443fee60533ea13ea38f5b6dd0b36215ca7ebef5502bbd5a2d2"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveReady_Headset.chroma",
+   "size": 1210,
+   "sha256": "9af6ebad0d3f5c60d0faad2f7d23b2c2560cab97b9e37267c95a3c0f38c1c751"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveReady_Keyboard.chroma",
+   "size": 1606,
+   "sha256": "c0d8a4e0c08749638275bafb564bc73b33136ff03141c92774e23b6fb67283a7"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveReady_Mouse.chroma",
+   "size": 12810,
+   "sha256": "21bd19954b2e2a43573f4d986d26dcce4a29c845bf82bbb10a3a18d74d1596dc"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveReady_Mousepad.chroma",
+   "size": 3210,
+   "sha256": "830e4d26790be1ff7a40d907265c32ee311b1c918eec9f8eedf67608cb01c189"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveUsed_ChromaLink.chroma",
+   "size": 2410,
+   "sha256": "ce22e6b5234b4ed13128541256663fbe2a2fba03f331d15c75ad11b37e6948d5"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveUsed_Headset.chroma",
+   "size": 2410,
+   "sha256": "de3c7beba851d076ebd33841a3a4c71dbfbd3de3e37d62e2a3f76bee6fbc47c7"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveUsed_Keyboard.chroma",
+   "size": 53210,
+   "sha256": "82e06b39c8e97855bdbf4e31afe2a7fa409f476fae19422358298a8506a6427d"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveUsed_Mouse.chroma",
+   "size": 25610,
+   "sha256": "5fe5fa58e972272906e8ff1ee206ce933473c62add9d0f68cc8165e9a3431a30"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CombatStatus_OverdriveUsed_Mousepad.chroma",
+   "size": 6410,
+   "sha256": "438b950f6aea1170a179316de24d5cc6d27b506fb268aa705db102bac687b02c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CoreOpen_ChromaLink.chroma",
+   "size": 370,
+   "sha256": "e0551e6a1e5b890396369a4ac509ae7ffbc4241a1c1e7a2bf9b48841cac5fdea"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CoreOpen_Headset.chroma",
+   "size": 370,
+   "sha256": "938925895ce2108b7ec4efc294b04911b4d355463a468876330c285d8b57fc87"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CoreOpen_Keyboard.chroma",
+   "size": 7990,
+   "sha256": "b9b7a90e432ac782a6a4189bda2f32961b20fd5914fc23572bff6abe461ed2c7"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CoreOpen_Keypad.chroma",
+   "size": 7990,
+   "sha256": "d8f4dd0ceddf386a8b6476333745d8557f12a19357497e8bbb411549c9cbecec"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CoreOpen_Mouse.chroma",
+   "size": 7990,
+   "sha256": "b26e1385d7341aeee9fb9fb50de0b9435ec5d6eed70ac3cc283917439abeaf7a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/CoreOpen_Mousepad.chroma",
+   "size": 970,
+   "sha256": "ea2070b96e4470afb30ea18d0d4398e94d3c2108084b3ee26aedf1bf96300f5e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Craft_ChromaLink.chroma",
+   "size": 418,
+   "sha256": "6597e03cca4a587bef3ba8274d90896122d1854d1ee177ae043f67df6985dbd6"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Craft_Headset.chroma",
+   "size": 418,
+   "sha256": "0f24e01c855c43c1a465b00eacf9418ffd4515f22eeeb90410ecf36dd5854815"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Craft_Keyboard.chroma",
+   "size": 10118,
+   "sha256": "5db017c0b873fd9b2acd7290b3facf0c290d964485c4b948de908fffafe652ec"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Craft_Keypad.chroma",
+   "size": 850,
+   "sha256": "abcdf153b23cf4582404241b1624109877d6c71408a81ab712529dd57f674e1a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Craft_Mouse.chroma",
+   "size": 3594,
+   "sha256": "30cb67332b095b423a1b8fe6d86e6938bfd92cbd0995fcacccec066d83a721a9"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Craft_Mousepad.chroma",
+   "size": 1226,
+   "sha256": "b5975645e541b427cf5537d97aa3e578a7657e78fab8ef03b9fadb367838b32e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_ChromaLink.chroma",
+   "size": 58,
+   "sha256": "9114e62598be9bb7238cf36c0d6aab5d28cef23eeb578aa14362bd2c40c657c3"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_Headset.chroma",
+   "size": 58,
+   "sha256": "6bcbecf11790e9ad42513ef3f6d1683f228f6d0cf2b82740ed908d393cfb6357"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_Keybaord.chroma",
+   "size": 1074,
+   "sha256": "b6a8a7db16a90ca97566c31f9a3fed15cb104b3a4c5c4a90e06e6901fe26b0e8"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_Keyboard.chroma",
+   "size": 1074,
+   "sha256": "b6a8a7db16a90ca97566c31f9a3fed15cb104b3a4c5c4a90e06e6901fe26b0e8"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_Keypad.chroma",
+   "size": 178,
+   "sha256": "bf9b1c8a781c01bd02683be9912c67380ae1cb88c9b86b2483a38a08705ce911"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_Mouse.chroma",
+   "size": 522,
+   "sha256": "cf6b87dbbf9b8e91e9c982c2d08bc6edc0155e0d8a80a95f40b0a71d6ef453ec"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DamageTaken_Mousepad.chroma",
+   "size": 138,
+   "sha256": "2b1ba5655fad3ad879e2fff276c9cae1be2b15b3d3ad5e795e8d6811fb1b997a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DauntlessBase_ChromaLink.chroma",
+   "size": 2410,
+   "sha256": "aea2db49aae93ffd344c7868bc60ddefd15dba827eb7b39d9a8aa418c1f19591"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DauntlessBase_Headset.chroma",
+   "size": 2410,
+   "sha256": "6f4e3ad5ce2c9793fff32815479f4f9f21f9c44ec6fb9f6ffea7ca816f04beb4"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DauntlessBase_Keyboard.chroma",
+   "size": 53210,
+   "sha256": "a9f5f89c596da14fd1bb2c92a72428061850e8e698cd6dfaebca10597e059510"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DauntlessBase_Keypad.chroma",
+   "size": 8410,
+   "sha256": "16a18b328283da99ec1786e3166c3e0207b230435b587ac00d92a02accc93ae1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DauntlessBase_Mouse.chroma",
+   "size": 25610,
+   "sha256": "f074521673c2d9c113c4f8d969f7331128424cb9d35a1f98b52ce8e3aa274b1d"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/DauntlessBase_Mousepad.chroma",
+   "size": 6410,
+   "sha256": "56f82ee24d9af36c7bd26d7e2f7fbe1382a47e3476e03a4ebb605043eca29da1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Flare1_ChromaLink.chroma",
+   "size": 490,
+   "sha256": "31d7db3991db006c4aabdf276538ccdcb8aa4088e31dcdf3e633c4f14ae63ea5"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Flare1_Headset.chroma",
+   "size": 490,
+   "sha256": "8daec6eb013e1b98b039bd54091918d61933eb525de885648a9d8e13288ee661"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Flare1_Keyboard.chroma",
+   "size": 10650,
+   "sha256": "6fa8f8d70b1709d12c005c300d8ec2f60a4cf7b14793f7e09cac21431445a8c8"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Flare1_Keypad.chroma",
+   "size": 1690,
+   "sha256": "bbf6eda0ffd66b422b3788e126d48f50ecf8063515af832221251f3487cc50ea"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Flare1_Mouse.chroma",
+   "size": 5130,
+   "sha256": "199fd438bb0b7a189da208d35b130af9f8e969636118c503cc06345ba4a251f6"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Flare1_Mousepad.chroma",
+   "size": 1290,
+   "sha256": "48879a794d6b815024f772a977c50cd4bfac35e296bd54aa50bbbd68cde7ad39"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Heal_ChromaLink.chroma",
+   "size": 178,
+   "sha256": "06cd0faf45d3b29dc69153fd357dcaca37e3f60d3446319d449ce682ff705417"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Heal_Headset.chroma",
+   "size": 178,
+   "sha256": "f85aad48d68c14a88269b5f0bdba7c2ba829f2624614d2bb6c40f6bcbc785a28"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Heal_Keyboard.chroma",
+   "size": 7990,
+   "sha256": "971ef0279bb7b6bc22f9d4c5a29b1437e4326100b866e3825cb95d295a7a076e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Heal_Keypad.chroma",
+   "size": 598,
+   "sha256": "a37e025f5d01fde7d4de58b7ad1d19c7d56a1f8d3d261c46f53b6524f5b5268f"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Heal_Mouse.chroma",
+   "size": 1802,
+   "sha256": "2674b5a94f4324b31be274cc8a790618304e1d17e86ece0adbac97632469d0cb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Heal_Mousepad.chroma",
+   "size": 458,
+   "sha256": "1c1ee47a0514c65a320d129e5cb70db5677693e0a4338c692f6900f46a5ec916"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/ItemPickup_ChromaLink.chroma",
+   "size": 250,
+   "sha256": "a0798dc73f54495a434bcea9816e2b1c32e5ca8fdf900f3672e93734f7a9829b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/ItemPickup_Headset.chroma",
+   "size": 250,
+   "sha256": "8573e7c794aa76deca0e9cc39c19f3d4f2c6462855e4ecee5ea814732af8d317"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/ItemPickup_Keyboard.chroma",
+   "size": 5330,
+   "sha256": "09f6aee13340a0495937570f52d42099478fc94a67956cb79ea29aecc707d010"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/ItemPickup_Keypad.chroma",
+   "size": 850,
+   "sha256": "f40a18cd035a0ed3ee1c07545693bc0b5a616a7996593fa26c2d8f84a3b91794"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/ItemPickup_Mouse.chroma",
+   "size": 2058,
+   "sha256": "2ee060defb32117d7be78157c6819ee4406e68a6a754ef07d0a18f3758211879"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/ItemPickup_Mousepad.chroma",
+   "size": 586,
+   "sha256": "7ae7852ae19f65b47ec9663c08950d54bdc63eb454453f8cba13bad031f43b60"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternReady_Keyboard.chroma",
+   "size": 1074,
+   "sha256": "fa177de98fabca07f3665fc9e8c6661ba2e5eec0ec0bb0776287a17be7ae1e67"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternUsed_ChromaLink.chroma",
+   "size": 706,
+   "sha256": "f5aa2408ea0802d00b9c1b002c084173d47fec7a11da42fe1e520f7686234290"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternUsed_Headset.chroma",
+   "size": 706,
+   "sha256": "cce84de5797559e025108c520d096dd0b57356a742d6ec71fff0e0dce48ba496"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternUsed_Keyboard.chroma",
+   "size": 15438,
+   "sha256": "f02c89342a0a42953308a2d0557926c9ef77fdc8453eabc3378427ca078a83ee"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternUsed_Keypad.chroma",
+   "size": 15438,
+   "sha256": "6cd24bbfbc6674cc0f8a06abc09a5fda5357c763681863128600e4e05b3d0117"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternUsed_Mouse.chroma",
+   "size": 15438,
+   "sha256": "5842c104c1372e80e4d0ff65d49ad1e203be1de80816b03451c3aa77543dea5b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LanternUsed_Mousepad.chroma",
+   "size": 1866,
+   "sha256": "987c86b125bce58e5f1b231320bac229cfc7b260c73c1270fb72c027480cb6c0"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LowHealth_ChromaLink.chroma",
+   "size": 394,
+   "sha256": "089773076f77cb0b982623e3b2ff17f585515dd376c05eb8c565f4936af5726f"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LowHealth_Headset.chroma",
+   "size": 394,
+   "sha256": "cbdef0d5f2fe3f20eb5d619324e9ed601a4cc7310ea75c739566b75eaa34895a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LowHealth_Keyboard.chroma",
+   "size": 7990,
+   "sha256": "c6b2147468ac5ebac9d5626001411f66ce275c87e43605304ffedb4bae31d2c1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LowHealth_Keypad.chroma",
+   "size": 1354,
+   "sha256": "e1784ea81a9cc14c104a31c1514a8cdeb4b42e1c7db8ef2873a3886de2ca9a2f"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LowHealth_Mouse.chroma",
+   "size": 4106,
+   "sha256": "b3c88c512efbc51ea99eaa65fadd3b19598c7f687ced79b0ab19bdae0e0bea96"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/LowHealth_Mousepad.chroma",
+   "size": 1034,
+   "sha256": "8a674a5a3acb997eef9d7140f914faa9149a582362b328b7fde132f1ee4e59f0"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Misc_BouncyRam_ChromaLink.chroma",
+   "size": 2410,
+   "sha256": "e91db8ba339e6965feaee38e2d66d371642cabd8f2085c8489e4e9185ccb9bf6"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Misc_BouncyRam_Headset.chroma",
+   "size": 2410,
+   "sha256": "3eb917370cf77d8a61e61401af24a57daef45d2a733cd6c43abedab5cc116f1d"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Misc_BouncyRam_Keyboard.chroma",
+   "size": 53210,
+   "sha256": "d24a6781ce97db881871bc999ab910d2949d3c892083096347992d06ecc176b5"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Misc_BouncyRam_Mouse.chroma",
+   "size": 25610,
+   "sha256": "beba0bff4f2b38f834f0172f4ed3b29e6b4b916d514d66195eae6e97090104f8"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Misc_BouncyRam_Mousepad.chroma",
+   "size": 6410,
+   "sha256": "803a0b5dcc2ce2aa00c18c751513c4456ba4b6b8e42e196ea471d3d9a2b52d14"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Corruption_ChromaLink.chroma",
+   "size": 250,
+   "sha256": "8175ef5fc30ef68c60fd22e2a2512da583e2cb94e6c371fa506acf620f5f488c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Corruption_Headset.chroma",
+   "size": 250,
+   "sha256": "f47d0c3f83ec99416841cc37996e64822bd1a5a8183ce9f121971a4b1a983522"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Corruption_Keyboard.chroma",
+   "size": 5330,
+   "sha256": "930c04e5dd7476a1ad630f1ff558432440e9e452cc2eab85756e349fbb2557e4"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Corruption_Mouse.chroma",
+   "size": 2570,
+   "sha256": "305d70feba431ba8a82acc30b8808fcd80a662901d840fca73d0d5732978ec53"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Corruption_Mousepad.chroma",
+   "size": 650,
+   "sha256": "74c5937099d216ce47aa83d2d71ede71162a61523ee1f7a8b40bf18d6adbfd55"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Entangled_ChromaLink.chroma",
+   "size": 1210,
+   "sha256": "d695fbf5821ac7dbf2cd34ace3a98fa37539b807bb561c79e8303753c6cac55e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Entangled_Headset.chroma",
+   "size": 1210,
+   "sha256": "516d1fab4206ab089d81f1e4568975da250a18eed4b3648c3b605eae5b6d7cf1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Entangled_Keyboard.chroma",
+   "size": 39910,
+   "sha256": "bc10e4bf1d1a4bf8fa6706fcf147138d27c229d552b33f89cd4469ca811b1b0c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Entangled_Mouse.chroma",
+   "size": 12810,
+   "sha256": "9f14ccca8391888f37444df4a554044960e74db11d013753729f27830af3f77d"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Entangled_Mousepad.chroma",
+   "size": 3210,
+   "sha256": "e8a17298316393b907b04729f04b574a59908d0c2f3eb307861a1efb9ccf807a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Frozen_ChromaLink.chroma",
+   "size": 634,
+   "sha256": "02278d382e44e2fd07cfc06ba6a2dc5af6e62cc8dc793c0fe2e044cde516ac1a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Frozen_Headset.chroma",
+   "size": 634,
+   "sha256": "370bab360a79fb47d0bf5a4f5a4b1096cca3cdf082940504446f8a43c476c1fe"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Frozen_Keyboard.chroma",
+   "size": 13842,
+   "sha256": "7a8949e9511865ab92796210c63cba453f6cdc9eed2caa25fc86f0b03140694a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Frozen_Mouse.chroma",
+   "size": 6666,
+   "sha256": "92cbf36b0c1a6f9ba83e1347805ee0f08e31144856b60d6fa320fa8adca836a1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Frozen_Mousepad.chroma",
+   "size": 1674,
+   "sha256": "7589c146a0a7ad556d1f9c9454ca1c7a29aa36fe12e28c8d5d42ff3faedad26c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_LowHealth_ChromaLink.chroma",
+   "size": 1210,
+   "sha256": "02c17a4b399dda692694f06c9dfed3b1220ff27c39eb3384df4e87c96ec517fb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_LowHealth_Headset.chroma",
+   "size": 1210,
+   "sha256": "6fe189e047d2445900e96676ec3f62109bbfd25a86813c0ca1cbf16c0e6aadb0"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_LowHealth_Keyboard.chroma",
+   "size": 26610,
+   "sha256": "aed488e1d1b12bc54ec75ecc7bc53c95404b63d0d6610149032390d2f5b29c9c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_LowHealth_Mouse.chroma",
+   "size": 12810,
+   "sha256": "1ac5b78bac3f4fc531cbe21ddda2df49a13e0e7ec0bd77ae6ec424b7ec27c896"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_LowHealth_Mousepad.chroma",
+   "size": 3210,
+   "sha256": "41ff224b0836b3f4d94db9464e1775e4160e75da45556cb26989209d5f900a0f"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_OnFire_ChromaLink.chroma",
+   "size": 2410,
+   "sha256": "5d8396d1d6c8455d4bc02991d49aae1e81d3b475e8318db10e677d910c290828"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_OnFire_Headset.chroma",
+   "size": 2410,
+   "sha256": "2cac611f4138104570bd1f898fc05b5fc2a8a97a9e846acf0998e2c9c281d70b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_OnFire_Keyboard.chroma",
+   "size": 53210,
+   "sha256": "791f5885ca68704fe1ce16ac28e298588cba3b09c39a0096a1cd76b67e07f28a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_OnFire_Mouse.chroma",
+   "size": 25610,
+   "sha256": "8d0d6fca5878232674f1b1545c241ead556ba5afee515e19d017d37602978ced"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_OnFire_Mousepad.chroma",
+   "size": 6410,
+   "sha256": "e670cb423061bddb5e92bb9d20355e894f2a3e2dc98250a0de2b38468a14b163"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Shellshocked_ChromaLink.chroma",
+   "size": 970,
+   "sha256": "8507bf2f8df83c61c3774b16e9df721c58a6136efdd875d81b8d7d8ac75dabdf"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Shellshocked_Headset.chroma",
+   "size": 970,
+   "sha256": "4e992035fd3e4f2a2bb31666b48d151d0e840e6d960ce1fd437c370faf48ecda"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Shellshocked_Keyboard.chroma",
+   "size": 53210,
+   "sha256": "48359017f0bacfdea6891f22570d93981d200eab76d90243adb6cd79504d6e4a"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Shellshocked_Mouse.chroma",
+   "size": 10250,
+   "sha256": "f09a16dc14712285e96dc0901a6c468d6f39d8ffb4b6b95217f47af1bc8a62a5"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Shellshocked_Mousepad.chroma",
+   "size": 2570,
+   "sha256": "6c0b6e5f13f5bb773352e2fc99ca980b8a11cb5eb7b460de608693dfa01d8418"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Wounded_ChromaLink.chroma",
+   "size": 154,
+   "sha256": "0b4fabbdcf9c0b77031036d908b41ea4c97b9e33287ad7df9ea087efdf481aa4"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Wounded_Headset.chroma",
+   "size": 154,
+   "sha256": "f8cb97498a1d6e84bc6892f2028d9f1cd25f6fc18ab8e358e1c8e571dd96937e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Wounded_Keyboard.chroma",
+   "size": 3202,
+   "sha256": "04b2e179c6c437e70b42108ded7cea836b02706917248a4a5fd4f964270dd0b7"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Wounded_Mouse.chroma",
+   "size": 1546,
+   "sha256": "4dbbb3457ace36e16a84af853607a2299319ddce5de88ea6aef2b8cb63516d8c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/PlayerStatus_Wounded_Mousepad.chroma",
+   "size": 394,
+   "sha256": "5cd21ef9470c872f7782af582ed81c5a346f7af35813171e48d01d485528c319"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Revive_Keyboard.chroma",
+   "size": 542,
+   "sha256": "ef102d4fe09fa1e8b1542f4d605482f535bcdfff6bca95d5baee61266ad886f9"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_MurderPalace_ChromaLink.chroma",
+   "size": 970,
+   "sha256": "a2e47f9084eb942960e975bb6901b9c9fef3d66a32e5c775ece670538f24eff6"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_MurderPalace_Headset.chroma",
+   "size": 970,
+   "sha256": "0b1c8892269844a84ec7f52740f4d121bda30aa275d0f179995c54bd294c7e7e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_MurderPalace_Keyboard.chroma",
+   "size": 22354,
+   "sha256": "d6f506ed267f47846151933308d395d4a93264baa8635b52010fe9353aac2255"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_MurderPalace_Mouse.chroma",
+   "size": 10250,
+   "sha256": "c511380e5ee9b9ec5ce06237cc339a1d95b1b5c89390aa82a5851b3d16c8cfcd"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_MurderPalace_Mousepad.chroma",
+   "size": 2570,
+   "sha256": "5df4a25b37211ad5ef199bf88533b65f7122b40b9636783e99a165fac9da2207"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Shroud_ChromaLink.chroma",
+   "size": 970,
+   "sha256": "a2e47f9084eb942960e975bb6901b9c9fef3d66a32e5c775ece670538f24eff6"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Shroud_Headset.chroma",
+   "size": 970,
+   "sha256": "0b1c8892269844a84ec7f52740f4d121bda30aa275d0f179995c54bd294c7e7e"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Shroud_Keyboard.chroma",
+   "size": 12246,
+   "sha256": "08432c04ba78e8f9f30c5d667d430510fb00ed97d097f98ba815867216e82239"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Shroud_Mouse.chroma",
+   "size": 10250,
+   "sha256": "c511380e5ee9b9ec5ce06237cc339a1d95b1b5c89390aa82a5851b3d16c8cfcd"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Shroud_Mousepad.chroma",
+   "size": 2570,
+   "sha256": "5df4a25b37211ad5ef199bf88533b65f7122b40b9636783e99a165fac9da2207"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Whiteout_ChromaLink.chroma",
+   "size": 250,
+   "sha256": "6298049cbbced6cf71ace50d5317f318c3a9e2c624e8c98ea5797df124179c9b"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Whiteout_Headset.chroma",
+   "size": 250,
+   "sha256": "354e2b5359351924d9db2f61327d14f434576429854cb55b8256b554ca709c80"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Whiteout_Keyboard.chroma",
+   "size": 4266,
+   "sha256": "372aaf1458babe149c4ab5d118c2b1334463a97099e641f2332b2b4396b537e5"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Whiteout_Mouse.chroma",
+   "size": 2570,
+   "sha256": "8fd0d8a144b7136f9b1aa7d5b6804b56c40bed2d1a94274f150502e68650a1cf"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Traps_Whiteout_Mousepad.chroma",
+   "size": 650,
+   "sha256": "9eb344fa5702717290c9fe293baeb525c0e9a98a326ab1924d0cfdfe97113019"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Axe_PowerActive_ChromaLink.chroma",
+   "size": 490,
+   "sha256": "f6a8556d334f699eba84503f6e4c4ef7cb3cbc599cab1af106e7ccfc588207d8"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Axe_PowerActive_Headset.chroma",
+   "size": 490,
+   "sha256": "87724be714f1c00e2e3a68b5e72326320f4016abb3b83db8917a9369794d9807"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Axe_PowerActive_Keyboard.chroma",
+   "size": 10650,
+   "sha256": "f500844259ac2ae7742795c70294149d78527b93214ebb66ed40c3113bc8a196"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Axe_PowerActive_Mouse.chroma",
+   "size": 5130,
+   "sha256": "335a0b78911575b35bb27d592db08487d27f26d801adf5e09e0f315fbb1615f3"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Axe_PowerActive_Mousepad.chroma",
+   "size": 1290,
+   "sha256": "bac4c47232ec15e5772dbdab30c68696f1feb748a63ffdc5b1cd11773b264ccb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_Empowered_ChromaLink.chroma",
+   "size": 34,
+   "sha256": "8998f9e2fafe3c63ad97ed42b181e5b36b68f3e112f5fcab808e2ff343e7be78"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_Empowered_Headset.chroma",
+   "size": 34,
+   "sha256": "0f4d1e4a61533742d1f9172dee3a810c73ba0b4c187696f22273d44a7fe425fe"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_Empowered_Keyboard.chroma",
+   "size": 53210,
+   "sha256": "aa8ee3f074a2f64487427659795d4546f6f281d3e4581ed913b46deb36e8c1a6"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_Empowered_Mouse.chroma",
+   "size": 266,
+   "sha256": "43bc841fa5f151731ed3758566b6fa5ff11df59ebc8d4564a3648a10c0ecddcb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_Empowered_Mousepad.chroma",
+   "size": 74,
+   "sha256": "f092ac782a506f32f41d0ecd6a40eee34f5fa7af5bbf3ff9774ffbfca72febaa"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_SecondaryFire_ChromaLink.chroma",
+   "size": 154,
+   "sha256": "f849111682082428104cbf427cd39678674abdfee79927425911b2eaafad4c54"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_SecondaryFire_Headset.chroma",
+   "size": 154,
+   "sha256": "5d74c758423b19a661cd5b7112a29fd1f279f7ecd2397298406359c06ff5cba1"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_SecondaryFire_Keyboard.chroma",
+   "size": 26610,
+   "sha256": "e23ea1b3d8330afae1b0c9a91f4247ea935bc9053ef4291a413bd4290d772cc9"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_SecondaryFire_Mouse.chroma",
+   "size": 2058,
+   "sha256": "20963a6e2220b75bfbddd4d5294c91fa5d40caa84b4ef5994dc19f6d9875d15c"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Repeaters_SecondaryFire_Mousepad.chroma",
+   "size": 1034,
+   "sha256": "8a77397d347b9d7d50e02454654b15249e701dc35929b2fdb0894640998d1451"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Warpike_Shot_ChromaLink.chroma",
+   "size": 154,
+   "sha256": "e68747b5e0680e3a8c2c12f2d33afcce45c2de5f6f054a35587cf38f604bc654"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Warpike_Shot_Headset.chroma",
+   "size": 154,
+   "sha256": "4545bb5f2db28cb852d8eb23e78b31079bca2d15531bea1eb1ca168d202ffb97"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Warpike_Shot_Keyboard.chroma",
+   "size": 26610,
+   "sha256": "95d6a38f305c1fde6677ff7dc95371f02a98867f22b04dd14c8accf99a74c8cb"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Warpike_Shot_Mouse.chroma",
+   "size": 2058,
+   "sha256": "d064219a329f486695e9e8626d17cdaee3d839631aa76b56e595f284a8111b8d"
+  },
+  {
+   "path": "Archon/Content/ThirdParty/ChromaEffects/Wpn_Warpike_Shot_Mousepad.chroma",
+   "size": 1034,
+   "sha256": "ed19d56c48cf85a1490bb0c4e8a7e43a285f0835895c3f9b912bd006d6820948"
+  },
+  {
+   "path": "Dauntless.exe",
+   "size": 1455056,
+   "sha256": "69b2327c247bb4e4663cf09cc474b3c6ab1c53433f1a500729db39158a91635d"
+  },
+  {
+   "path": "EasyAntiCheat/Certificates/game.bin",
+   "size": 245987,
+   "sha256": "8f92c912bf0ec207521a2b1f7a670f6a83ca87c90ec3af61a46b3af7132eef3a"
+  },
+  {
+   "path": "EasyAntiCheat/Certificates/game.cer",
+   "size": 1340,
+   "sha256": "309c7f6b333fac3b85c1d3b534018f34b96ab29b02e72673798f35127c70f51b"
+  },
+  {
+   "path": "EasyAntiCheat/EasyAntiCheat_Setup.exe",
+   "size": 1136080,
+   "sha256": "78f066980987a9a8ec54e3a6e72f3493a0160b30dbe017f22ea35eb55ec2be18"
+  },
+  {
+   "path": "EasyAntiCheat/EasyAntiCheat_x64.dll",
+   "size": 793552,
+   "sha256": "fb253d333552cceb4e0cf7956516e2d58e7c0b3f0a3ee6441d6b148c967a1196"
+  },
+  {
+   "path": "EasyAntiCheat/EasyAntiCheat_x86.dll",
+   "size": 677840,
+   "sha256": "9cc6bf62750a7d96af1f59c60e94de7b716ed2b1f2e1320925cd4d10dacfbb6a"
+  },
+  {
+   "path": "EasyAntiCheat/Launcher/Settings.json",
+   "size": 376,
+   "sha256": "cf6746231221461af061e348b294afec8f95c11183d54d7864efc9f1dd5ac4da"
+  },
+  {
+   "path": "EasyAntiCheat/Launcher/SplashScreen.png",
+   "size": 20192,
+   "sha256": "80964e35260c469f40f206f3778fe2219fb1e3c229ef40b8180240391b5e6ded"
+  },
+  {
+   "path": "EasyAntiCheat/Licenses/Apache-2.0.txt",
+   "size": 11560,
+   "sha256": "3ddf9be5c28fe27dad143a5dc76eea25222ad1dd68934a047064e56ed2fa40c5"
+  },
+  {
+   "path": "EasyAntiCheat/Licenses/CCO-1.0.txt",
+   "size": 997,
+   "sha256": "21aba492d227dfa225af6b4d29afdb0ecb39685acf7b491cf3276bc9a17c550f"
+  },
+  {
+   "path": "EasyAntiCheat/Licenses/LGPL-2.1.txt",
+   "size": 27032,
+   "sha256": "1e7e6bae5a5bde32f1ae5a7c37a082d1ab03cf89354f7f936ac40be9e39a6531"
+  },
+  {
+   "path": "EasyAntiCheat/Licenses/Licenses.txt",
+   "size": 17579,
+   "sha256": "71235a78c75d26af6c648e843ff46349480421a0259611dcae77210db8b46648"
+  },
+  {
+   "path": "EasyAntiCheat/Licenses/MIT.txt",
+   "size": 1093,
+   "sha256": "54a8b5e9bb2e8575f09fadbd59eccd9db3a27331ff4b661b7b18578222fe82c9"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/ar_sa.cfg",
+   "size": 9153,
+   "sha256": "2bd303e19a20fe8ac9e9f25d5263b59c5679982352ab29feaaf5889e187bbedf"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/cs_cz.cfg",
+   "size": 8001,
+   "sha256": "ad7cb0c7702e55665be299ea0003705d2c2fb83d012fd7006c7959fbac7c3b0f"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/de_de.cfg",
+   "size": 7925,
+   "sha256": "7c00d03f81b99ff4361fad3f9e18b514c9966727b98bdfe89dc2123f4f664175"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/en_us.cfg",
+   "size": 7619,
+   "sha256": "d40194b82f6a79ec04ebd7a9fde85691bf1d858fac2a6f1390b5204c89209665"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/es_ar.cfg",
+   "size": 8135,
+   "sha256": "46b9cae9d1a1d1f8a96656db25e63060089dfa21a56253a40797ca0d87b0f27d"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/es_es.cfg",
+   "size": 8156,
+   "sha256": "4bd08d5fd3c1433aa73dfae992b3b3154432a461342c7dee9fc1ec12df87fbb1"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/fr_fr.cfg",
+   "size": 8178,
+   "sha256": "d23af4991776c0b7ad96a8a4514be4fa73efd38dec3bcdb82dc14e5c8aa72c9d"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/it_it.cfg",
+   "size": 7707,
+   "sha256": "c3a477bd0e924d6b98a6fb87431da5799fff85a0a090a7c936215c19998036a4"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/ja_ja.cfg",
+   "size": 9363,
+   "sha256": "130d4f9dabcc1bf91d96f91899410f5ed9fbd4d0266fcbe118412f4a38f8b300"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/ko_kr.cfg",
+   "size": 8269,
+   "sha256": "3b6a7ab879b56f65033848588da754914329bb34f3068e03d34b738a45bcd6c2"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/nl_nl.cfg",
+   "size": 7616,
+   "sha256": "024b45d41c6e27dc5937a4b220fe28e67e3b646e1df1e2bf043ab93ee2ec084d"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/pl_pl.cfg",
+   "size": 8056,
+   "sha256": "bb4925d4808cc74298ca3ef6fe804f769a250293cfd14be30e86603bf0bebc40"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/pt_br.cfg",
+   "size": 7943,
+   "sha256": "92e622cd40d70ce669469bc7fd91ba980bf93a7898cb13a196e54880ac164f33"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/ru_ru.cfg",
+   "size": 10817,
+   "sha256": "9993426349070a7e6bbb0a6a90b19d47bc09dff7d4ac1c4ad005e702f7c1a4f0"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/th_th.cfg",
+   "size": 13441,
+   "sha256": "9952193c0d57cf337398ee37ecf6a625e62fdd156b470d74ad1186b871bef064"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/tr_tr.cfg",
+   "size": 7529,
+   "sha256": "58bf5dcf2fa362591071abcfbc8cfd0b5d09e699c261975a966e5c6cb590e937"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/zh_cn.cfg",
+   "size": 6874,
+   "sha256": "b3ca436bb7542babc9d3b966eb140efb52004641ab662f4ce2b3b658e98041a3"
+  },
+  {
+   "path": "EasyAntiCheat/Localization/zh_tw.cfg",
+   "size": 6857,
+   "sha256": "0443ccce39e4bf64bc8a18c46d9785d04e16e838e85a42f66cf34f3f5c68aeab"
+  },
+  {
+   "path": "EasyAntiCheat/easyanticheat_x64.so",
+   "size": 4256576,
+   "sha256": "96527e868afdfe942fb6d1dec4c5caf1097beeab39d43f35a924b9feea88af68"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/ChromiumEmbeddedFramework.tps",
+   "size": 277,
+   "sha256": "ba73ed1bf181c61d7cb87eab14c6c2da471e1d3aee82fee11390f6150631c0ef"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/cef.pak",
+   "size": 6003861,
+   "sha256": "c26ff7260312b10cf2659e048a0c7d8989f8e63a1069802265e47d2f67e65d85"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/cef_100_percent.pak",
+   "size": 279905,
+   "sha256": "5db46cebb4085976d52d9d27280fad10b64bdf50b768d3a61b23fc1cda01ed14"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/cef_200_percent.pak",
+   "size": 386884,
+   "sha256": "5de8af5fec935ffd1227b4d2c2be1afaba3aeaa334e842ab3f86a63bcf999e26"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/cef_extensions.pak",
+   "size": 3565138,
+   "sha256": "0268ed1497f3951662efffb7f14a388c65fd14a1b4e477e8380a31dd9cc6872f"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/devtools_resources.pak",
+   "size": 5183550,
+   "sha256": "86ca2607ee8256a55a7aa0b30b7ff3a3bef5c1c095d2e4310e7efda257bfd1c1"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/am.pak",
+   "size": 317735,
+   "sha256": "644d8494114542e0cc62f09c325b1504bfa8e63fbfa7e32f8d9e70375d21e5b6"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ar.pak",
+   "size": 314031,
+   "sha256": "78a728f45c5f0e245153656c277f452d7fa9670bf7d947f41d2a5b4434d21b91"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/bg.pak",
+   "size": 366595,
+   "sha256": "966f12b6bdfbccec17b3aaf41cd267b3b50adc08ebb9d4052bc056cf4a9a3c92"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/bn.pak",
+   "size": 478939,
+   "sha256": "baab6045ab40c9d0b9f684a70296d759033501981bc9dcd7d6f320e7ecefa4c0"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ca.pak",
+   "size": 228122,
+   "sha256": "fcf071199dff9eadf87088c8604a4e7feeb746b52f7a2250a4b4708c7c3253e1"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/cs.pak",
+   "size": 231572,
+   "sha256": "f6cbb6464f7a89c133d66c919c48227a6fa10285b3ccb5d87581f168584f6574"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/da.pak",
+   "size": 207739,
+   "sha256": "4834233e031169260acb8864a4fd6a35bd9f295f74ba39c88e56b8850d145c20"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/de.pak",
+   "size": 226211,
+   "sha256": "b2b3f9a080951e1b42447f6fab93ba70f3f18dfb2618b3bb7a9bcd03ac21f1d5"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/el.pak",
+   "size": 402687,
+   "sha256": "73245db3afa2d270533773e35f15cda1d4d09a8fe6f2f8a05bd9b117c760b8d5"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/en-GB.pak",
+   "size": 186958,
+   "sha256": "3cb1ae145de1892ce5c1dc4ecc00a247f32de71d04c3720de49c800c48be6073"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/en-US.pak",
+   "size": 186991,
+   "sha256": "de2958f810539e85e770f4dec86ff880dc0223cd36071d5b1ab4eea2052b6fa0"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/es-419.pak",
+   "size": 224532,
+   "sha256": "0e97ee85938625a9a317cd35b66501b02ce56bba0e36ab79d59e76bad6635aa9"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/es.pak",
+   "size": 228808,
+   "sha256": "4515a47223a992a72d4cf5cb6f1b290eecc499e96b00e01c71942e20ba8e12d4"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/et.pak",
+   "size": 202214,
+   "sha256": "9b3839f55f186318e257a07149a07caa2a2171b8a740cd251c245323c8a7524f"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/fa.pak",
+   "size": 321134,
+   "sha256": "a0e38afc45902bae2e2ead3e51972495558fd75e420ad8a05752c76c5c3df5a3"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/fi.pak",
+   "size": 211980,
+   "sha256": "a31ce159b03a3ea1dc144d14e31b5525bddc28e9bce366713c7e90580ef3df8c"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/fil.pak",
+   "size": 232070,
+   "sha256": "4128934b8dc6fbc90d7d68bd926bd63006ed9869f77ec9a7b78434903fadd18e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/fr.pak",
+   "size": 243625,
+   "sha256": "7d2f5a575e6090cc15d28ca2c20723310528278f89bacb31c0cb5d918fec929e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/gu.pak",
+   "size": 451818,
+   "sha256": "b62fe556a941b1ca2cc89bc36508694fb61cf145a2e2bcc505ef1aabb9a60993"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/he.pak",
+   "size": 265463,
+   "sha256": "600fc783659a765efb3086a992f1f5c7e780687bd4cab67fca41c8115582e57d"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/hi.pak",
+   "size": 460810,
+   "sha256": "8e5021c07399ae0f28a4b3816f6606fe161347e65d1a7d01f5ed57ba4377a535"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/hr.pak",
+   "size": 217428,
+   "sha256": "ba334953f117ade947420c5f58fd21623a1979b4a7821267bdeff7e1d0ca8c26"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/hu.pak",
+   "size": 239083,
+   "sha256": "c449703b65f0796b298cb2f932166cbc0acecb2a061e2d3c823724825877f4aa"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/id.pak",
+   "size": 201977,
+   "sha256": "788c6504013495df3ade34f2a8fb81c1fea1bb49351879d56f587680f807a78e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/it.pak",
+   "size": 220397,
+   "sha256": "39c6b3f68f5bd3dabffc7b907e9cc026ee037d5cb9dc36fb1f3dec38f299af29"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ja.pak",
+   "size": 270807,
+   "sha256": "f9fa579100cbe58df0f06f39bf7c4719aea9af8d6b5e01bf7b91a9793b653154"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/kn.pak",
+   "size": 519415,
+   "sha256": "8339140afdec8f08aba5cf4c87474bd4e4e420293c6332833b9821dc713de290"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ko.pak",
+   "size": 230850,
+   "sha256": "4eb2136286e136dd0c0490e8163607fa8f5dc3eb804802ca5ca05302d5691745"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/lt.pak",
+   "size": 234416,
+   "sha256": "80fd3e71172cfd78d360eaa9b7a157beaa5c128ac64a1fb784cec49701b88207"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/lv.pak",
+   "size": 234204,
+   "sha256": "73c17bc97d8173949aab0a9748d86b934c14e0418ee8ec314102a5fed40ec5d2"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ml.pak",
+   "size": 567612,
+   "sha256": "db9928f514679e50a41e19bbbc582042ec8ca9fb6cd8088abe594af56b83bb18"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/mr.pak",
+   "size": 456368,
+   "sha256": "05d3620c0fcb083647fae506a4e084add864434c5e9d35b23671e6aecf733de1"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ms.pak",
+   "size": 208619,
+   "sha256": "29800443a6afc617029c61c5f825814ecc08ee2ae50f4d06cd3d233a1cf78154"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/nb.pak",
+   "size": 205047,
+   "sha256": "ece4d7ffe733ee39d1d12f4999fdcd4cc33c96fbf93f86d64c0a93253737f9fc"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/nl.pak",
+   "size": 215699,
+   "sha256": "d1803e3c6d64050fc5a16c5168a99e3165b1137a2a676af2709c3ae13083cac5"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/pl.pak",
+   "size": 225555,
+   "sha256": "ffcad2748416d25b0e23114e620bfec21be3c8c0dbd7fce3495535cb42e30da8"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/pt-BR.pak",
+   "size": 221133,
+   "sha256": "649de1c7b2b78d4a647ee3426e36ab93a379c5e7060933419d5f28493236efa3"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/pt-PT.pak",
+   "size": 223472,
+   "sha256": "335df6ef67e6f7346426f7f108498cdf0c49b748ceeab4eb4f4a53eed3882ae9"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ro.pak",
+   "size": 229091,
+   "sha256": "2807da4230c77df6188ce6607486d499290ecf8daca118b3925fc2a3dd52f902"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ru.pak",
+   "size": 351003,
+   "sha256": "2667857778df720e0768c05c55eb46485f5477169dc716e3b1b5bdbf8fea2c86"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/sk.pak",
+   "size": 237218,
+   "sha256": "fea92269172e1e38ba3d1e3400d1de989364bab5d49334aed5352e24b8cb640b"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/sl.pak",
+   "size": 217919,
+   "sha256": "2fc6a7bbac450cb583bef9b12d21ca43a31205865faf2352982a29adeb44fc4e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/sr.pak",
+   "size": 341731,
+   "sha256": "9a0e5008633ebe6270bd3101f09a764dff12b4f4118c763f9998c3f432b6b829"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/sv.pak",
+   "size": 206145,
+   "sha256": "935d6d3968fa20c7e6e10865e8ecee15a2bb8363a28e4470fbea8e16942b085e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/sw.pak",
+   "size": 209319,
+   "sha256": "fe2502a37371ea88acc8d6e75c16e764cc1212f9ed4142079a0d5dbe8e7f2669"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/ta.pak",
+   "size": 527387,
+   "sha256": "70049a6dd560d54b94705e084d638c231f324aad726122d013396f9e976f8f0c"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/te.pak",
+   "size": 503299,
+   "sha256": "b959a78fb5cfc0239eb94f15530402ce9aee0ca61ab7e0d763edb3ead0423fd1"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/th.pak",
+   "size": 438108,
+   "sha256": "25e4775efabcc22b87e02c393cebd85ef39fe24790a9c83b96dcddab80501ba6"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/tr.pak",
+   "size": 221774,
+   "sha256": "0fe9c7b8849c9e386c34215e7544afbaac04360896e6dd79d206511ab6a78e37"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/uk.pak",
+   "size": 358245,
+   "sha256": "d31fa0678019ffe21d693ab809800a127d9585c9d21eba55094299396c61d448"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/vi.pak",
+   "size": 254300,
+   "sha256": "6c42b4810b9ff2bc6deece746385d0ab8bba1c4ac213be8bf6007dbe990b8059"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/zh-CN.pak",
+   "size": 190714,
+   "sha256": "24938e63e4d487c96bc74d17a76629c837db11dc3adbf4cba58c90cdd6ae5645"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/Resources/locales/zh-TW.pak",
+   "size": 192079,
+   "sha256": "7bedce5280dd86b5ed52b950a0b39b5349e7e8b3123e23027230469341327e0e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/chrome_elf.dll",
+   "size": 557856,
+   "sha256": "b03bfa6b1218a70342ae8d4e4d09262dd2c6475d7c01d601e11965ae44078125"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/d3dcompiler_43.dll",
+   "size": 2106216,
+   "sha256": "2f23182ec6f4889397ac4bf03d62536136c5bdba825c7d2c4ef08c827f3a8a1c"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/d3dcompiler_47.dll",
+   "size": 4488904,
+   "sha256": "d82f77d802ff05d4da0c82335a05613604da243513faa7fb145aaad0119bddb5"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/icudtl.dat",
+   "size": 10130560,
+   "sha256": "51b93e0bc7e6d697ccc29703e2ebc9210c231c931fe764c372e5ba0d26098d3b"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/libEGL.dll",
+   "size": 102688,
+   "sha256": "4e6dceea06d48094b88f4590c6d428b1372b8e791ae26008ea403267a42fd177"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/libGLESv2.dll",
+   "size": 3932448,
+   "sha256": "7211dd60d4e57d758edbedab0a123c968573778c0798a24ab67467a0474fa477"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/libcef.dll",
+   "size": 98285344,
+   "sha256": "401751eb7b7c73e86e7a3896394890b46417a65cde10521258741540f34e5d4f"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/natives_blob.bin",
+   "size": 246209,
+   "sha256": "20210a0e530832a0267d584015eecb331c2ac0d841faf7b36feb9d326c32c113"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/snapshot_blob.bin",
+   "size": 1562112,
+   "sha256": "8d6b166f4fb2a3910f0dd1958850cbf101a8f4b60823e324d57626383561dd19"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/CEF3/Win64/widevinecdmadapter.dll",
+   "size": 285472,
+   "sha256": "430410b0600dc73f5445b0daec239c93510af354ea5960d9f1b0d620a4bd1afc"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/DbgHelp/dbghelp.dll",
+   "size": 1868736,
+   "sha256": "9a02133854ff9f06c3b23a70f8c2a4814b2ed4eef613244b485e3737259ddf9e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/NVIDIA/NVaftermath/Win64/GFSDK_Aftermath_Lib.x64.dll",
+   "size": 127776,
+   "sha256": "4a385f2cf46615a25e5afc1ed29efca4706f899c2ed40d3835fd6b480b626b0f"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/Ogg/Win64/VS2015/libogg_64.dll",
+   "size": 59168,
+   "sha256": "ff38574bba1e23df2ecfe3b6a9b31ade4f91b6f60d082dcbffd7d9986463d935"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/APEX_Clothing_x64.dll",
+   "size": 1229088,
+   "sha256": "2d60b1b1e506b95df45a93547b534afeef8c3b1bccaadd19d366b67ef827d501"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/APEX_Destructible_x64.dll",
+   "size": 2019616,
+   "sha256": "f33b6d5905dd2f479265595901a42ff38f78496358cfb0ecb3fd40ee01162331"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/APEX_Legacy_x64.dll",
+   "size": 3339552,
+   "sha256": "4647971096d8f4658b81dec220f91aff8be8789066471f18e8b77a824fdde35b"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/ApexFramework_x64.dll",
+   "size": 1053984,
+   "sha256": "56fd9b447e1e057f6dd12d7f9817feb8185d3f48f98c686f69ca955a8a0d6a71"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/NvCloth_x64.dll",
+   "size": 275744,
+   "sha256": "f9a50230ead07985307bf74db016b8fb5d61b5da4bc3709916a367a7f039462e"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/PhysX3Common_x64.dll",
+   "size": 1608992,
+   "sha256": "347226a82824c38df474fca040fe4f448d5cfcb76773bfacddfabdee884a0f5d"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/PhysX3Cooking_x64.dll",
+   "size": 254752,
+   "sha256": "0da8994e5ffd38d5b07bf109adc976220a14424ad9085188dd5ccc9a7d443aaf"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/PhysX3_x64.dll",
+   "size": 2115360,
+   "sha256": "416ccf3536700487b659992298b2def739fdf1c4a391c7285700f654eba45688"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/PxFoundation_x64.dll",
+   "size": 64800,
+   "sha256": "fc21a4736bd385da0ce516d0a9a02e4124892419b8b02c2487c2c5b91e5736ef"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/PhysX3/Win64/VS2015/PxPvdSDK_x64.dll",
+   "size": 198944,
+   "sha256": "cf462ccc9c7a5c903235751b822bb3730ded1f5ce50e467087a3e90cf3ed6874"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/Vorbis/Win64/VS2015/libvorbis_64.dll",
+   "size": 1724192,
+   "sha256": "c050393e7e046bbceece7f2c32c431bcb88c215b1a51fb0f7bdecb7973036b4a"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/Vorbis/Win64/VS2015/libvorbisfile_64.dll",
+   "size": 47904,
+   "sha256": "da1f966aaad1db8af4b408045f0acd838a1c55b76ff1952ed2211119a0da5f37"
+  },
+  {
+   "path": "Engine/Binaries/ThirdParty/Windows/XAudio2_9/x64/xaudio2_9redist.dll",
+   "size": 847440,
+   "sha256": "0e01f400baa09694cacfd2cfbff0d721c17b56785d2d6e29b6fdd117f70ccc1e"
+  },
+  {
+   "path": "Engine/Binaries/Win64/CrashReportClient.exe",
+   "size": 19351328,
+   "sha256": "25584af1f1679adc88593892cb1a2db4a42cfe111e1ad488b9b9bed46dcc982f"
+  },
+  {
+   "path": "Engine/Binaries/Win64/UnrealCEFSubProcess.exe",
+   "size": 3703584,
+   "sha256": "30da042162f9c6642f8acbe0a86378c48e03eede7186c98423230084e08fbbd6"
+  },
+  {
+   "path": "Engine/Binaries/Win64/X3DAudio1_7.dll",
+   "size": 24920,
+   "sha256": "9460709339701ad471a5cabe6365355f4d586dc4fcb86507c1331839dc555446"
+  },
+  {
+   "path": "Engine/Binaries/Win64/XAPOFX1_5.dll",
+   "size": 77656,
+   "sha256": "e47dcf74d50403b376c562e4121e359e5886e42fcc60b3fa8ba53e6826854c49"
+  },
+  {
+   "path": "Engine/Binaries/Win64/XAudio2_7.dll",
+   "size": 518488,
+   "sha256": "f8636ccc37bbfc84107992b60e4226eb7237417112267ed64b08f72983ac4314"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-console-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "89384f8f64a9b7f67c8deccaa721e2d76b8a17026d8083630859ed0cd1a9b58b"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-console-l1-2-0.dll",
+   "size": 21024,
+   "sha256": "f901b0bc8c00b3afc80e151e6f54b18f7672f932602c304fbfeedd5aa3ad63c8"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-datetime-l1-1-0.dll",
+   "size": 20512,
+   "sha256": "12d801992bbb09d43bb90330bb96e77bf12e669c325dda4b5235942221c301c8"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-debug-l1-1-0.dll",
+   "size": 20544,
+   "sha256": "64a9ac181fd91b79270bf01759749394f57be171436ed46f43d165325bb82067"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-errorhandling-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "44822ae123a3d6c3a8bdf9a4d65a4dc89eb31004c72fcfcefa1dc3a53ff3eab0"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-file-l1-1-0.dll",
+   "size": 24104,
+   "sha256": "c15dacec228f40ce4c5b9d69bba5e6627bc484c6e9d6550a76db6f332e9f7734"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-file-l1-2-0.dll",
+   "size": 20520,
+   "sha256": "27878021c6d48fb669f1822821b5934f5a2904740bebb340b6849e7635490cb7"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-file-l2-1-0.dll",
+   "size": 20520,
+   "sha256": "c55eb043454ac2d460f86ea26f934ecb16bdb1d05294c168193a05090bf1c56c"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-handle-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "6dcbdab7fa8cf66f4a05d1f5166bed33cd88bee1d37af6128f18184e6c301709"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-heap-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "2e00c0176952d7c009b93c40949f91f0ab367a1b274ee78b736bf563f0344da3"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-interlocked-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "d4d86e560a22d833fcdf0ba165d3bd3f6059e69830f4d2f9748af08905b2d4c8"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-libraryloader-l1-1-0.dll",
+   "size": 21568,
+   "sha256": "655bade7ff61f01a803e7532082b14ae354442b0f65ef8164f824d0cfa033e6f"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-localization-l1-2-0.dll",
+   "size": 23080,
+   "sha256": "646b28a20208be68439d73efa21be59e12ed0a5fe9e63e5d3057ca7b84bc6641"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-memory-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "13ae84007249d532f326a00ad62e5c1f463581f30701e662bb1b3658c4c32a07"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-namedpipe-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "84cec1a1aaf344a93581b0f0c293623cd07652982a9f54f2fc879092512c4d92"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-processenvironment-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "c6e8472ffc639ccd9c07e7f6954da9ae94779cb9a81acb11ed3588cdca1182b0"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-processthreads-l1-1-0.dll",
+   "size": 22560,
+   "sha256": "a1a413de3c85658d1672aa4c6aa77056e1a4884ab9ed5bb572cad991c9b348db"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-processthreads-l1-1-1.dll",
+   "size": 21056,
+   "sha256": "51a73fbfa2afe5e45962031618ec347aaa0857b11f3cf273f4c218354bfe70cb"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-profile-l1-1-0.dll",
+   "size": 20008,
+   "sha256": "9518b9399ac4d459122e428173b2baaccd92c02e585a13e58a7812fad7012381"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-rtlsupport-l1-1-0.dll",
+   "size": 21056,
+   "sha256": "197a57651e3014f9f3cf21fbcaa718de63f0a76f222a3ad08f287bfedc101bfa"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-string-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "3c2c4d10c8397a38d6a1407c4606907df5781b1339893c3861605094d8a69053"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-synch-l1-1-0.dll",
+   "size": 22568,
+   "sha256": "bf32d8aea6faebe41b1454e4b80b5a3639ba2cd35a9715de25acd7f28bf6d4de"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-synch-l1-2-0.dll",
+   "size": 21032,
+   "sha256": "80fbae0acceb55364437bdd862d454db5acaa797ad0367931aef7677c7e84e7b"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-sysinfo-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "96a594b5a57303ae1e1dce14724a46500edc38d2c5cca0f52f0c77e3ebc916b1"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-timezone-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "d7ab47157bff1b2347e7ae945517b4fc256425939ba7b6288ff85a51931568a7"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-core-util-l1-1-0.dll",
+   "size": 20520,
+   "sha256": "598c5cfc2b5ce7f9c874c85e47f7571f6127590a52b46e0a8f576a603dfefa94"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-conio-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "762ca8dd14f8ff603d06811ba904c973a684022202476bca45e9dc1345151ac4"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-convert-l1-1-0.dll",
+   "size": 24616,
+   "sha256": "983f4d4c7b7330e7f5f091080c1e81905575ebccd97e11dff8a064979ec8d9b8"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-environment-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "67bbb287b2e9057bf8b412ad2faa266321ac28c6e6ba5f22169e2517a3ead248"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-filesystem-l1-1-0.dll",
+   "size": 22568,
+   "sha256": "ab2158fe6b354fb429f57f374ca25105b44e97edcbdc1b752650d895dadd6fd1"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-heap-l1-1-0.dll",
+   "size": 21544,
+   "sha256": "2ee3d52640d84ac4f7f7ddfe748f51baa6fd0d492286c781251222420e85ca97"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-locale-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "c36f5c0ac5d91a8417866dd4d8c670c2192ba83364693e7438282fb8678c3d1e"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-math-l1-1-0.dll",
+   "size": 29528,
+   "sha256": "7c3336c3a50bf3b4c5492c0d085519c040878243e9f7d3ea9f6a2e35c8f1f374"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-multibyte-l1-1-0.dll",
+   "size": 28736,
+   "sha256": "d0e566797a5861a745a8f46e1f79ff56185f7c64ce10623dad4700f8e410d94f"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-private-l1-1-0.dll",
+   "size": 73048,
+   "sha256": "e83b09c0e5acc8dc356c233908657380e756fad4f24748b8d33ac9b50992c11f"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-process-l1-1-0.dll",
+   "size": 21568,
+   "sha256": "12bb3f480ec115d5f9447414525c5dcd236ed48356d5a70650541c9499bc4d19"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-runtime-l1-1-0.dll",
+   "size": 25128,
+   "sha256": "57fe2bab2acb1184a468e45cebe7609a2986d5220bb2d82592b9ca6e22384f89"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-stdio-l1-1-0.dll",
+   "size": 26664,
+   "sha256": "e6a1ef1f7c1957c50a3d9c1d70c0f7b0d8badc7f279cd056eb179dc256bfefda"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-string-l1-1-0.dll",
+   "size": 26664,
+   "sha256": "e71d517e6b7039437e3fc449d8ad12eeeca0d5c8ed1c500555344fd90ddc3207"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-time-l1-1-0.dll",
+   "size": 23080,
+   "sha256": "c3a70153e1d0ecd1cbf95de033bfef5cfecabe7a8274cafe272cc2c14865cd8c"
+  },
+  {
+   "path": "Engine/Binaries/Win64/api-ms-win-crt-utility-l1-1-0.dll",
+   "size": 21032,
+   "sha256": "af1e1b84f066ba05da20847bffd874d80a810b5407f8c6647b3ff9e8f7d37863"
+  },
+  {
+   "path": "Engine/Binaries/Win64/concrt140.dll",
+   "size": 333592,
+   "sha256": "dabdb0732b2fc14040cedbbfd369d9eb3c7a2e66b38a79892e1c05e6d6a8526d"
+  },
+  {
+   "path": "Engine/Binaries/Win64/dbgcore.dll",
+   "size": 166720,
+   "sha256": "99bbffd86ee8e2d911fa1b4fefb2e4c631ea98db6b41357d7f2a1ad218dc6e7d"
+  },
+  {
+   "path": "Engine/Binaries/Win64/dbgeng.dll",
+   "size": 6210368,
+   "sha256": "ac21e8e22eda8b77de8e8694e8240c2233fa6ae315fb4f9e657eb054a4f2899f"
+  },
+  {
+   "path": "Engine/Binaries/Win64/dbghelp.dll",
+   "size": 1643840,
+   "sha256": "c3ebc8c31e9eb99d22fe7b27a4c8f9d79aa50d44c32e07eadd21da6217bd93c7"
+  },
+  {
+   "path": "Engine/Binaries/Win64/msvcp140.dll",
+   "size": 618264,
+   "sha256": "f87819ae8c6f7c90d3237a1abb9809e8cba9dcd0c80ac3f0969a5e68ef652ca4"
+  },
+  {
+   "path": "Engine/Binaries/Win64/msvcp140_1.dll",
+   "size": 31512,
+   "sha256": "b05f3dfd4e999c3e110219fb59151cbaa322757f4f3ce52b64dddc853e5c105c"
+  },
+  {
+   "path": "Engine/Binaries/Win64/msvcp140_2.dll",
+   "size": 203544,
+   "sha256": "7d5d180c8e41b1964835b2550191e2d9054d8f4beff898ade67b3d5dd25b5101"
+  },
+  {
+   "path": "Engine/Binaries/Win64/msvcp140_codecvt_ids.dll",
+   "size": 27416,
+   "sha256": "1e56cee876940affe9883aeccee9132280d03fd4282ab6552adf75fbeeed2bac"
+  },
+  {
+   "path": "Engine/Binaries/Win64/turbojpeg.dll",
+   "size": 736032,
+   "sha256": "b123e930cca07f676d98cc0ac95ec5eee896c8122aefc334f0804d0d4646d11f"
+  },
+  {
+   "path": "Engine/Binaries/Win64/ucrtbase.dll",
+   "size": 1026088,
+   "sha256": "eb89af5911a60d892a685181c397d32b72c61dc2ad77dd45b8cac0fbb7602b84"
+  },
+  {
+   "path": "Engine/Binaries/Win64/vccorlib140.dll",
+   "size": 366360,
+   "sha256": "41b6af9484c860804c69e00c9d7fee22efe5f769c51355936fc9de248221de94"
+  },
+  {
+   "path": "Engine/Binaries/Win64/vcruntime140.dll",
+   "size": 89880,
+   "sha256": "61832990e364dca5bfa2c61d930f00acaae6d1aaa3130392403455ae9a1125a5"
+  },
+  {
+   "path": "Engine/Binaries/Win64/vcruntime140_1.dll",
+   "size": 44312,
+   "sha256": "6cc4315daceb0522816c60678344466cb452426267f70c7faae925361674e774"
+  },
+  {
+   "path": "Engine/Binaries/Win64/xinput1_3.dll",
+   "size": 107368,
+   "sha256": "756cad002e1553cfa1a91ebe8c1b9380ffabe0b4b1916c4a4db802396ddfbef8"
+  },
+  {
+   "path": "Engine/Content/SlateDebug/Fonts/LastResort.tps",
+   "size": 930,
+   "sha256": "0f775fa99d05e21d43d2d06d55982b23dcdccdb512a9a5a07aff674f212c41b8"
+  },
+  {
+   "path": "Engine/Content/SlateDebug/Fonts/LastResort.ttf",
+   "size": 5395052,
+   "sha256": "fff0f8de0b868b964950fe97c9b60f893e9bc85a4f90b3629c5693db058b97b9"
+  },
+  {
+   "path": "Engine/Plugins/OWGameEvents/Source/ThirdParty/OWGameEventsLibrary/x64/Release/libowgameevents.dll",
+   "size": 224072,
+   "sha256": "e882d0660249c7ec11d8899fe017f896864cabb386ddc73ab0c465a9af335efe"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkAudioInput.dll",
+   "size": 112928,
+   "sha256": "69f9ae19a56a4bc091a55cb4be3737028fe9ff9cead5281dfa21998ba1c8bed5"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkCompressor.dll",
+   "size": 120096,
+   "sha256": "7c82e1dd72fee7b30f3034d8247c913d8061ac49a004f8fecbaf3a07a51df7e0"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkConvolutionReverb.dll",
+   "size": 205600,
+   "sha256": "19aabfeb661d218a2275b7c77ebbb012326f7e1af027d1aa515970af175f6c93"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkDelay.dll",
+   "size": 118048,
+   "sha256": "f3812d91982f3ba20b7c1cb1cdac09ae2fbcbda7bee0cbaab093d90ac4897682"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkExpander.dll",
+   "size": 118048,
+   "sha256": "e3b1cfc7a5dedb42a8534f12b3de9dbeedb47f8af3c8bb364f5fa540c20ec7ef"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkFlanger.dll",
+   "size": 139552,
+   "sha256": "c9a35ffd4223099393c6e5d5f848155b2e67a08811dcd4129f9be687e6b7f81e"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkGain.dll",
+   "size": 112928,
+   "sha256": "58675551ccc506fe9a403387a9b1319bf0c41cb70b34f003da4dd98a16c9e741"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkGuitarDistortion.dll",
+   "size": 152352,
+   "sha256": "382a789404c9c6ce91e83e19c9556311efc8def181b6b6e6ed287d6cbb64751d"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkHarmonizer.dll",
+   "size": 208672,
+   "sha256": "4b2129cd7542e725561c8eed8b47081b4b5324ca12f89b8a3e71c32680012317"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkMatrixReverb.dll",
+   "size": 178464,
+   "sha256": "d6399803470f7e9789480096a0566d47876bb51998dd2e8ab7ff95c45ae2eb89"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkMotion.dll",
+   "size": 177952,
+   "sha256": "703b1ebf36891af3e4d763a77d97a632f9f80371fe44638391397e0fbb39fa88"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkParametricEQ.dll",
+   "size": 141600,
+   "sha256": "893cf45aaa3c12fd02fecf390a2cd2c2e0673a0ded7d761539fe0edff1c88958"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkPeakLimiter.dll",
+   "size": 120608,
+   "sha256": "3294177111ff0622ffd0907f2fd7f544e817362b6dd54eedaf00d60f7f451116"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkPitchShifter.dll",
+   "size": 147232,
+   "sha256": "d95f7f47c176c1cf092b7511681616de9b2467bc150da1441905bd18ad7428cf"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkRecorder.dll",
+   "size": 113440,
+   "sha256": "66f3cff7d864e14e109fd66b8ed6a0991bd4fb53992ac22291c6ef427faac90e"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkRoomVerb.dll",
+   "size": 228128,
+   "sha256": "bc7b470d50841b8de1d20f60678d0f507dbf95adb6f56a048f9fadfa0f8c7008"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkSilenceGenerator.dll",
+   "size": 103712,
+   "sha256": "0c24e17138b62a88a4d8773c96d40a9c1fe6bd99104fa05a83e812171be95c77"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkSineTone.dll",
+   "size": 113440,
+   "sha256": "dd587e0d655e381378c928527cdc5eaf4e27cb1dacb77789626fe38f1e5e2b53"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkSoundEngineDLL.dll",
+   "size": 1577760,
+   "sha256": "c2be6a1c4920684fea4fa18a89f989424714c427ca94ae548f0c34211d4d00e4"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkStereoDelay.dll",
+   "size": 153376,
+   "sha256": "c01464498da13003c374e898c2d0a7de9a3b0eea4f694e332220b35365b8f595"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkSynthOne.dll",
+   "size": 157984,
+   "sha256": "9a6f718e5f859df09944301122a1a2a16a19fe8999af6a470d2ba19f94960dc6"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkTimeStretch.dll",
+   "size": 189216,
+   "sha256": "afb2d18b1421eb1f32621c506b600113b914144369cd4fdc9f3b85e6aaf7e456"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkToneGen.dll",
+   "size": 133408,
+   "sha256": "e910766758bd32896d043b4a1bc8f1ba58f7c4fdad935cef5ca4d9c0b6680002"
+  },
+  {
+   "path": "Engine/Plugins/Wwise/ThirdParty/SDK/x64_vc160/Release/bin/AkTremolo.dll",
+   "size": 138016,
+   "sha256": "bd595a3165dc3d0bf27a6770bbf2592ebcbd3e750477128b858bbd8cabf50d95"
+  },
+  {
+   "path": "Engine/Programs/CrashReportClient/Content/Paks/CrashReportClient.pak",
+   "size": 21268931,
+   "sha256": "97018e8fad93516149be99406f0f03fc697eff80fa3aa9bb11710d8721b6328d"
+  },
+  {
+   "path": "Features.json",
+   "size": 47586,
+   "sha256": "b317194f1a410e474c898b09defefb37a706bec0c45c856e135999a575c5933b"
+  },
+  {
+   "path": "Version.txt",
+   "size": 59,
+   "sha256": "0d460e7eb6ebd496740670df939be6a5086368ae35492f54e222e35fa525a9ac"
+  }
+ ]
+}

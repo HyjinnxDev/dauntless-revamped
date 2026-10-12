@@ -1,32 +1,27 @@
-import {chooseClosestRegion} from './autoregion';
 // The launcher's state machine. It owns every piece of state; the renderer draws Snapshots and
 // sends intents. Nothing in here imports Electron: main.ts passes the platform pieces in, which
 // keeps this testable with plain Node.
 //
-// Two server modes exist (see shared/invite.ts):
-//  - private (invite v1): the host's PC over Tailscale, plain HTTP to host:61000.
-//  - public (invite v2): a server on a public IP. Everything goes over TLS to its gateway, pinned
-//    to the invite's certificate fingerprint. While the game runs, a local relay on
-//    127.0.0.1:61000 carries the game's own traffic to the gateway (relay.ts).
+// One kind of server: a Mystic Paradox backend for Dauntless 1.14.7, reached over TLS pinned to the
+// invite's certificate fingerprint (over Tailscale or a public address). While the game runs, a local
+// relay on 127.0.0.1 carries the game's own HTTP and chat traffic to it (relay.ts); the runtime finds
+// the relay through MYSTICPARADOX_API_BASE. The game's UDP traffic goes straight to the server's
+// game ports.
 
 import { createHash } from "node:crypto";
 import { promises as fsp, existsSync } from "node:fs";
 import path from "node:path";
-import { missingDirectX, gameExitDetail } from './windows-runtime';
+import { gameExitDetail } from "./windows-runtime";
 
-import { parseInvite, isLoopbackHost, type Invite } from "../shared/invite";
-import { checkUsername, extractAccountKey } from "../shared/username";
-import { limitedView, type ServerStatus } from "../shared/status";
-import { saveHuntRegion, endPlaying } from './hostapi';
+import { parseInvite, isLoopbackHost, isTailnetHost, type Invite } from "../shared/invite";
+import { checkUsername, isValidPassword } from "../shared/username";
 import type {
   ActionResult,
   Branding,
   ConnectProblem,
   ErrorCode,
-  ExposureMode,
   ExternalTarget,
   GameLanguage,
-  GraphicsPreset,
   InviteCheck,
   Language,
   LauncherError,
@@ -38,74 +33,62 @@ import type {
   Snapshot,
   TaskProgress,
 } from "../shared/types";
-import { EXPOSURE_MODES, GAME_LANGUAGES, GRAPHICS_PRESETS, LANGUAGES } from "../shared/types";
+import { GAME_LANGUAGES, LANGUAGES } from "../shared/types";
 import type { Endpoint } from "./http";
 import {
   fetchBrandingImage,
   fetchBrandingIndex,
   fetchContentManifest,
   fetchNews,
+  fetchRuntimeRelease,
   fetchServerStatus,
-  fetchUserInfo,
+  login,
+  logout as apiLogout,
   probeContent,
+  refreshSession,
   registerAccount,
-  type StatusResult,
+  requestGameSession,
+  type ApiFailure,
+  type RuntimeRelease,
+  type Session,
+  type SessionResult,
 } from "./hostapi";
 import { compareManifests, resolveInside, type GameManifest, type ManifestFile } from "./manifest";
 import { contentDownloadBase, DownloadError, DownloadJob } from "./downloader";
 import { AbortedError, hashFile, removePartFiles, verifyInstall, VerifiedCache } from "./verify";
-import { dllStatus, installPinnedDlls, DllError, win64Dir } from "./dlls";
-import { installClientMods } from "./client-mods";
-import { applyGameConfig } from "./engineini";
+import { installRuntime, installedRuntime, runtimeMatches, RuntimeError, win64Dir } from "./runtime";
 import { locateExistingGame } from "./game-folder";
-import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, type LaunchRuntime, type SpawnFn } from "./launch";
-import { backupFileText, KeyStore, KeyStoreError, serverId, type Encryptor, type KeySlot } from "./keystore";
+import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, relayEnv, type SpawnFn } from "./launch";
+import { KeyStore, serverId, type Encryptor, type KeySlot } from "./keystore";
 import { SettingsStore, type StoredServer, type StoredSettings } from "./settings";
-import { freeBytes, missingVcRuntime } from "./system";
+import { freeBytes } from "./system";
 import { fixedLinkUrl, isAllowedExternalUrl } from "./links";
 import { describeError, log } from "./log";
 import { DEFAULT_RELAY_PORT, Relay, RelayError } from "./relay";
-import {
-  DISK_MARGIN_BYTES,
-  EXE_NAME,
-  EXE_RELATIVE_PATH,
-  PINNED_EXE_SHA256,
-  PROJECT_URL,
-  STATUS_POLL_MS,
-  XMPP_PORT,
-} from "./constants";
+import { DISK_MARGIN_BYTES, EXE_NAME, EXE_RELATIVE_PATH, PINNED_EXE_SHA256, PROJECT_URL, STATUS_POLL_MS } from "./constants";
 
 export interface Platform {
   userDataDir: string;
-  documentsDir?: string;
-  resourcesDir: string;
-  runtimeFilesExist?: (file: string) => boolean;
-
   defaultInstallDir: string;
-  hostPlatform?: NodeJS.Platform;
   appVersion: string;
   packaged: boolean;
   defaultLanguage: Language;
   // The operating system's locale ("es-ES"), for the game language "auto".
   systemLocale?: string;
+  deviceName?: string;
   encryptor: Encryptor;
   manifest: GameManifest | null;
-  gameConfigDir?: string;
-  // Public mode: where the local relay listens. The game server tells every client to use
-  // 127.0.0.1:61000, so only tests and rehearsals change it.
+  // Where the local relay listens while the game runs (tests and rehearsals change it).
   relayPort?: number;
   // The file checked by hash before every launch (tests use a fake game).
   exePin?: { relativePath: string; sha256: string };
   chooseFolder(title: string, defaultPath: string): Promise<string | null>;
-  chooseSaveFile(defaultName: string): Promise<string | null>;
-  chooseOpenFile(): Promise<string | null>;
   openExternal(url: string): Promise<void>;
   openPath(dir: string): Promise<void>;
   emitSnapshot(s: Snapshot): void;
   emitProgress(p: TaskProgress): void;
   findTailscale(): string | null;
   findRunningClients(): Promise<number[]>;
-  prepareGameLaunch?(): Promise<{ runtime: LaunchRuntime; configDir: string; runtimeName: string } | null>;
   spawn?: SpawnFn;
   installUpdate?(): void;
 }
@@ -114,21 +97,31 @@ interface InstallInfo {
   present: number;
   missing: ManifestFile[];
   partFiles: number;
-  dllsOk: boolean;
+  runtimeOk: boolean;
 }
+
+// The signed-in account on the current server, in memory only. The refresh token is in the KeyStore.
+interface Account {
+  userId: string;
+  username: string;
+  accessToken: string;
+  expiresAt: number;
+}
+
+// The backend's access tokens last 12 minutes; renew a little before that.
+const ACCESS_TOKEN_LIFETIME_MS = 10 * 60 * 1000;
 
 const err = (code: ErrorCode, detail?: string): { ok: false; error: LauncherError } => ({ ok: false, error: detail ? { code, detail } : { code } });
 const OK: ActionResult = { ok: true };
 
 export function endpointFor(sv: StoredServer): Endpoint {
-  return { host: sv.host, port: sv.port, pin: sv.mode === "public" ? sv.fp : null };
+  return { host: sv.host, port: sv.port, pin: sv.fp };
 }
 
 export class Controller {
   private readonly settings: SettingsStore;
   private readonly keys: KeyStore;
   private readonly game: GameProcess;
-  private endPlayingSession: (()=>Promise<void>) | null = null;
   private readonly verified: VerifiedCache;
 
   private reachable: boolean | null = null;
@@ -137,16 +130,16 @@ export class Controller {
   private tailscaleInstalled = false;
   private lastCheckedAt: string | null = null;
   private failedPolls = 0;
-  private status: ServerStatus | null = null;
-  private statusUnsupported = false;
   private contentProbe: boolean | null = null;
-  private hasKey = false;
-  private keyRejected = false;
-  // Bumped when a ServerStatus answer already on its way may no longer be shown: logout, a new key,
-  // a forgotten or different server. See fetchStatus().
-  private statusGen = 0;
+  private account: Account | null = null;
+  // One refresh at a time: refresh tokens rotate, and the server revokes the whole sign-in when an
+  // already-used one comes back (two parallel refreshes would do exactly that).
+  private refreshing: Promise<Account | null> | null = null;
+  // Bumped when the server or the sign-in changes, so answers already on their way are dropped.
+  private generation = 0;
   private busy = false;
-  private install: InstallInfo = { present: 0, missing: [], partFiles: 0, dllsOk: false };
+  private install: InstallInfo = { present: 0, missing: [], partFiles: 0, runtimeOk: false };
+  private runtimeRelease: RuntimeRelease | null = null;
   private freeSpace: number | null = null;
   private task: TaskProgress | null = null;
   private taskAbort: AbortController | null = null;
@@ -165,17 +158,14 @@ export class Controller {
   private phase: Phase = "loading";
 
   constructor(private readonly p: Platform) {
-    this.settings = new SettingsStore(p.userDataDir, p.defaultLanguage, p.hostPlatform ?? process.platform);
-    this.keys = new KeyStore(path.join(p.userDataDir, "keys"), p.encryptor, p.documentsDir ? path.join(p.documentsDir, "Dauntless Forever", "Account Keys") : undefined);
+    this.settings = new SettingsStore(p.userDataDir, p.defaultLanguage);
+    this.keys = new KeyStore(path.join(p.userDataDir, "sessions"), p.encryptor);
     this.game = new GameProcess(p.spawn);
     this.verified = new VerifiedCache(path.join(p.userDataDir, "verified-files.json"));
     this.game.onChange((running, code) => {
       log.info(running ? "game started" : `game exited (code ${code ?? "none"})`);
       if (!running) {
-        const end=this.endPlayingSession; this.endPlayingSession=null;
-        if(end) void end().catch(()=>{});
-        if (code !== null && code !== 0) this.lastError = {code:'launch_failed',detail:gameExitDetail(code)};
-
+        if (code !== null && code !== 0) this.lastError = { code: "launch_failed", detail: gameExitDetail(code) };
         void this.stopRelay().then(() => this.publish());
         return;
       }
@@ -193,10 +183,6 @@ export class Controller {
     return this.s.installDir ?? this.p.defaultInstallDir;
   }
 
-  private get hostPlatform(): NodeJS.Platform {
-    return this.p.hostPlatform ?? process.platform;
-  }
-
   // True while the game runs through the local relay: closing the launcher would cut the game off.
   get relayActive(): boolean {
     return this.relay !== null && this.relay.running;
@@ -211,28 +197,25 @@ export class Controller {
     return sv ? endpointFor(sv) : null;
   }
 
-  // Private mode: the content server's own port on the host. Public mode: the gateway itself,
-  // which serves /content/* from the content server behind it.
   private contentEndpoint(): Endpoint | null {
-    const sv = this.s.server;
-    if (!sv) return null;
-    if (sv.mode === "public") return this.contentProbe === true ? endpointFor(sv) : null;
-    if (!this.status || this.status.contentPort === null) return null;
-    return { host: sv.host, port: this.status.contentPort, pin: null };
+    return this.contentProbe === true ? this.endpoint() : null;
   }
 
   private slot(): KeySlot | null {
     const sv = this.s.server;
-    return sv ? { host: sv.host, port: sv.port, mode: sv.mode, fp: sv.fp } : null;
+    return sv ? { host: sv.host, port: sv.port, fp: sv.fp } : null;
   }
 
   private sid(): string | null {
     const sv = this.s.server;
-    return sv ? serverId(sv.host, sv.port, sv.mode) : null;
+    return sv ? serverId(sv.host, sv.port) : null;
+  }
+
+  private device(): { deviceId: string; deviceName: string } {
+    return { deviceId: this.s.deviceId, deviceName: this.p.deviceName ?? "Dauntless Forever launcher" };
   }
 
   async init(): Promise<void> {
-    await this.refreshKeyFlag();
     await this.inspectInstall();
     this.publish();
     if (this.s.server) void this.connect();
@@ -243,10 +226,10 @@ export class Controller {
     if (this.task) return "installing";
     if (this.game.running) return "running";
     if (this.reachable !== true) return "connect";
-    if (!this.hasKey || this.keyRejected) return "register";
+    if (!this.account) return "register";
     if (!this.p.manifest) return "install";
     if (this.install.present === 0 && this.install.partFiles === 0) return "install";
-    if (this.install.missing.length > 0 || !this.install.dllsOk || this.s.verifiedDir !== this.installDir) return "update";
+    if (this.install.missing.length > 0 || !this.install.runtimeOk || this.s.verifiedDir !== this.installDir) return "update";
     return "ready";
   }
 
@@ -260,26 +243,24 @@ export class Controller {
       phase: this.phase,
       busy: this.busy,
       savedServers: this.s.savedServers.map((o) => {
-        const id = serverId(o.host, o.port, o.mode);
-        return { id, mode: o.mode, host: o.host, port: o.port, name: o.name, current: sid === id, username: this.s.usernames[id] ?? null };
+        const id = serverId(o.host, o.port);
+        return { id, host: o.host, port: o.port, name: o.name, current: sid === id, username: this.s.usernames[id] ?? null };
       }),
       server: sv
         ? {
-            mode: sv.mode,
             host: sv.host,
             port: sv.port,
             name: sv.name,
-            hasShare: sv.share !== null,
             hasPendingInvite: sv.code !== null,
+            tailnet: isTailnetHost(sv.host),
             loopback: isLoopbackHost(sv.host),
             fingerprint: sv.fp,
           }
         : null,
       connect: { checking: this.checking, problem: this.connectProblem, tailscaleInstalled: this.tailscaleInstalled, lastCheckedAt: this.lastCheckedAt },
       account: {
-        username: sid ? this.s.usernames[sid] ?? null : null,
-        hasKey: this.hasKey && !this.keyRejected,
-        offerBackup: sid !== null && this.hasKey && !this.keyRejected && this.s.backupOffered[sid] !== true,
+        username: this.account?.username ?? (sid ? this.s.usernames[sid] ?? null : null),
+        signedIn: this.account !== null,
       },
       install: {
         dir: this.installDir,
@@ -287,24 +268,26 @@ export class Controller {
         installed: this.phase === "ready" || this.phase === "running",
         missingFiles: this.install.missing.length,
         verified: this.s.verifiedDir === this.installDir,
-        dllsOk: this.install.dllsOk,
+        runtimeOk: this.install.runtimeOk,
         freeBytes: this.freeSpace,
         requiredBytes: missingBytes + DISK_MARGIN_BYTES,
         totalBytes: manifest?.totalBytes ?? 0,
-        vcRuntimeMissing: missingVcRuntime(process.env, this.p.runtimeFilesExist ?? existsSync, this.hostPlatform),
-        directXMissing: missingDirectX(process.env, this.p.runtimeFilesExist ?? existsSync, this.hostPlatform),
-
         contentAvailable: this.contentEndpoint() !== null,
       },
       task: this.task,
       game: { running: this.game.running, relayPort: this.relay?.port ?? null },
-      settings: { graphics: this.s.graphics, exposure: this.s.exposure, windowed: this.s.windowed, language: this.s.language, gameLanguage: this.s.gameLanguage, streamerMode: this.s.streamerMode, showConsole: this.s.showConsole, ...(this.s.huntRegion ? {huntRegion:this.s.huntRegion} : {}) },
+      settings: this.settingsView(),
       app: { version: this.p.appVersion, packaged: this.p.packaged, updateReady: this.updateReady },
-      status: this.status,
-      statusUnsupported: this.statusUnsupported,
+      // Mystic Paradox has no public player list: a reachable server is shown as "online".
+      status: null,
+      statusUnsupported: this.reachable === true,
       lastError: this.lastError,
       notice: this.notice,
     };
+  }
+
+  private settingsView(): Settings {
+    return { windowed: this.s.windowed, language: this.s.language, gameLanguage: this.s.gameLanguage, streamerMode: this.s.streamerMode };
   }
 
   private publish(): void {
@@ -355,8 +338,8 @@ export class Controller {
 
   // ------------------------------------------------------------------ join / connect
 
-  // Public invites: is there a key for this host:port that belongs to another certificate? The
-  // page asks before it offers to join, so that it can warn instead of offering a one-click join.
+  // Is there a sign-in for this host:port that belongs to another certificate? The page asks before
+  // it offers to join, so that it can warn instead of offering a one-click join.
   async checkInvite(text: unknown): Promise<InviteCheck> {
     const parsed = parseInvite(text);
     if (!parsed.ok) return err("invite_invalid_format", parsed.error);
@@ -364,15 +347,14 @@ export class Controller {
     return { ok: true, certificateChanged: change !== null, previousFingerprint: change?.fp ?? null };
   }
 
-  private async certificateChange(inv: Pick<Invite, "mode" | "host" | "port" | "fp">): Promise<{ fp: string | null } | null> {
-    if (inv.mode !== "public") return null;
-    const bound = await this.keys.certificateOf({ host: inv.host, port: inv.port, mode: "public", fp: inv.fp });
+  private async certificateChange(inv: Pick<Invite, "host" | "port" | "fp">): Promise<{ fp: string } | null> {
+    const bound = await this.keys.certificateOf(inv);
     return bound && bound.fp !== inv.fp ? bound : null;
   }
 
-  // Joins the server from an invite. When a public invite carries another certificate than the
-  // one this PC's key for that host:port belongs to, nothing is changed or sent (error
-  // cert_changed, detail = the saved fingerprint) until the user confirms the new certificate.
+  // Joins the server from an invite. When the invite carries another certificate than the one this
+  // PC's sign-in for that host:port belongs to, nothing is changed or sent (error cert_changed,
+  // detail = the saved fingerprint) until the user confirms the new certificate.
   async submitInvite(text: unknown, opts: { acceptNewCertificate?: boolean } = {}): Promise<ActionResult> {
     if (this.busy || this.task) return err("busy");
     if (this.game.running) return this.fail("already_running");
@@ -385,16 +367,15 @@ export class Controller {
   async switchServer(id: string): Promise<ActionResult> {
     if (this.busy || this.task) return err("busy");
     if (this.game.running) return this.fail("already_running");
-    const saved = this.s.savedServers.find((sv) => serverId(sv.host, sv.port, sv.mode) === id);
+    const saved = this.s.savedServers.find((sv) => serverId(sv.host, sv.port) === id);
     if (!saved) return this.fail("invite_invalid_format");
     return this.join({ ...saved });
   }
 
   async removeSavedServer(id: string): Promise<ActionResult> {
-    const cur = this.sid();
-    if (id === cur) return err("busy"); // the current server stays in the list
+    if (id === this.sid()) return err("busy"); // the current server stays in the list
     await this.settings.update((s) => {
-      s.savedServers = s.savedServers.filter((sv) => serverId(sv.host, sv.port, sv.mode) !== id);
+      s.savedServers = s.savedServers.filter((sv) => serverId(sv.host, sv.port) !== id);
     });
     this.publish();
     return OK;
@@ -404,31 +385,21 @@ export class Controller {
     const change = await this.certificateChange(inv);
     if (change) {
       if (opts.acceptNewCertificate !== true) {
-        log.warn(`invite for ${inv.host}:${inv.port} has a new certificate; the stored key stays with the old one until the user confirms`);
-        return err("cert_changed", change.fp ?? "");
+        log.warn(`invite for ${inv.host}:${inv.port} has a new certificate; the stored sign-in stays with the old one until the user confirms`);
+        return err("cert_changed", change.fp);
       }
-      await this.keys.rebind({ host: inv.host, port: inv.port, mode: "public", fp: change.fp }, inv.fp as string);
-      log.warn(`the user accepted a new certificate for ${inv.host}:${inv.port} (was ${change.fp ?? "not recorded"}, now ${inv.fp})`);
+      await this.keys.rebind(inv, inv.fp);
+      log.warn(`the user accepted a new certificate for ${inv.host}:${inv.port} (was ${change.fp}, now ${inv.fp})`);
     }
     const current = this.s.server;
-    const same =
-      current !== null && current.mode === inv.mode && current.host === inv.host && current.port === inv.port && current.fp === inv.fp;
-    const hasKeyForIt = await this.keys.has({ host: inv.host, port: inv.port, mode: inv.mode, fp: inv.fp });
+    const same = current !== null && current.host === inv.host && current.port === inv.port && current.fp === inv.fp;
+    const signedInThere = await this.keys.has(inv);
     await this.settings.update((s) => {
-      s.server = {
-        mode: inv.mode,
-        host: inv.host,
-        port: inv.port,
-        name: inv.name,
-        share: inv.share,
-        fp: inv.fp,
-        // A friend who already has an account on this server does not need the code again.
-        code: hasKeyForIt ? null : inv.code,
-      };
+      // A friend who already has an account on this server does not need the code again.
+      s.server = { host: inv.host, port: inv.port, name: inv.name, fp: inv.fp, code: signedInThere ? null : inv.code };
     });
     if (!same) this.resetServerState();
-    log.info(`joined ${inv.mode} server ${inv.host}:${inv.port}`);
-    await this.refreshKeyFlag();
+    log.info(`joined server ${inv.host}:${inv.port}`);
     this.lastError = null;
     await this.connect();
     return OK;
@@ -436,15 +407,15 @@ export class Controller {
 
   private resetServerState(): void {
     this.reachable = null;
-    this.status = null;
-    this.statusUnsupported = false;
     this.contentProbe = null;
     this.connectProblem = null;
     this.news = null;
     this.branding = null;
-    this.keyRejected = false;
+    this.account = null;
+    this.refreshing = null;
+    this.runtimeRelease = null;
     this.failedPolls = 0;
-    this.statusGen++;
+    this.generation++;
   }
 
   async forgetServer(): Promise<ActionResult> {
@@ -453,7 +424,6 @@ export class Controller {
       s.server = null;
     });
     this.resetServerState();
-    this.hasKey = false;
     this.publish();
     return OK;
   }
@@ -466,27 +436,22 @@ export class Controller {
     this.checking = true;
     this.publish();
     try {
-      this.tailscaleInstalled = sv.mode === "private" ? this.p.findTailscale() !== null : false;
-      const { res, stale } = await this.fetchStatus(ep);
+      this.tailscaleInstalled = isTailnetHost(sv.host) ? this.p.findTailscale() !== null : false;
+      const res = await fetchServerStatus(ep);
       this.lastCheckedAt = new Date().toISOString();
-      if (res.kind === "ok" || res.kind === "unsupported") {
+      if (res.kind === "ok") {
         this.reachable = true;
         this.connectProblem = null;
         this.failedPolls = 0;
-        // Overtaken (logout, new key, other server): the server still answers, but never show a
-        // list that was asked for with a key the launcher no longer has.
-        this.status = res.kind === "ok" ? (stale ? limitedView(res.status) : res.status) : null;
-        this.statusUnsupported = res.kind === "unsupported";
-        if (res.kind === "ok" && !stale) await this.rememberServerName(res.status.name);
-        if (sv.mode === "public") this.contentProbe = await probeContent(ep);
-        await this.checkAccount();
+        this.contentProbe = await probeContent(ep);
+        if (!this.account) await this.resumeSession();
         await this.inspectInstall();
         void this.loadExtras();
       } else {
         this.reachable = false;
         if (res.kind === "bad_answer") this.connectProblem = "bad_answer";
         else if (res.kind === "cert_mismatch") this.connectProblem = "cert_mismatch";
-        else if (sv.mode === "private" && !this.tailscaleInstalled && !isLoopbackHost(ep.host)) this.connectProblem = "tailscale_missing";
+        else if (isTailnetHost(sv.host) && !this.tailscaleInstalled) this.connectProblem = "tailscale_missing";
         else this.connectProblem = "unreachable";
         if (this.connectProblem === "cert_mismatch") log.error(`server ${ep.host}:${ep.port} presented a certificate that does not match the invite`);
         else log.warn(`server ${ep.host}:${ep.port} not reachable (${this.connectProblem})`);
@@ -495,71 +460,6 @@ export class Controller {
     } finally {
       this.checking = false;
       this.publish();
-    }
-  }
-
-  private async rememberServerName(name: string): Promise<void> {
-    const sv = this.s.server;
-    if (sv && sv.name !== name) {
-      await this.settings.update((s) => {
-        if (s.server) s.server.name = name;
-      });
-    }
-  }
-
-  private async refreshKeyFlag(): Promise<void> {
-    const slot = this.slot();
-    this.hasKey = slot ? await this.keys.has(slot) : false;
-  }
-
-  // The key sent with ServerStatus, so the server lists who is online (it shows the list to
-  // registered players only). Only this server's own key, which in public mode is bound to the
-  // invite's certificate and only ever goes over the connection pinned to it; none while the
-  // server refuses the key. Read from the key store for each request, never kept in memory.
-  private async statusKey(): Promise<string | null> {
-    const slot = this.slot();
-    if (!slot || !this.hasKey || this.keyRejected) return null;
-    return this.keys.load(slot).catch(() => null);
-  }
-
-  // ServerStatus with statusKey(). "stale" when statusGen moved while it was on its way (the user
-  // logged out, a new key was stored, the server was forgotten or changed): the answer was asked
-  // for under the old state, so a full list in it must not be shown any more.
-  private async fetchStatus(ep: Endpoint): Promise<{ res: StatusResult; stale: boolean }> {
-    const gen = this.statusGen;
-    const res = await fetchServerStatus(ep, { key: await this.statusKey() });
-    return { res, stale: gen !== this.statusGen };
-  }
-
-  // Confirms the stored key with GetUserInfo and refreshes the username.
-  private async checkAccount(): Promise<void> {
-    const ep = this.endpoint();
-    const slot = this.slot();
-    const sid = this.sid();
-    if (!ep || !slot || !sid) return;
-    let key: string | null = null;
-    try {
-      key = await this.keys.load(slot);
-    } catch {
-      key = null;
-    }
-    this.hasKey = key !== null;
-    if (!key) return;
-    const info = await fetchUserInfo(ep, key);
-    if (info.ok) {
-      this.keyRejected = false;
-      if (this.s.usernames[sid] !== info.info.username) {
-        await this.settings.update((s) => {
-          s.usernames[sid] = info.info.username;
-        });
-      }
-    } else if (info.error === "account_banned") {
-      this.keyRejected = true;
-      this.lastError = {code:'account_banned',detail:info.detail};
-    } else if (info.error === "key_rejected") {
-      this.keyRejected = true;
-      this.lastError = { code: "key_rejected" };
-      log.warn("the server does not accept the stored key");
     }
   }
 
@@ -584,26 +484,19 @@ export class Controller {
       if (this.connectProblem !== "cert_mismatch") await this.connect();
       return;
     }
-    const { res, stale } = await this.fetchStatus(ep);
-    // Overtaken: drop it; the next poll asks again under the new state.
-    if (stale) return;
+    const gen = this.generation;
+    const res = await fetchServerStatus(ep);
+    if (gen !== this.generation) return;
     if (res.kind === "ok") {
-      this.status = res.status;
-      this.statusUnsupported = false;
       this.failedPolls = 0;
       if (this.branding === null) void this.loadExtras();
       else void this.refreshNews();
-    } else if (res.kind === "unsupported") {
-      this.statusUnsupported = true;
-      this.failedPolls = 0;
     } else if (res.kind === "cert_mismatch") {
       this.reachable = false;
       this.connectProblem = "cert_mismatch";
-      if (this.status) this.status = { ...this.status, online: false };
       log.error("the server's certificate changed and no longer matches the invite");
     } else {
       this.failedPolls++;
-      if (this.status) this.status = { ...this.status, online: false };
       // While the game runs, a busy moment on the server must not flip the launcher back to the
       // connect guide.
       if (this.failedPolls >= 2 && !this.game.running) {
@@ -622,12 +515,17 @@ export class Controller {
     const ep = this.contentEndpoint();
     if (!ep || this.newsLoading || (this.news !== null && Date.now() - this.newsCheckedAt < 60000)) return;
     this.newsLoading = true;
-    const generation = this.statusGen;
+    const gen = this.generation;
     this.newsCheckedAt = Date.now();
     try {
       const items = await fetchNews(ep, this.news ?? []);
-      if (generation === this.statusGen) { this.news = items; this.publish(); }
-    } finally { this.newsLoading = false; }
+      if (gen === this.generation) {
+        this.news = items;
+        this.publish();
+      }
+    } finally {
+      this.newsLoading = false;
+    }
   }
 
   private async loadExtras(): Promise<void> {
@@ -669,155 +567,122 @@ export class Controller {
 
   // ------------------------------------------------------------------ account
 
-  async register(username: unknown): Promise<RegisterOutcome> {
+  // Keeps a new or refreshed session: the rotated refresh token goes to the KeyStore, the access
+  // token stays in memory.
+  private async adopt(session: Session): Promise<Account> {
+    const slot = this.slot();
+    const sid = this.sid();
+    if (!slot || !sid) throw new Error("no server");
+    await this.keys.save(slot, session.refreshToken);
+    this.account = { userId: session.userId, username: session.username, accessToken: session.accessToken, expiresAt: Date.now() + ACCESS_TOKEN_LIFETIME_MS };
+    if (this.s.usernames[sid] !== session.username || this.s.server?.code) {
+      await this.settings.update((s) => {
+        s.usernames[sid] = session.username;
+        if (s.server) s.server.code = null;
+      });
+    }
+    return this.account;
+  }
+
+  // Trades the stored refresh token for a new session. Only one at a time (see `refreshing`).
+  private refresh(): Promise<Account | null> {
+    if (this.refreshing) return this.refreshing;
+    const gen = this.generation;
+    const run = async (): Promise<Account | null> => {
+      const ep = this.endpoint();
+      const slot = this.slot();
+      if (!ep || !slot) return null;
+      const token = await this.keys.load(slot).catch(() => null);
+      if (!token) return null;
+      const res = await refreshSession(ep, token, this.device());
+      if (gen !== this.generation) return null;
+      if (res.ok) return this.adopt(res.session);
+      if (res.error === "session_expired" || res.error === "account_banned") {
+        await this.keys.remove(slot);
+        this.account = null;
+        this.lastError = res.error === "account_banned" ? { code: "account_banned", detail: res.detail } : { code: "session_expired" };
+        log.warn(`the server no longer accepts the stored sign-in (${res.error})`);
+      } else {
+        // Unreachable, rate limited, server error: the sign-in is kept for the next try.
+        this.lastError = { code: res.error };
+      }
+      return null;
+    };
+    this.refreshing = run().finally(() => {
+      this.refreshing = null;
+    });
+    return this.refreshing;
+  }
+
+  // A current access token, refreshing when needed. null = not signed in (any more).
+  async accessToken(): Promise<string | null> {
+    if (this.account && Date.now() < this.account.expiresAt) return this.account.accessToken;
+    const account = await this.refresh();
+    return account?.accessToken ?? null;
+  }
+
+  private async resumeSession(): Promise<void> {
+    if (await this.refresh()) log.info(`signed in as ${this.account?.username}`);
+  }
+
+  private async sessionOutcome(res: SessionResult, what: string): Promise<RegisterOutcome> {
+    if (!res.ok) {
+      log.warn(`${what} refused: ${res.error}`);
+      this.lastError = res.detail ? { code: res.error, detail: res.detail } : { code: res.error };
+      return { ok: false, error: this.lastError };
+    }
+    try {
+      await this.adopt(res.session);
+    } catch (e) {
+      log.error(`could not store the sign-in: ${describeError(e)}`);
+      this.account = null;
+      this.lastError = { code: "key_storage_unavailable" };
+      return err("key_storage_unavailable");
+    }
+    log.info(`${what}: ${res.session.username}`);
+    await this.inspectInstall();
+    return { ok: true, username: res.session.username };
+  }
+
+  async register(username: unknown, password: unknown): Promise<RegisterOutcome> {
     if (this.busy || this.task) return err("busy");
     const check = checkUsername(username);
     if (check !== "ok") return this.fail("username_invalid", check);
+    if (!isValidPassword(password)) return this.fail("password_invalid");
     const ep = this.endpoint();
     const sv = this.s.server;
-    const slot = this.slot();
-    const sid = this.sid();
-    if (!ep || !sv || !slot || !sid) return err("server_unreachable");
+    if (!ep || !sv) return err("server_unreachable");
     return this.withBusy(async () => {
-      const res = await registerAccount(ep, username as string, sv.code ?? "");
-      if (!res.ok) {
-        log.warn(`registration refused: ${res.error}`);
-        this.lastError = { code: res.error };
-        return err(res.error);
-      }
-      try {
-        await this.keys.save(slot, res.key);
-      } catch (e) {
-        log.error(`could not store the key: ${describeError(e)}`);
-        this.lastError = { code: "key_storage_unavailable" };
-        return err("key_storage_unavailable");
-      }
-      await this.settings.update((s) => {
-        if (s.server) s.server.code = null;
-        s.usernames[sid] = username as string;
-        delete s.backupOffered[sid];
-      });
-      this.hasKey = true;
-      this.keyRejected = false;
-      this.statusGen++;
-      log.info(`registered as ${username as string}`);
-      await this.checkAccount();
-      await this.inspectInstall();
-      // Now a registered player: ask again, with the key, so the player list shows at once.
-      await this.pollStatus();
-      return { ok: true as const, username: username as string };
+      const res = await registerAccount(ep, { username: username as string, password: password as string, inviteCode: sv.code, ...this.device() });
+      return this.sessionOutcome(res, "registered");
     });
   }
 
-  async useExistingKey(text: unknown): Promise<ActionResult> {
+  // identifier: the username (or the email of an account made with one).
+  async signIn(identifier: unknown, password: unknown): Promise<RegisterOutcome> {
     if (this.busy || this.task) return err("busy");
-    const key = typeof text === "string" ? extractAccountKey(text) : null;
-    if (!key) return this.fail("key_invalid");
-    return this.withBusy(() => this.adoptKey(key));
-  }
-
-  async importKeyFile(): Promise<ActionResult> {
-    if (this.busy || this.task) return err("busy");
-    const file = await this.p.chooseOpenFile();
-    if (!file) return err("cancelled");
-    let text: string;
-    try {
-      const st = await fsp.stat(file);
-      if (st.size > 8192) return this.fail("key_invalid");
-      text = await fsp.readFile(file, "utf8");
-    } catch {
-      return this.fail("key_invalid");
-    }
-    const key = extractAccountKey(text);
-    if (!key) return this.fail("key_invalid");
-    return this.withBusy(() => this.adoptKey(key));
-  }
-
-  private async adoptKey(key: string): Promise<ActionResult> {
+    if (typeof identifier !== "string" || identifier.trim().length === 0 || identifier.length > 254) return this.fail("login_failed");
+    if (typeof password !== "string" || password.length === 0 || password.length > 256) return this.fail("login_failed");
     const ep = this.endpoint();
-    const slot = this.slot();
-    const sid = this.sid();
-    if (!ep || !slot || !sid) return err("server_unreachable");
-    const info = await fetchUserInfo(ep, key);
-    if (!info.ok) {
-      this.lastError = { code: info.error, detail: info.detail };
-      return {ok:false,error:this.lastError};
-    }
-    try {
-      await this.keys.save(slot, key);
-    } catch (e) {
-      this.lastError = { code: e instanceof KeyStoreError && e.code === "invalid" ? "key_invalid" : "key_storage_unavailable" };
-      return err(this.lastError.code);
-    }
-    await this.settings.update((s) => {
-      s.usernames[sid] = info.info.username;
-      s.backupOffered[sid] = true; // they already have a copy
-      if (s.server) s.server.code = null;
+    if (!ep) return err("server_unreachable");
+    return this.withBusy(async () => {
+      const res = await login(ep, { identifier: identifier.trim(), password, ...this.device() });
+      return this.sessionOutcome(res, "signed in");
     });
-    this.hasKey = true;
-    this.keyRejected = false;
-    this.statusGen++;
-    log.info(`using an existing key for ${info.info.username}`);
-    await this.inspectInstall();
-    await this.pollStatus();
-    return OK;
-  }
-
-  async saveKeyBackup(): Promise<ActionResult> {
-    const sv = this.s.server;
-    const slot = this.slot();
-    const sid = this.sid();
-    if (!sv || !slot || !sid) return err("server_unreachable");
-    const key = await this.keys.load(slot).catch(() => null);
-    if (!key) return this.fail("key_invalid");
-    const username = this.s.usernames[sid] ?? null;
-    const file = await this.p.chooseSaveFile(`Dauntless Forever key${username ? ` - ${username}` : ""}.txt`);
-    if (!file) return err("cancelled");
-    try {
-      await fsp.writeFile(
-        file,
-        backupFileText({ key, username, serverName: sv.name, host: sv.host, port: sv.port, fingerprint: sv.fp, date: new Date() }),
-        { mode: 0o600 },
-      );
-    } catch (e) {
-      log.error(`backup not saved: ${describeError(e)}`);
-      return this.fail("unknown");
-    }
-    log.info("key backup saved");
-    await this.settings.update((s) => {
-      s.backupOffered[sid] = true;
-    });
-    this.notice = "backup_saved";
-    this.publish();
-    return OK;
-  }
-
-  async dismissBackupOffer(): Promise<void> {
-    const sid = this.sid();
-    if (!sid) return;
-    await this.settings.update((s) => {
-      s.backupOffered[sid] = true;
-    });
-    this.publish();
   }
 
   async logout(): Promise<ActionResult> {
     if (this.task || this.game.running) return err("busy");
     const slot = this.slot();
-    const sid = this.sid();
-    if (!slot || !sid) return OK;
+    const ep = this.endpoint();
+    if (!slot || !ep) return OK;
+    const token = this.account?.accessToken;
+    this.generation++;
+    this.account = null;
+    this.refreshing = null;
     await this.keys.remove(slot);
-    await this.settings.update((s) => {
-      delete s.usernames[sid];
-      delete s.backupOffered[sid];
-    });
-    this.hasKey = false;
-    this.keyRejected = false;
-    // Without a key the server no longer lists who is online; stop showing the old list now, and
-    // drop any status request still on its way with the old key (it would bring the list back).
-    this.statusGen++;
-    if (this.status) this.status = limitedView(this.status);
-    log.info("logged out; key removed");
+    if (token) await apiLogout(ep, token);
+    log.info("signed out");
     this.publish();
     return OK;
   }
@@ -829,7 +694,7 @@ export class Controller {
     const dir = this.installDir;
     this.freeSpace = await freeBytes(dir);
     if (!manifest) {
-      this.install = { present: 0, missing: [], partFiles: 0, dllsOk: false };
+      this.install = { present: 0, missing: [], partFiles: 0, runtimeOk: false };
       return;
     }
     let present = 0;
@@ -849,34 +714,37 @@ export class Controller {
       missing.push(f);
       if (existsSync(full + ".part")) partFiles++;
     }
-    const dlls = present > 0 ? await dllStatus(dir) : [];
-    this.install = { present, missing, partFiles, dllsOk: dlls.length > 0 && dlls.every((d) => d.ok) };
+    this.install = { present, missing, partFiles, runtimeOk: present > 0 && (await this.runtimeOk(dir)) };
+  }
+
+  // The runtime counts as fine when it matches the server's current release (or, before the release
+  // is known, when both files are there at all).
+  private async runtimeOk(dir: string): Promise<boolean> {
+    const ep = this.endpoint();
+    if (ep && this.reachable === true && !this.runtimeRelease) {
+      const release = await fetchRuntimeRelease(ep);
+      if ("files" in release) this.runtimeRelease = release;
+    }
+    if (this.runtimeRelease) return runtimeMatches(await installedRuntime(dir, this.runtimeRelease), this.runtimeRelease);
+    return ["MysticParadox.dll", "winmm.dll"].every((n) => existsSync(path.join(win64Dir(dir), n)));
   }
 
   async chooseInstallDir(): Promise<ActionResult> {
     if (this.task || this.busy || this.game.running) return err("busy");
     const picked = await this.p.chooseFolder("install", this.installDir);
     if (!picked) return err("cancelled");
-    // A folder that already holds the game (BaseGame144, its Dauntless folder, or Archon or Win64
-    // inside it) is used as that game: no second copy is downloaded next to it.
-    const existing = await locateExistingGame(picked, this.hostPlatform);
+    // A folder that already holds the game is used as that game: no second copy is downloaded next to it.
+    const existing = await locateExistingGame(picked, "win32");
     if (this.task || this.busy || this.game.running) return err("busy");
     // A game found there whose root is too long is refused, not given a second copy in a subfolder
     // (which would be longer still).
     if (!existing.ok && existing.reason === "too_long") return this.fail("folder_invalid");
-    const pathApi = this.hostPlatform === "win32" ? path.win32 : path.posix;
-    let dir = existing.ok ? existing.root : pathApi.resolve(picked);
-    const absolute = this.hostPlatform === "win32" ? /^[A-Za-z]:[\\/]/.test(dir) && path.win32.isAbsolute(dir) : path.posix.isAbsolute(dir);
-    if (!absolute || dir.length > 150) return this.fail("folder_invalid");
+    let dir = existing.ok ? existing.root : path.win32.resolve(picked);
+    if (!/^[A-Za-z]:[\\/]/.test(dir) || dir.length > 150) return this.fail("folder_invalid");
     // Otherwise an empty folder is used as is, and anything else gets a subfolder.
     if (!existing.ok) {
-      let entries: string[] = [];
-      try {
-        entries = await fsp.readdir(dir);
-      } catch {
-        entries = [];
-      }
-      if (entries.length > 0 && !entries.some((e) => e.toLowerCase() === "archon")) dir = pathApi.join(dir, "DauntlessForever");
+      const entries = await fsp.readdir(dir).catch(() => [] as string[]);
+      if (entries.length > 0 && !entries.some((e) => e.toLowerCase() === "archon")) dir = path.win32.join(dir, "Dauntless");
     }
     await this.settings.update((s) => {
       s.installDir = dir === this.p.defaultInstallDir ? null : dir;
@@ -893,13 +761,12 @@ export class Controller {
     return this.useExistingGamePath(picked);
   }
 
-  // "I already have the game files", from a pasted path or a picked folder (Vvoidddd, #8). The game
-  // is used where it is: Repair checks every file against the manifest, fetches only what is missing
-  // or different, and installs the pinned DLLs.
+  // "I already have the game files", from a pasted path or a picked folder. The game is used where it
+  // is: Repair checks every file against the manifest, fetches only what is missing or different, and
+  // installs the server's runtime.
   async useExistingGamePath(input: string): Promise<ActionResult> {
     if (this.task || this.busy || this.game.running) return err("busy");
-    const found = await locateExistingGame(input, this.hostPlatform);
-    // Unlike the folder dialog, a pasted path leaves the window usable while the folder is looked at.
+    const found = await locateExistingGame(input, "win32");
     if (this.task || this.busy || this.game.running) return err("busy");
     if (!found.ok) return this.fail(found.reason === "not_found" ? "game_folder_not_found" : "folder_invalid");
     await this.settings.update((s) => {
@@ -926,15 +793,11 @@ export class Controller {
   }
 
   pauseTask(): void {
-    if (this.job && this.task?.kind === "download") {
-      this.job.pause();
-    }
+    if (this.job && this.task?.kind === "download") this.job.pause();
   }
 
   resumeTask(): void {
-    if (this.job && this.task?.kind === "download") {
-      this.job.resume();
-    }
+    if (this.job && this.task?.kind === "download") this.job.resume();
   }
 
   cancelTask(): void {
@@ -947,14 +810,21 @@ export class Controller {
     if (t) this.p.emitProgress(t);
   }
 
-  // UE4SS and the client mods (client-mods.ts). Never fatal: the game runs without them.
-  private async installMods(dir: string): Promise<void> {
+  // The server's current runtime release, installed next to the game exe.
+  private async ensureRuntime(dir: string): Promise<RuntimeRelease | ApiFailure> {
+    const ep = this.endpoint();
+    if (!ep) return { ok: false, error: "server_unreachable" };
+    const release = await fetchRuntimeRelease(ep);
+    if (!("files" in release)) return release;
+    this.runtimeRelease = release;
     try {
-      const r = await installClientMods(this.p.resourcesDir, dir);
-      if (r) log.info(`client mods: ${r.installed} installed, ${r.upToDate} up to date, ${r.kept} kept, ${r.removed} removed, ${r.disabled} switched off`);
+      await installRuntime(ep, dir, release);
     } catch (e) {
-      log.warn(`client mods not installed: ${describeError(e)}`);
+      log.error(`runtime install failed: ${describeError(e)}`);
+      return { ok: false, error: e instanceof RuntimeError && e.code === "download" ? "runtime_unavailable" : "runtime_failed", detail: e instanceof RuntimeError ? e.file : undefined };
     }
+    log.info(`runtime ${release.version} installed`);
+    return release;
   }
 
   private async runTask(mode: "install" | "repair"): Promise<ActionResult> {
@@ -962,9 +832,7 @@ export class Controller {
     if (this.game.running) return this.fail("already_running");
     const manifest = this.p.manifest;
     if (!manifest) return this.fail("manifest_unavailable");
-    const sv = this.s.server;
-    const slot = this.slot();
-    if (!sv || !slot) return this.fail("server_unreachable");
+    if (!this.s.server) return this.fail("server_unreachable");
     const dir = this.installDir;
     this.lastError = null;
     this.notice = null;
@@ -1003,14 +871,11 @@ export class Controller {
 
       // 2. Download what is missing or damaged.
       if (needed.length > 0) {
-        if (sv.mode === "public" && this.contentProbe !== true) {
-          const ep = this.endpoint();
-          if (ep) this.contentProbe = await probeContent(ep);
-        }
+        const ep = this.endpoint();
+        if (ep && this.contentProbe !== true) this.contentProbe = await probeContent(ep);
         const cep = this.contentEndpoint();
         if (!cep) return this.fail("no_content_server");
-        const key = await this.keys.load(slot).catch(() => null);
-        if (!key) return this.fail("key_invalid");
+        if ((await this.accessToken()) === null) return this.fail("session_expired");
 
         const serverManifest = await fetchContentManifest(cep);
         if (serverManifest === null) return this.fail("manifest_unavailable");
@@ -1023,11 +888,7 @@ export class Controller {
         const free = await freeBytes(dir);
         let onDisk = 0;
         for (const f of needed) {
-          try {
-            onDisk += Math.min(f.size, (await fsp.stat(resolveInside(dir, f.path) + ".part")).size);
-          } catch {
-            /* none */
-          }
+          onDisk += Math.min(f.size, (await fsp.stat(resolveInside(dir, f.path) + ".part").catch(() => ({ size: 0 }))).size);
         }
         const required = needed.reduce((a, f) => a + f.size, 0) - onDisk + DISK_MARGIN_BYTES;
         if (free !== null && free < required) return this.fail("disk_space", String(required));
@@ -1035,7 +896,7 @@ export class Controller {
         const job = new DownloadJob({
           endpoint: cep,
           downloadBaseUrl: contentDownloadBase(serverManifest),
-          key,
+          auth: () => this.accessToken(),
           installDir: dir,
           files: needed,
           onProgress: (p) => this.setTask({ kind: "download", ...p }),
@@ -1052,11 +913,11 @@ export class Controller {
         log.info(`downloaded and verified ${needed.length} file(s)`);
       }
 
-      // 3. The pinned DLLs.
-      this.setTask(blank("dlls", 2, 2));
+      // 3. The server's runtime.
+      this.setTask(blank("runtime", 2, 2));
       this.publish();
-      await installPinnedDlls(this.p.resourcesDir, dir);
-      await this.installMods(dir);
+      const runtime = await this.ensureRuntime(dir);
+      if (!("files" in runtime)) return this.fail(runtime.error, runtime.detail);
       await removePartFiles(dir, manifest.files);
       await this.settings.update((s) => {
         s.verifiedDir = dir;
@@ -1072,7 +933,7 @@ export class Controller {
       if (e instanceof DownloadError) {
         log.error(`download stopped: ${e.code} ${e.filePath ?? ""} ${e.message}`);
         const map: Record<string, ErrorCode> = {
-          key_rejected: "key_rejected",
+          session_expired: "session_expired",
           file_missing_on_server: "file_missing_on_server",
           file_different_on_server: "file_different_on_server",
           disk_space: "disk_space",
@@ -1080,16 +941,11 @@ export class Controller {
           download_failed: "download_failed",
           cert_mismatch: "cert_mismatch",
         };
-        if (e.code === "key_rejected") this.keyRejected = true;
         if (e.code === "cert_mismatch") {
           this.reachable = false;
           this.connectProblem = "cert_mismatch";
         }
         return this.fail(map[e.code] ?? "download_failed", e.filePath);
-      }
-      if (e instanceof DllError) {
-        log.error(`DLL install failed: ${e.dll}: ${e.message}`);
-        return this.fail("dll_failed", e.dll);
       }
       const code = (e as NodeJS.ErrnoException)?.code;
       log.error(`${mode} failed: ${describeError(e)}`);
@@ -1112,104 +968,50 @@ export class Controller {
     if (this.busy || this.task) return err("busy");
     if (this.game.running) return this.fail("already_running");
     const sv = this.s.server;
-    const slot = this.slot();
-    if (!sv || !slot) return this.fail("server_unreachable");
+    const ep = this.endpoint();
+    if (!sv || !ep) return this.fail("server_unreachable");
     return this.withBusy(async () => {
-      const missing = [...missingVcRuntime(process.env, this.p.runtimeFilesExist ?? existsSync, this.hostPlatform), ...missingDirectX(process.env, this.p.runtimeFilesExist ?? existsSync, this.hostPlatform)];
-      if (missing.length) return this.fail('windows_runtime_missing', missing.join(', '));
-
-      const others = await this.p.findRunningClients();
-      if (others.length > 0) return this.fail("already_running");
-      const key = await this.keys.load(slot).catch(() => null);
-      if (!key) return this.fail("key_invalid");
-      const ep = this.endpoint();
-      if (!ep) return this.fail('server_unreachable');
-      const account = await fetchUserInfo(ep, key);
-      if (!account.ok) {
-        this.keyRejected = account.error === 'key_rejected' || account.error === 'account_banned';
-        return this.fail(account.error, account.detail);
-      }
-      this.keyRejected = false;
-      const chosenRegion = !this.s.huntRegion || this.s.huntRegion === 'auto'
-        ? await chooseClosestRegion(ep, key) : this.s.huntRegion;
-      if (chosenRegion) {
-        try {
-          if (!await saveHuntRegion(ep,key,chosenRegion)) return this.fail('server_error','The selected hunt region is unavailable. Choose Main in Settings or try again later.');
-        } catch { return this.fail('server_unreachable'); }
-      }
+      if ((await this.p.findRunningClients()).length > 0) return this.fail("already_running");
       const dir = this.installDir;
       await this.inspectInstall();
       if (this.install.missing.length > 0) return this.fail("game_files_invalid", String(this.install.missing.length));
-      // Same checks as play.ps1 on every launch: the exe and both DLLs by hash.
+      // The exe by hash on every launch; the server checks the same hash before it hands out a login.
       const exePin = this.p.exePin ?? { relativePath: EXE_RELATIVE_PATH, sha256: PINNED_EXE_SHA256 };
-      let exeHash = "";
-      try {
-        exeHash = await hashFile(resolveInside(dir, exePin.relativePath));
-      } catch {
-        exeHash = "";
-      }
+      const exeHash = await hashFile(resolveInside(dir, exePin.relativePath)).catch(() => "");
       if (exeHash !== exePin.sha256) return this.fail("game_files_invalid", exePin.relativePath);
-      if (!this.install.dllsOk) {
-        try {
-          await installPinnedDlls(this.p.resourcesDir, dir);
-        } catch (e) {
-          log.error(`DLL repair before launch failed: ${describeError(e)}`);
-          return this.fail("dll_failed");
-        }
-      }
-      await this.installMods(dir);
 
-      // Where the game connects. Public mode: the local relay, started before the game.
-      let gameHost = sv.host;
-      let gamePort = sv.port;
-      let xmppPort = XMPP_PORT;
-      if (sv.mode === "public") {
-        const started = await this.startRelay(sv);
-        if (!started.ok) return started;
-        gameHost = "127.0.0.1";
-        gamePort = this.relay?.port ?? DEFAULT_RELAY_PORT;
-        xmppPort = gamePort;
-      }
+      // The server's current runtime release (it may have been updated since the last launch).
+      const release = await this.ensureRuntime(dir);
+      if (!("files" in release)) return this.fail(release.error, release.detail);
+      this.install.runtimeOk = true;
 
+      const token = await this.accessToken();
+      if (!token || !this.account) return this.fail(this.lastError?.code ?? "session_expired", this.lastError?.detail);
+      const { userId, username } = this.account;
+      const ticket = await requestGameSession(ep, token, {
+        executableSha256: exeHash,
+        runtimeVersion: release.version,
+        runtimeArtifacts: release.files.map((f) => ({ name: f.name, sha256: f.sha256 })),
+      });
+      if (!ticket.ok) return this.fail(ticket.error, ticket.detail);
+
+      // The relay first: the game talks to it from its first request.
+      const started = await this.startRelay(sv);
+      if (!started.ok) return started;
+      const relayPort = this.relay?.port ?? DEFAULT_RELAY_PORT;
       let launched = false;
       try {
-        let prepared: { runtime: LaunchRuntime; configDir: string; runtimeName: string } | null = null;
-        if (this.p.prepareGameLaunch) {
-          try {
-            prepared = await this.p.prepareGameLaunch();
-          } catch (e) {
-            log.error(`compatibility runtime preparation failed: ${describeError(e)}`);
-            return this.fail("launch_failed");
-          }
-          if (this.hostPlatform === "linux" && prepared === null) return this.fail("compat_runtime_missing");
-        }
-        let displayRepaired = false;
-
+        const args = buildLaunchArgs({
+          exchangeCode: ticket.exchangeCode,
+          userId,
+          username,
+          windowed: this.s.windowed,
+          gameLocale: gameLocale(this.s.gameLanguage, this.p.systemLocale ?? "en-US"),
+        });
+        log.info(`starting ${describeLaunch(EXE_NAME, args)} (relay 127.0.0.1:${relayPort} -> ${sv.host}:${sv.port})`);
         try {
-          const config = await applyGameConfig({
-            host: gameHost,
-            xmppPort,
-            graphics: this.s.graphics,
-            exposure: this.s.exposure,
-            safeWindow: this.s.windowed,
-
-            configDir: prepared?.configDir ?? this.p.gameConfigDir,
-          });
-          displayRepaired = config.displayRepaired;
-
-          if (this.s.exposure !== "game") log.info(`game config: auto exposure ${this.s.exposure}`);
+          await this.game.start(win64Dir(dir), args, relayEnv(relayPort));
         } catch (e) {
-          log.error(`could not write the game config: ${describeError(e)}`);
-          return this.fail("config_failed");
-        }
-        const args = buildLaunchArgs({ host: gameHost, port: gamePort, key, windowed: this.s.windowed || displayRepaired, gameLocale: gameLocale(this.s.gameLanguage, this.p.systemLocale ?? "en-US") });
-        const via = prepared ? ` via ${prepared.runtimeName}` : "";
-        log.info(`starting ${describeLaunch(EXE_NAME, args)}${via}${sv.mode === "public" ? ` (relay to ${sv.host}:${sv.port})` : ""}`);
-        try {
-          this.endPlayingSession=()=>endPlaying(ep,key);
-          await this.game.start(win64Dir(dir), args, prepared?.runtime, this.s.showConsole ? { DR_SHOW_CONSOLE: "1" } : undefined);
-        } catch (e) {
-          this.endPlayingSession=null;
           log.error(`launch failed: ${describeError(e)}`);
           return this.fail("launch_failed");
         }
@@ -1223,7 +1025,6 @@ export class Controller {
 
   private async startRelay(sv: StoredServer): Promise<ActionResult> {
     await this.stopRelay();
-    if (sv.mode !== "public" || sv.fp === null) return err("relay_failed");
     const port = this.p.relayPort ?? DEFAULT_RELAY_PORT;
     const relay = new Relay({
       target: { host: sv.host, port: sv.port, fingerprint: sv.fp },
@@ -1259,34 +1060,20 @@ export class Controller {
     if (typeof patch === "object" && patch !== null) {
       const p = patch as Record<string, unknown>;
       await this.settings.update((s) => {
-        if (GRAPHICS_PRESETS.includes(p.graphics as GraphicsPreset)) s.graphics = p.graphics as GraphicsPreset;
-        if (EXPOSURE_MODES.includes(p.exposure as ExposureMode)) s.exposure = p.exposure as ExposureMode;
         if (typeof p.windowed === "boolean") s.windowed = p.windowed;
         if (typeof p.streamerMode === "boolean") s.streamerMode = p.streamerMode;
-        if (typeof p.showConsole === "boolean") s.showConsole = p.showConsole;
-        if (p.huntRegion === 'auto' || p.huntRegion === 'main' || p.huntRegion === 'aus' || p.huntRegion === 'ger' || p.huntRegion === 'us') s.huntRegion = p.huntRegion;
         if (LANGUAGES.includes(p.language as Language)) s.language = p.language as Language;
         if (GAME_LANGUAGES.includes(p.gameLanguage as GameLanguage)) s.gameLanguage = p.gameLanguage as GameLanguage;
       });
     }
     this.publish();
-    return { graphics: this.s.graphics, exposure: this.s.exposure, windowed: this.s.windowed, language: this.s.language, gameLanguage: this.s.gameLanguage, streamerMode: this.s.streamerMode, showConsole: this.s.showConsole, ...(this.s.huntRegion ? {huntRegion:this.s.huntRegion} : {}) };
+    return this.settingsView();
   }
 
   async openExternal(target: ExternalTarget): Promise<ActionResult> {
-    let url: string | null;
-    switch (target) {
-      case "tailscale_share":
-        url = this.s.server?.mode === "private" ? this.s.server.share : null;
-        break;
-      case "server_source":
-        url = this.status?.sourceUrl ?? PROJECT_URL;
-        break;
-      default:
-        // Every other target opens its one fixed URL; an unknown name gets null.
-        url = fixedLinkUrl(target);
-    }
-    if (!url || !isAllowedExternalUrl(url, this.status?.sourceUrl ?? null)) return err("unknown");
+    // Every target opens its one fixed URL; an unknown name gets null.
+    const url = target === "server_source" ? PROJECT_URL : fixedLinkUrl(target);
+    if (!url || !isAllowedExternalUrl(url, null)) return err("unknown");
     await this.p.openExternal(url);
     return OK;
   }

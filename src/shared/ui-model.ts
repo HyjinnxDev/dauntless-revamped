@@ -2,7 +2,7 @@
 // tested without a DOM.
 
 import type { StringKey } from "./i18n";
-import type { ExposureMode, GraphicsPreset, Language, Phase, Snapshot, TaskProgress } from "./types";
+import type { Language, Phase, Snapshot, TaskProgress } from "./types";
 import type { InstanceKind, PlayerWhere } from "./status";
 import { formatBytes, formatDuration, formatPercent, formatSpeed } from "./format";
 
@@ -16,7 +16,9 @@ export interface PrimaryButton {
 
 export interface FormState {
   inviteValid: boolean;
-  usernameValid: boolean;
+  usernameValid: boolean; // register: a valid new username; sign in: anything typed
+  passwordValid: boolean;
+  signIn: boolean; // the sign-in form is shown instead of the register form
 }
 
 export function primaryButton(s: Snapshot, form: FormState): PrimaryButton {
@@ -34,9 +36,9 @@ export function primaryButton(s: Snapshot, form: FormState): PrimaryButton {
       return { labelKey: "btn_retry", action: "retry", disabled: busy };
     case "register":
       return {
-        labelKey: busy ? "btn_wait" : "btn_register",
+        labelKey: busy ? "btn_wait" : form.signIn ? "btn_sign_in" : "btn_register",
         action: "register",
-        disabled: busy || !form.usernameValid || s.status?.registration === "NONE",
+        disabled: busy || !form.usernameValid || !form.passwordValid,
       };
     case "install": {
       const lowSpace = s.install.freeBytes !== null && s.install.freeBytes < s.install.requiredBytes;
@@ -89,7 +91,7 @@ export interface TaskView {
 
 export function taskView(t: TaskProgress, lang: Language): TaskView {
   const titleKey: StringKey =
-    t.kind === "download" ? (t.paused ? "task_download_paused" : "task_download") : t.kind === "dlls" ? "task_dlls" : "task_verify";
+    t.kind === "download" ? (t.paused ? "task_download_paused" : "task_download") : t.kind === "runtime" ? "task_dlls" : "task_verify";
   const bytesTask = t.kind === "download" || (t.kind === "verify" && t.totalBytes > t.filesTotal);
   return {
     titleKey,
@@ -98,7 +100,7 @@ export function taskView(t: TaskProgress, lang: Language): TaskView {
     speedText: t.kind === "download" && !t.paused && t.bytesPerSecond > 0 ? formatSpeed(t.bytesPerSecond, lang) : null,
     etaText: t.kind === "download" && !t.paused && t.etaSeconds !== null ? formatDuration(t.etaSeconds, lang) : null,
     filesText: `${t.filesDone}/${t.filesTotal}`,
-    indeterminate: t.kind === "dlls",
+    indeterminate: t.kind === "runtime",
   };
 }
 
@@ -110,18 +112,11 @@ export function kindKey(k: InstanceKind): StringKey {
   return `kind_${k}` as StringKey;
 }
 
-export function graphicsKey(g: GraphicsPreset): StringKey {
-  return g < 0 ? "gfx_menu" : (`gfx_${g}` as StringKey);
-}
-
-export function exposureKey(m: ExposureMode): StringKey {
-  return `exposure_${m}` as StringKey;
-}
-
 export function playersKey(n: number): StringKey {
   return n === 1 ? "sp_players_one" : "sp_players_other";
 }
 
+// "dlls": the server's runtime is missing or out of date.
 export type UpdateReason = "missing" | "dlls" | "unverified";
 
 export function updateReason(s: Snapshot): UpdateReason {

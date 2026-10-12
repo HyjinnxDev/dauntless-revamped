@@ -1,8 +1,7 @@
-// Checks on the friend's PC: Tailscale, free disk space, the Visual C++ runtime.
+// Checks on the friend's PC: Tailscale and free disk space.
 
 import { existsSync, promises as fsp } from "node:fs";
 import path from "node:path";
-import { VC_RUNTIME_FILES } from "./constants";
 
 export function tailscaleCandidates(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string[] {
   if (platform === "linux") {
@@ -51,14 +50,4 @@ export async function freeBytes(dir: string): Promise<number | null> {
       current = parent;
     }
   }
-}
-
-export function missingVcRuntime(
-  env: NodeJS.ProcessEnv = process.env,
-  exists: (p: string) => boolean = existsSync,
-  platform: NodeJS.Platform = process.platform,
-): string[] {
-  if (platform !== "win32") return [];
-  const windir = env.WINDIR ?? env.SystemRoot ?? "C:\\Windows";
-  return VC_RUNTIME_FILES.filter((f) => !exists(path.join(windir, "System32", f)));
 }
