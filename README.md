@@ -137,7 +137,7 @@ every listed file, and a tag at the commit that was built. To release, raise the
 - or run Actions > **Launcher release** > **Run workflow** on `dauntless-revived`.
 
 After publishing, the release workflow points the rolling `launcher-updates` release at the new
-Windows Squirrel package; installed Windows launchers check it every hour. Linux users update through
+Windows Squirrel package; installed Windows launchers check it every five minutes. Linux users update through
 their package format or download a newer release. A version is published only if it is newer than
 every earlier one, and never replaced. A prerelease version (such as `0.2.0-beta.1`) becomes a
 GitHub prerelease and never reaches `launcher-updates`. If a run fails halfway, re-run its failed

@@ -190,6 +190,7 @@ test("the big button in every phase", () => {
   assert.equal(primaryButton(snap({ phase: "installing", task: { ...task, paused: true } }), form).action, "resume");
   assert.equal(primaryButton(snap({ phase: "update" }), form).labelKey, "btn_update");
   assert.deepEqual(primaryButton(snap({ phase: "ready" }), form), { labelKey: "btn_play", action: "play", disabled: false });
+  assert.equal(primaryButton({ ...snap({ phase: "ready" }), app: { version: "0", packaged: true, updateReady: true } }, form).action, "launcher_update");
   assert.deepEqual(primaryButton(snap({ phase: "running" }), form), { labelKey: "btn_running", action: "none", disabled: true });
   assert.deepEqual(["join", "register", "install", "ready"].map((p) => stepIndex(p as Snapshot["phase"])), [0, 1, 2, 3]);
 });

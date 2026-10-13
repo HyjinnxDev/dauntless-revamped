@@ -392,11 +392,30 @@ if (!started) {
       if (app.isPackaged && process.platform === "win32" && UPDATE_FEED_URL) {
         updateElectronApp({
           updateSource: { type: UpdateSourceType.StaticStorage, baseUrl: UPDATE_FEED_URL },
-          updateInterval: "1 hour",
+          updateInterval: "5 minutes", // the library minimum: a release reaches open launchers quickly
           notifyUser: true,
           onNotifyUser: () => controller?.setUpdateReady(),
           logger: { log: (m) => log.info(`update: ${m}`), info: (m) => log.info(`update: ${m}`), warn: (m) => log.warn(`update: ${m}`), error: (m) => log.error(`update: ${m}`) },
         });
+        // The library's timer cannot go below 5 minutes: also check every minute and when the window gets
+        // focus, but never while a check or download is running or once the update is ready.
+        let checking = true;
+        let ready = false;
+        const free = () => void (checking = false);
+        autoUpdater.on("update-not-available", free);
+        autoUpdater.on("error", free);
+        autoUpdater.on("update-downloaded", () => void (ready = true));
+        const recheck = () => {
+          if (checking || ready) return;
+          checking = true;
+          try {
+            autoUpdater.checkForUpdates();
+          } catch {
+            checking = false;
+          }
+        };
+        setInterval(recheck, 60_000).unref();
+        app.on("browser-window-focus", recheck);
       }
     }).catch((error) => {
       log.error(`launcher startup failed: ${describeError(error)}`);

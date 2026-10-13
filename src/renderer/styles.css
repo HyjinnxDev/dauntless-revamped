@@ -2900,11 +2900,6 @@ img {
 
 .credit-avatar.role-maintainer,
 .credit-avatar.role-creator,
-.credit-avatar.role-patron {
-  color: var(--dr-ink);
-  background: linear-gradient(160deg, var(--dr-glow), var(--dr-ice));
-}
-
 .credit-text {
   display: grid;
   gap: 2px;
@@ -2930,10 +2925,6 @@ img {
 
 .credit-role.role-maintainer,
 .credit-role.role-creator,
-.credit-role.role-patron {
-  color: var(--dr-glow);
-}
-
 .credit-note {
   margin: 0;
   color: var(--dr-steel);

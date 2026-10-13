@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { PATRONS, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, localized, type CreditPerson } from "../src/shared/credits";
+import { MYSTIC_PEOPLE, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, localized, type CreditPerson } from "../src/shared/credits";
 import { STRINGS, type StringKey } from "../src/shared/i18n";
 import { LANGUAGES, type ExternalTarget } from "../src/shared/types";
 
@@ -45,24 +45,10 @@ test("the credits name every contributor, in order, with their role", () => {
   assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /reverted in launcher 0\.1\.1/);
   assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /peruttiin käynnistimen versiossa 0\.1\.1/);
 
-  // Harmonic: the work ported from Harmonic's Dauntless 1.4.4 fork (Harmonicrain/Undaunted 895f7c7),
-  // listed after Vvoidddd. The English note names no gender (nothing we have says which).
-  const harmonic = person(REVIVED_PEOPLE, "Harmonicrain");
-  assert.equal(harmonic.name, "Harmonic");
-  assert.equal(harmonic.role, "contributor");
-  assert.ok(
-    REVIVED_PEOPLE.findIndex((p) => p.github === "Harmonicrain") > REVIVED_PEOPLE.findIndex((p) => p.github === "Vvoidddd"),
-    "Harmonic comes after Vvoidddd",
-  );
-  assert.match(harmonic.note.en, /Dauntless 1\.4\.4 fork of Undaunted/);
-  assert.doesNotMatch(harmonic.note.en, /\b(he|his|him|she|her|hers)\b/i);
-  for (const part of ["Escalation season registry and save rules", "the free store", "Slayer Links", "restart of a dead Ramsgate", "friends' online status", "test cases"]) {
-    assert.ok(harmonic.note.en.includes(part), `Harmonic en: ${part}`);
-  }
-  assert.match(harmonic.note.fi, /Undauntedin Dauntless 1\.4\.4 -haaraa/);
-  for (const part of ["Escalationin kausiluettelo ja tallennussäännöt", "ilmainen kauppa", "Slayer Links", "kaatunut Ramsgate", "kavereiden paikalla olosta", "testitapaukset"]) {
-    assert.ok(harmonic.note.fi.includes(part), `Harmonic fi: ${part}`);
-  }
+  assert.ok(!REVIVED_PEOPLE.some((p) => p.github === "Harmonicrain"), "only the repositories we build from are credited");
+  assert.equal(MYSTIC_PEOPLE[0].github, "pranav158", "Mystic Paradox's creator comes first");
+  assert.equal(MYSTIC_PEOPLE[0].role, "creator");
+  for (const github of ["ridjan-xhika", "ZFXSTATIC", "anxo0"]) assert.equal(person(REVIVED_PEOPLE, github).role, "contributor");
 
   assert.equal(UPSTREAM_PEOPLE[0].github, "SyST3MDeV", "Undaunted's creator comes first");
   const gwog = person(UPSTREAM_PEOPLE, "SyST3MDeV");
@@ -71,22 +57,12 @@ test("the credits name every contributor, in order, with their role", () => {
   for (const part of ["server-mode DLL", "deploy server", "metagame", "launcher"]) assert.ok(gwog.note.en.includes(part), part);
   assert.equal(person(UPSTREAM_PEOPLE, "EisigesEis").role, "contributor");
 
-  const handles = [...PROJECT_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE].map((p) => p.github);
+  const handles = [...PROJECT_PEOPLE, ...MYSTIC_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE].map((p) => p.github);
   assert.equal(new Set(handles).size, handles.length, "nobody is listed twice");
 });
 
-test("patrons are listed separately with localized thanks", () => {
-  assert.deepEqual(PATRONS.map((p) => p.name), ["nasagi"]);
-  for (const p of PATRONS) {
-    assert.ok(p.name.trim(), JSON.stringify(p));
-    assert.match(p.note.en, /Patreon/);
-    assert.match(p.note.fi, /Patreon/);
-    assert.notEqual(p.note.fi, p.note.en, `${p.name}: the Finnish note is not translated`);
-  }
-});
-
 test("every credit has text in every language", () => {
-  for (const p of [...PROJECT_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE]) {
+  for (const p of [...PROJECT_PEOPLE, ...MYSTIC_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE]) {
     assert.ok(p.name.trim() && p.github.trim(), JSON.stringify(p));
     assert.match(p.github, /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, `not a GitHub handle: ${p.github}`);
     for (const lang of LANGUAGES) assert.ok(p.note[lang].trim().length > 10, `${p.github} ${lang}`);
@@ -157,7 +133,7 @@ test("THIRD-PARTY-NOTICES.txt ships with the launcher and has the Octicons, MinH
 });
 
 test("the credits hold no links and no e-mail addresses", () => {
-  const data = JSON.stringify([PATRONS, PROJECT_PEOPLE, UPSTREAM_PEOPLE, SOFTWARE]);
+  const data = JSON.stringify([PROJECT_PEOPLE, MYSTIC_PEOPLE, REVIVED_PEOPLE, UPSTREAM_PEOPLE, SOFTWARE]);
   assert.ok(!data.includes("://"), "the credits must not carry URLs: the page opens links by name");
   assert.ok(!/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(data), "no e-mail addresses on the Credits page");
 });
@@ -227,6 +203,8 @@ test("the new text exists in English and Finnish", () => {
     "credits_intro",
     "credits_project_text",
     "credits_upstream_text",
+    "credits_mystic_text",
+    "credits_mystic_source",
     "credits_role_maintainer",
     "credits_role_creator",
     "credits_role_contributor",

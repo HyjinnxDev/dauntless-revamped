@@ -1,6 +1,6 @@
 // Everyone the launcher's Credits page thanks, in English, Finnish and Spanish. This is the only place the
-// list lives: adding a contributor is one line in PROJECT_PEOPLE, REVIVED_PEOPLE or UPSTREAM_PEOPLE.
-// Keep the Dauntless Revived and Undaunted entries: this project is a modified version of both (AGPL-3.0).
+// list lives: adding a contributor is one line in PROJECT_PEOPLE, MYSTIC_PEOPLE, REVIVED_PEOPLE or UPSTREAM_PEOPLE.
+// Only the repositories this project is built from are credited here. Keep the Mystic Paradox, Dauntless Revived and Undaunted entries: this project is a modified version of both (AGPL-3.0).
 //
 // Plain data, no links: the page opens the contributor pages by link name ("project_contributors",
 // "revived_contributors", "upstream_contributors"), and the main process maps those names to fixed
@@ -19,11 +19,6 @@ export interface CreditPerson {
   note: Localized;
 }
 
-export interface Patron {
-  name: string;
-  note: Localized;
-}
-
 export interface CreditSoftware {
   name: string;
   author: string | Localized;
@@ -36,16 +31,18 @@ export const PROJECT_PEOPLE: readonly CreditPerson[] = [
   { name: "Hyjinnx", github: "HyjinnxDev", role: "maintainer", note: { en: "Maintains Dauntless Forever: the redesigned launcher, the host list and the hosting guide.", fi: "Ylläpitää Dauntless Foreveria: uudistettu käynnistin, palvelinluettelo ja palvelimen ylläpito-ohje.", es: "Mantiene Dauntless Forever: el launcher rediseñado, la lista de servidores y la guía para alojar servidores." } },
 ];
 
+// Mystic Paradox, the 1.14.7 server, backend and runtime this launcher plays on (everyone: the "mystic_source" link).
+export const MYSTIC_PEOPLE: readonly CreditPerson[] = [
+  { name: "Pranav Karande (MysticFox)", github: "pranav158", role: "creator", note: { en: "Created Mystic Paradox: the 1.14.7 backend, the game-server director and the runtime that lets the game connect to a private server.", fi: "Loi Mystic Paradoxin: 1.14.7-taustapalvelun, pelipalvelinten ohjaajan ja ajonaikaisen kerroksen, jonka avulla peli yhdistää yksityiseen palvelimeen.", es: "Creó Mystic Paradox: el backend de 1.14.7, el director de servidores de juego y el runtime que permite al juego conectarse a un servidor privado." } },
+];
+
 // Dauntless Revived, the fork of Undaunted this project is built on (everyone: the "revived_contributors" link).
 export const REVIVED_PEOPLE: readonly CreditPerson[] = [
   { name: "mixutin", github: "mixutin", role: "maintainer", note: { en: "Maintains the project: the server kit, this launcher, backend fixes, real progression and the docs.", fi: "Ylläpitää projektia: palvelinpaketti, tämä käynnistin, taustapalvelun korjaukset, oikea eteneminen ja ohjeet.", es: "Mantiene el proyecto: el kit de servidor, este launcher, correcciones del backend, la progresión real y la documentación." } },
-  { name: "anxo0", github: "anxo0", role: "contributor", note: { en: "Spanish translation, game language selection, styled settings menus, saved servers, the game log window setting, and the Dauntless-inspired launcher design.", fi: "Espanjankielinen käännös, pelin kielivalinta, asetusvalikot, tallennetut palvelimet, pelin loki-ikkunan asetus ja Dauntless-henkinen käynnistimen ulkoasu.", es: "Traducción al español, selección del idioma del juego, menús de ajustes, servidores guardados, opción de la ventana de registro y diseño del launcher inspirado en Dauntless." } },
+  { name: "ridjan-xhika", github: "ridjan-xhika", role: "contributor", note: { en: "Contributor to Dauntless Revived, the project this launcher is forked from.", fi: "Osallistui Dauntless Revivediin, projektiin, josta tämä käynnistin on haarautettu.", es: "Colaborador de Dauntless Revived, el proyecto del que deriva este launcher." } },
   { name: "Vvoidddd", github: "Vvoidddd", role: "contributor", note: { en: "Found the cause of the dark pre-hunt airship (the game's automatic exposure; the change was reverted in launcher 0.1.1 because it made Ramsgate too dark), then added the launcher's opt-in Basic adaptive exposure setting for the airship (off by default), hid the console windows of temporary hunt servers, added the repository's .gitignore, wrote the first performance sampler (the base of the server's performance log), let the launcher use an existing Dauntless 1.4.4 folder by pasting its path, and wrote the first in-game text chat server (XMPP) and tested it with a real 1.4.4 client.", fi: "Löysi syyn siihen, miksi ilmalaiva on pimeä ennen metsästystä (pelin automaattinen valotus; muutos peruttiin käynnistimen versiossa 0.1.1, koska se pimensi Ramsgaten), lisäsi sitten käynnistimeen valinnaisen mukautuvan perusvalotuksen asetuksen ilmalaivaa varten (oletuksena pois päältä), piilotti tilapäisten metsästyspalvelimien konsoli-ikkunat, lisäsi projektiin .gitignore-tiedoston, kirjoitti ensimmäisen suorituskykymittarin (palvelimen suorituskykylokin pohja), teki käynnistimelle mahdolliseksi käyttää valmista Dauntless 1.4.4 -kansiota liittämällä sen polun sekä kirjoitti ensimmäisen pelinsisäisen tekstichat-palvelimen (XMPP) ja testasi sen oikealla 1.4.4-pelillä.", es: "Encontró la causa de la aeronave oscura antes de la cacería (la exposición automática del juego; el cambio se revirtió en el launcher 0.1.1 porque oscurecía demasiado Ramsgate), después añadió al launcher el ajuste opcional de exposición adaptativa básica para la aeronave (desactivado por defecto), ocultó las ventanas de consola de los servidores de cacería temporales, añadió el .gitignore del repositorio, escribió el primer medidor de rendimiento (la base del registro de rendimiento del servidor), permitió al launcher usar una carpeta de Dauntless 1.4.4 ya existente pegando su ruta, y escribió el primer servidor de chat de texto del juego (XMPP) y lo probó con un cliente 1.4.4 real." } },
-  { name: "Harmonic", github: "Harmonicrain", role: "contributor", note: { en: "Keeps another Dauntless 1.4.4 fork of Undaunted. From it came the Escalation season registry and save rules, the free store (its catalogue, purchase flow and store tabs), the first working Slayer Links, the deploy server's restart of a dead Ramsgate, the idea of friends' online status, and the test cases ported from that fork.", fi: "Ylläpitää toista Undauntedin Dauntless 1.4.4 -haaraa. Siitä tulivat Escalationin kausiluettelo ja tallennussäännöt, ilmainen kauppa (valikoima, ostotapa ja kaupan välilehdet), ensimmäinen toimiva Slayer Links, deploy-palvelimen tapa käynnistää kaatunut Ramsgate uudelleen, idea kavereiden paikalla olosta sekä hänen haarastaan siirretyt testitapaukset.", es: "Mantiene otra bifurcación de Undaunted para Dauntless 1.4.4. De ella salieron el registro de temporadas de Escalada y sus reglas de guardado, la tienda gratuita (su catálogo, el proceso de compra y las pestañas de la tienda), los primeros Vínculos Slayer funcionales, el reinicio de un Ramsgate caído por parte del servidor de despliegue, la idea del estado en línea de los amigos y los casos de prueba traídos de esa bifurcación." } },
-];
-
-export const PATRONS: readonly Patron[] = [
-  { name: "nasagi", note: { en: "Thank you for supporting Dauntless Revived on Patreon.", fi: "Kiitos Dauntless Revivedin tukemisesta Patreonissa.", es: "Gracias por apoyar Dauntless Revived en Patreon." } },
+  { name: "ZFXSTATIC", github: "ZFXSTATIC", role: "contributor", note: { en: "Contributor to Dauntless Revived, the project this launcher is forked from.", fi: "Osallistui Dauntless Revivediin, projektiin, josta tämä käynnistin on haarautettu.", es: "Colaborador de Dauntless Revived, el proyecto del que deriva este launcher." } },
+  { name: "anxo0", github: "anxo0", role: "contributor", note: { en: "Spanish translation, game language selection, styled settings menus, saved servers, the game log window setting, and the Dauntless-inspired launcher design.", fi: "Espanjankielinen käännös, pelin kielivalinta, asetusvalikot, tallennetut palvelimet, pelin loki-ikkunan asetus ja Dauntless-henkinen käynnistimen ulkoasu.", es: "Traducción al español, selección del idioma del juego, menús de ajustes, servidores guardados, opción de la ventana de registro y diseño del launcher inspirado en Dauntless." } },
 ];
 
 // Undaunted, the project this launcher and the whole fork are a modified version of (everyone: the

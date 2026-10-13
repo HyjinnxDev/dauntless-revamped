@@ -6,7 +6,7 @@ import type { Language, Phase, Snapshot, TaskProgress } from "./types";
 import type { InstanceKind, PlayerWhere } from "./status";
 import { formatBytes, formatDuration, formatPercent, formatSpeed } from "./format";
 
-export type PrimaryAction = "join" | "retry" | "new_invite" | "register" | "install" | "update" | "play" | "pause" | "resume" | "none";
+export type PrimaryAction = "join" | "retry" | "new_invite" | "register" | "install" | "update" | "launcher_update" | "play" | "pause" | "resume" | "none";
 
 export interface PrimaryButton {
   labelKey: StringKey;
@@ -23,6 +23,10 @@ export interface FormState {
 
 export function primaryButton(s: Snapshot, form: FormState): PrimaryButton {
   const busy = s.busy;
+  // A downloaded launcher update replaces Play (and the game install/update buttons) until it is installed.
+  if (s.app.updateReady && (s.phase === "ready" || s.phase === "update" || s.phase === "install")) {
+    return { labelKey: "btn_update", action: "launcher_update", disabled: busy || s.game.running };
+  }
   switch (s.phase) {
     case "loading":
       return { labelKey: "btn_wait", action: "none", disabled: true };

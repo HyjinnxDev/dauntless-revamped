@@ -5,8 +5,14 @@
 import { $, forceRender, githubMark, h, icon, renderRegion, type IconName } from "./dom";
 import newsBadge from "./brand/news-badge.svg";
 import { buildScene } from "./scene";
+import shot1 from "./brand/bg/shot1.jpg";
+import shot2 from "./brand/bg/shot2.jpg";
+import shot3 from "./brand/bg/shot3.jpg";
+import shot4 from "./brand/bg/shot4.jpg";
+import shot5 from "./brand/bg/shot5.jpg";
+import shot6 from "./brand/bg/shot6.jpg";
 import { isStringKey, translate, type StringKey } from "../shared/i18n";
-import { localized, PATRONS, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, type CreditPerson, type CreditRole } from "../shared/credits";
+import { localized, MYSTIC_PEOPLE, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, type CreditPerson, type CreditRole } from "../shared/credits";
 import { isTailnetHost, parseInvite } from "../shared/invite";
 import { checkUsername, isValidPassword } from "../shared/username";
 import { primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
@@ -361,7 +367,7 @@ function errorText(e: LauncherError): string {
 // ------------------------------------------------------------------ play view
 
 function eyebrow(snap: Snapshot): HTMLElement {
-  return h("div", { class: "eyebrow" }, snap.server ? serverName() : t("join_eyebrow"), snap.server ? modeBadge(snap.server.tailnet) : null);
+  return h("div", { class: "eyebrow" }, snap.server ? serverName() : t("join_eyebrow"));
 }
 
 function heading(title: string, text: string | null): HTMLElement[] {
@@ -800,8 +806,6 @@ function actionHint(snap: Snapshot): string {
       return t("hint_install", { size: formatBytes(snap.install.totalBytes, state.lang) });
     case "update":
       return t("hint_update");
-    case "ready":
-      return t("hint_ready");
     case "running":
       return t("hint_running");
     default:
@@ -895,6 +899,9 @@ async function onPrimary(): Promise<void> {
     case "update":
       result = await api.startInstall();
       break;
+    case "launcher_update":
+      await api.installUpdate();
+      return;
     case "play":
       result = await api.play();
       break;
@@ -989,7 +996,7 @@ function renderPanel(): void {
       { class: "sp-head" },
       h("span", { class: "sp-kicker" }, t("sp_title")),
       h("span", { class: "sp-name" }, serverName()),
-      h("div", { class: "sp-state" }, h("span", { class: `dot ${online ? "online" : "offline"}`, "aria-hidden": "true" }), online ? t("sp_online") : t("sp_offline"), modeBadge(snap.server.tailnet)),
+      h("div", { class: "sp-state" }, h("span", { class: `dot ${online ? "online" : "offline"}`, "aria-hidden": "true" }), online ? t("sp_online") : t("sp_offline")),
     );
     // Not reachable, or refused for its certificate: say so instead of "waiting", and do not show
     // an old player list as if it were live.
@@ -1412,31 +1419,6 @@ function creditPeople(people: readonly CreditPerson[]): HTMLElement {
   );
 }
 
-function creditPatrons(): HTMLElement {
-  return h(
-    "ul",
-    { class: "credit-list" },
-    ...PATRONS.map((p) =>
-      h(
-        "li",
-        { class: "credit" },
-        h("span", { class: "credit-avatar role-patron", "aria-hidden": "true" }, Array.from(p.name)[0]?.toUpperCase() ?? "?"),
-        h(
-          "div",
-          { class: "credit-text" },
-          h(
-            "div",
-            { class: "credit-head" },
-            h("span", { class: "credit-name" }, p.name),
-            h("span", { class: "badge credit-role role-patron" }, t("credits_role_patron")),
-          ),
-          h("p", { class: "credit-note" }, localized(p.note, state.lang)),
-        ),
-      ),
-    ),
-  );
-}
-
 function creditSoftware(): HTMLElement {
   return h(
     "ul",
@@ -1475,6 +1457,13 @@ function renderCredits(): void {
       ),
       card(
         "settings-section",
+        h("h2", { class: "card-title" }, "Mystic Paradox"),
+        h("p", { class: "card-text" }, t("credits_mystic_text")),
+        creditPeople(MYSTIC_PEOPLE),
+        h("div", { class: "card-row" }, linkButton(t("credits_mystic_source"), () => open("mystic_source"), { icon: "external", fk: "cr-mystic" })),
+      ),
+      card(
+        "settings-section",
         h("h2", { class: "card-title" }, "Dauntless Revived"),
         h("p", { class: "card-text" }, t("credits_revived_text")),
         creditPeople(REVIVED_PEOPLE),
@@ -1484,12 +1473,6 @@ function renderCredits(): void {
           linkButton(t("credits_revived_source"), () => open("revived_source"), { icon: "external", fk: "cr-revived" }),
           linkButton(t("credits_all_contributors"), () => open("revived_contributors"), { icon: "external", fk: "cr-revived-contributors" }),
         ),
-      ),
-      card(
-        "settings-section",
-        h("h2", { class: "card-title" }, t("credits_patrons_title")),
-        h("p", { class: "card-text" }, t("credits_patrons_text")),
-        creditPatrons(),
       ),
       card(
         "settings-section",
@@ -1929,8 +1912,16 @@ async function checkInviteLink(): Promise<void> {
 
 // ------------------------------------------------------------------ hero art (the host's art pack)
 
+// Used when the host has no art pack of its own.
+const BUILTIN_ART = [shot1, shot2, shot3, shot4, shot5, shot6].map((url) => ({ url, credit: null }));
+
+function artList(): { url: string; credit: string | null }[] {
+  const host = state.branding.backgrounds.filter((b) => ART_URL.test(b.url));
+  return host.length > 0 ? host : BUILTIN_ART;
+}
+
 function showArt(index: number): void {
-  const list = state.branding.backgrounds.filter((b) => ART_URL.test(b.url));
+  const list = artList();
   const layers = [$("#art-a"), $("#art-b")];
   const credit = $("#art-credit");
   if (list.length === 0) {
@@ -1958,7 +1949,7 @@ function startArt(): void {
   window.clearInterval(state.artTimer);
   state.artIndex = 0;
   showArt(0);
-  const count = state.branding.backgrounds.length;
+  const count = artList().length;
   if (count > 1 && !reducedMotion.matches) {
     state.artTimer = window.setInterval(() => {
       state.artIndex++;
@@ -2067,6 +2058,7 @@ async function main(): Promise<void> {
     renderActionBar();
   });
   api.onInviteLink(() => void checkInviteLink());
+  startArt();
   onSnapshot(await api.getSnapshot());
   void api.setStatusPolling(!document.hidden);
   await checkInviteLink();
