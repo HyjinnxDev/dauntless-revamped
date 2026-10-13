@@ -109,6 +109,7 @@ function harness(userDataDir?: string, relayPort: number | undefined = RELAY_POR
     },
     manifest,
     relayPort,
+    gameConfigDir: temp("df-ctl-config-"),
     exePin: { relativePath: EXE, sha256: sha256(files.find((f) => f.path === EXE)!.data) },
     chooseFolder: async () => null,
     openExternal: async () => undefined,

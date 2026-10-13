@@ -93,6 +93,9 @@ export function pinnedConnect(target: PinnedTarget, opts: PinnedConnectOptions =
       if (actual !== target.fingerprint) return finish(new CertificatePinError(actual));
       // Errors after this point belong to whoever uses the socket.
       socket.on("error", () => undefined);
+      // http.Agent asks for noDelay, but a custom createConnection has to apply it itself. Without
+      // it small chat frames and requests wait on Nagle and the server's delayed ACK.
+      socket.setNoDelay(true);
       finish(null);
     });
   });

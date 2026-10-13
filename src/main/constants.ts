@@ -15,8 +15,9 @@ export const UPSTREAM_CONTRIBUTORS_URL = "https://github.com/SyST3MDeV/Undaunted
 export const MYSTIC_PARADOX_URL = "https://github.com/pranav158/Mystic-Paradox";
 export const TAILSCALE_DOWNLOAD_URL = "https://tailscale.com/download";
 export const VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
-// Self-update feed. ponytail: no 1.14.7 release feed exists yet; set this when releases are published.
-export const UPDATE_FEED_URL = "";
+// Self-update feed: the latest release of the releases repo (RELEASES and the full .nupkg, published by
+// `npm run release`). Squirrel checks it hourly; installs from the portable zip do not update.
+export const UPDATE_FEED_URL = "https://github.com/HyjinnxDev/dauntless-forever-1147-releases/releases/latest/download";
 
 // Dauntless 1.14.7 (rel-1.14.7-Archon, CL 647472). Paths are relative to the folder that contains Archon/.
 export const TARGET_CHANGELIST = 647472;

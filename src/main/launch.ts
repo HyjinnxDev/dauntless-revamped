@@ -4,6 +4,7 @@
 // local relay, instead of its compiled-in host.
 
 import { spawn, execFile, type ChildProcess } from "node:child_process";
+import { promises as fsp } from "node:fs";
 import path from "node:path";
 import { EXE_NAME } from "./constants";
 import type { GameLanguage } from "../shared/types";
@@ -60,6 +61,39 @@ export function buildLaunchArgs(s: LaunchSettings): string[] {
 export function relayEnv(relayPort: number): Record<string, string> {
   if (!Number.isInteger(relayPort) || relayPort < 1 || relayPort > 65535) throw new Error("invalid relay port");
   return { MYSTICPARADOX_API_BASE: `http://127.0.0.1:${relayPort}` };
+}
+
+export function defaultGameConfigDir(env: NodeJS.ProcessEnv = process.env): string {
+  const base = env.LOCALAPPDATA ?? path.join(env.USERPROFILE ?? "C:\\", "AppData", "Local");
+  return path.join(base, "Archon", "Saved", "Config", "WindowsClient");
+}
+
+// The 1.14.7 runtime does not redirect XMPP (its config hook is not ported yet), so chat, presence and
+// party invites follow [OnlineSubsystemMcp.XMPP] in the user's Engine.ini. That file is shared with
+// 1.4.4, whose launcher points it at its own server (port 61099). Replace only that section.
+export function withXmppSection(text: string, relayPort: number): string {
+  if (!Number.isInteger(relayPort) || relayPort < 1 || relayPort > 65535) throw new Error("invalid relay port");
+  const kept: string[] = [];
+  let skip = false;
+  for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/)) {
+    if (/^\s*\[/.test(line)) skip = /^\s*\[OnlineSubsystemMcp\.XMPP\]/i.test(line);
+    if (!skip) kept.push(line);
+  }
+  return ["[OnlineSubsystemMcp.XMPP]", 'ServerAddr="ws://127.0.0.1"', `ServerPort=${relayPort}`, "bUseSSL=false", "", ...kept].join("\r\n");
+}
+
+export async function pointXmppAtRelay(relayPort: number, configDir = defaultGameConfigDir()): Promise<void> {
+  const file = path.join(configDir, "Engine.ini");
+  let data = Buffer.alloc(0);
+  try {
+    data = await fsp.readFile(file);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+  }
+  const utf16 = data[0] === 0xff && data[1] === 0xfe;
+  const text = withXmppSection(utf16 ? data.subarray(2).toString("utf16le") : data.toString("utf8"), relayPort);
+  await fsp.mkdir(configDir, { recursive: true });
+  await fsp.writeFile(file, utf16 ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]) : Buffer.from(text, "utf8"));
 }
 
 export function maskArgs(args: string[]): string[] {

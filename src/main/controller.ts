@@ -58,7 +58,7 @@ import { contentDownloadBase, DownloadError, DownloadJob } from "./downloader";
 import { AbortedError, hashFile, removePartFiles, verifyInstall, VerifiedCache } from "./verify";
 import { installRuntime, installedRuntime, runtimeMatches, RuntimeError, win64Dir } from "./runtime";
 import { locateExistingGame } from "./game-folder";
-import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, relayEnv, type SpawnFn } from "./launch";
+import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, pointXmppAtRelay, relayEnv, type SpawnFn } from "./launch";
 import { KeyStore, serverId, type Encryptor, type KeySlot } from "./keystore";
 import { SettingsStore, type StoredServer, type StoredSettings } from "./settings";
 import { freeBytes } from "./system";
@@ -80,6 +80,8 @@ export interface Platform {
   manifest: GameManifest | null;
   // Where the local relay listens while the game runs (tests and rehearsals change it).
   relayPort?: number;
+  // The game's user config folder, where chat is pointed at the relay (tests use a temporary one).
+  gameConfigDir?: string;
   // The file checked by hash before every launch (tests use a fake game).
   exePin?: { relativePath: string; sha256: string };
   chooseFolder(title: string, defaultPath: string): Promise<string | null>;
@@ -1012,6 +1014,7 @@ export class Controller {
         });
         log.info(`starting ${describeLaunch(EXE_NAME, args)} (relay 127.0.0.1:${relayPort} -> ${sv.host}:${sv.port})`);
         try {
+          await pointXmppAtRelay(relayPort, this.p.gameConfigDir);
           await this.game.start(win64Dir(dir), args, relayEnv(relayPort));
         } catch (e) {
           log.error(`launch failed: ${describeError(e)}`);

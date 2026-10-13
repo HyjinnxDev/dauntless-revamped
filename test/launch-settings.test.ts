@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { buildLaunchArgs, describeLaunch, gameLocale, relayEnv } from "../src/main/launch";
+import { readFileSync, writeFileSync } from "node:fs";
+import { buildLaunchArgs, describeLaunch, gameLocale, pointXmppAtRelay, relayEnv } from "../src/main/launch";
 import { relayPortOverride, settingsPatch } from "../src/main/ipc-validate";
 import { sanitizeSettings, SettingsStore } from "../src/main/settings";
 
@@ -59,6 +60,34 @@ test("stored settings drop servers without a pinned certificate and keep a stabl
     const id = store.get().deviceId;
     assert.match(id, /^[0-9a-f-]{36}$/);
     assert.equal(new SettingsStore(dir, "en").get().deviceId, id);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("chat is pointed at the relay; the 1.4.4 XMPP section is replaced and the rest kept", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "df-ini-"));
+  try {
+    const ini = path.join(dir, "Engine.ini");
+    const old = [
+      "[SystemSettings]", "r.Streaming.PoolSize=3000", "",
+      "[OnlineSubsystemMcp.XMPP]", 'ServerAddr="ws://127.0.0.1"', "ServerPort=61099", "bUseSSL=false", "",
+      "[Core.System]", "Paths=x", "",
+    ].join("\r\n");
+    writeFileSync(ini, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(old, "utf16le")]));
+    await pointXmppAtRelay(61512, dir);
+    await pointXmppAtRelay(61513, dir); // again: still one section
+    const data = readFileSync(ini);
+    assert.deepEqual([...data.subarray(0, 2)], [0xff, 0xfe]);
+    const text = data.subarray(2).toString("utf16le");
+    assert.equal(text.split("[OnlineSubsystemMcp.XMPP]").length, 2);
+    assert.ok(text.includes("ServerPort=61513\r\n"));
+    assert.ok(!text.includes("61099") && !text.includes("61512"));
+    assert.ok(text.includes("[SystemSettings]\r\nr.Streaming.PoolSize=3000"));
+    assert.ok(text.includes("[Core.System]\r\nPaths=x"));
+    rmSync(ini);
+    await pointXmppAtRelay(61514, dir); // no file yet
+    assert.ok(readFileSync(ini, "utf8").startsWith('[OnlineSubsystemMcp.XMPP]\r\nServerAddr="ws://127.0.0.1"\r\nServerPort=61514\r\nbUseSSL=false\r\n'));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
