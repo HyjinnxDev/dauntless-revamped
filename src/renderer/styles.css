@@ -853,6 +853,15 @@ img {
   transition: background 0.15s, color 0.15s;
 }
 
+.app-version {
+  padding: 0 6px;
+  color: var(--dr-steel);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+  white-space: nowrap;
+}
+
 .rail-link:hover {
   background: color-mix(in srgb, var(--dr-deep) 55%, transparent);
   color: var(--dr-frost);

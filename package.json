@@ -1,7 +1,7 @@
 {
   "name": "dauntless-forever-1147-launcher",
   "productName": "Dauntless Forever 1.14.7 Launcher",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Windows launcher for Dauntless 1.14.7 servers running Mystic Paradox: join from an invite, create an account, download and verify the pinned 1.14.7 client and the server runtime, and play through a pinned-TLS relay.",
   "main": ".vite/build/main.js",
   "private": true,
