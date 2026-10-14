@@ -85,6 +85,9 @@ test("chat is pointed at the relay; the 1.4.4 XMPP section is replaced and the r
     assert.ok(!text.includes("61099") && !text.includes("61512"));
     assert.ok(text.includes("[SystemSettings]\r\nr.Streaming.PoolSize=3000"));
     assert.ok(text.includes("[Core.System]\r\nPaths=x"));
+    // engine VOIP sections: written once each
+    assert.equal(text.split("[OnlineSubsystem]\r\nbHasVoiceEnabled=true").length, 2);
+    assert.equal(text.split("[Voice]\r\nbEnabled=true").length, 2);
     rmSync(ini);
     await pointXmppAtRelay(61514, dir); // no file yet
     assert.ok(readFileSync(ini, "utf8").startsWith('[OnlineSubsystemMcp.XMPP]\r\nServerAddr="ws://127.0.0.1"\r\nServerPort=61514\r\nbUseSSL=false\r\n'));

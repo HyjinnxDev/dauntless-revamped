@@ -73,17 +73,33 @@ export function defaultGameConfigDir(env: NodeJS.ProcessEnv = process.env): stri
 // 1.4.4, whose launcher points it at its own server (port 61099). Replace only that section.
 export function withXmppSection(text: string, relayPort: number): string {
   if (!Number.isInteger(relayPort) || relayPort < 1 || relayPort > 65535) throw new Error("invalid relay port");
-  const kept: string[] = [];
-  let skip = false;
-  for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/)) {
-    if (/^\s*\[/.test(line)) skip = /^\s*\[OnlineSubsystemMcp\.XMPP\]/i.test(line);
-    if (!skip) kept.push(line);
-  }
-  return ["[OnlineSubsystemMcp.XMPP]", 'ServerAddr="ws://127.0.0.1"', `ServerPort=${relayPort}`, "bUseSSL=false", "", ...kept].join("\r\n");
+  return withIniSection(text, "OnlineSubsystemMcp.XMPP", ['ServerAddr="ws://127.0.0.1"', `ServerPort=${relayPort}`, "bUseSSL=false"]);
 }
 
-export async function pointXmppAtRelay(relayPort: number, configDir = defaultGameConfigDir()): Promise<void> {
-  const file = path.join(configDir, "Engine.ini");
+// Puts `[header]` with `lines` at the top of the ini text, dropping any older copy of that section.
+// ponytail: replaces the whole section, fine while the saved ini never holds other keys of it.
+export function withIniSection(text: string, header: string, lines: string[]): string {
+  const kept: string[] = [];
+  let skip = false;
+  const name = `[${header}]`.toLowerCase();
+  for (const line of text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/)) {
+    if (/^\s*\[/.test(line)) skip = line.trim().toLowerCase() === name;
+    if (!skip) kept.push(line);
+  }
+  return [`[${header}]`, ...lines, "", ...kept].join("\r\n");
+}
+
+// Engine VOIP (UE4's own, over the game server connection) replaces the dead EOS voice. The host's
+// dedicated servers read these same WindowsClient files, so the host's Play enables them too.
+// Push-to-talk ([/Script/Engine.GameSession] bRequiresPushToTalk in Game.ini) is server-side only,
+// so it is set by hand in the host's Game.ini, not here.
+const VOICE_ENGINE_SECTIONS: [string, string[]][] = [
+  ["OnlineSubsystem", ["bHasVoiceEnabled=true"]],
+  ["Voice", ["bEnabled=true"]],
+];
+
+// Rewrites one ini file in place, keeping its encoding (the game writes UTF-16 LE with a BOM).
+async function editIni(file: string, edit: (text: string) => string): Promise<void> {
   let data = Buffer.alloc(0);
   try {
     data = await fsp.readFile(file);
@@ -91,9 +107,16 @@ export async function pointXmppAtRelay(relayPort: number, configDir = defaultGam
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
   const utf16 = data[0] === 0xff && data[1] === 0xfe;
-  const text = withXmppSection(utf16 ? data.subarray(2).toString("utf16le") : data.toString("utf8"), relayPort);
-  await fsp.mkdir(configDir, { recursive: true });
+  const text = edit(utf16 ? data.subarray(2).toString("utf16le") : data.toString("utf8"));
+  await fsp.mkdir(path.dirname(file), { recursive: true });
   await fsp.writeFile(file, utf16 ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]) : Buffer.from(text, "utf8"));
+}
+
+const withSections = (text: string, sections: [string, string[]][]) => sections.reduce((t, [h, l]) => withIniSection(t, h, l), text);
+
+export async function pointXmppAtRelay(relayPort: number, configDir = defaultGameConfigDir()): Promise<void> {
+  // Voice first so the XMPP section stays at the top.
+  await editIni(path.join(configDir, "Engine.ini"), (t) => withXmppSection(withSections(t, VOICE_ENGINE_SECTIONS), relayPort));
 }
 
 export function maskArgs(args: string[]): string[] {
