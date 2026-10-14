@@ -1019,7 +1019,7 @@ export class Controller {
         try {
           await applyIntro(dir, this.p.introFile).catch((e) => log.warn(`intro not applied: ${describeError(e)}`));
           await pointXmppAtRelay(relayPort, this.p.gameConfigDir);
-          await this.game.start(win64Dir(dir), args, relayEnv(relayPort));
+          await this.game.start(win64Dir(dir), args, relayEnv(relayPort, ticket.voice && { host: sv.host, ...ticket.voice }));
         } catch (e) {
           log.error(`launch failed: ${describeError(e)}`);
           return this.fail("launch_failed");

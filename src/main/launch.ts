@@ -58,9 +58,16 @@ export function buildLaunchArgs(s: LaunchSettings): string[] {
   return args;
 }
 
-export function relayEnv(relayPort: number): Record<string, string> {
+// voice: the party voice relay (UDP straight to the server host, beside the game's own UDP); the runtime's
+// in-game voice (ParadoxRuntime Voice.cpp) stays off without it.
+export function relayEnv(relayPort: number, voice?: { host: string; port: number; ticket: string }): Record<string, string> {
   if (!Number.isInteger(relayPort) || relayPort < 1 || relayPort > 65535) throw new Error("invalid relay port");
-  return { MYSTICPARADOX_API_BASE: `http://127.0.0.1:${relayPort}` };
+  const env: Record<string, string> = { MYSTICPARADOX_API_BASE: `http://127.0.0.1:${relayPort}` };
+  if (voice) {
+    env.MYSTICPARADOX_VOICE_ADDR = `${voice.host}:${voice.port}`;
+    env.MYSTICPARADOX_VOICE_TICKET = voice.ticket;
+  }
+  return env;
 }
 
 export function defaultGameConfigDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -89,15 +96,6 @@ export function withIniSection(text: string, header: string, lines: string[]): s
   return [`[${header}]`, ...lines, "", ...kept].join("\r\n");
 }
 
-// Engine VOIP (UE4's own, over the game server connection) replaces the dead EOS voice. The host's
-// dedicated servers read these same WindowsClient files, so the host's Play enables them too.
-// Push-to-talk ([/Script/Engine.GameSession] bRequiresPushToTalk in Game.ini) is server-side only,
-// so it is set by hand in the host's Game.ini, not here.
-const VOICE_ENGINE_SECTIONS: [string, string[]][] = [
-  ["OnlineSubsystem", ["bHasVoiceEnabled=true"]],
-  ["Voice", ["bEnabled=true"]],
-];
-
 // Rewrites one ini file in place, keeping its encoding (the game writes UTF-16 LE with a BOM).
 async function editIni(file: string, edit: (text: string) => string): Promise<void> {
   let data = Buffer.alloc(0);
@@ -112,11 +110,8 @@ async function editIni(file: string, edit: (text: string) => string): Promise<vo
   await fsp.writeFile(file, utf16 ? Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(text, "utf16le")]) : Buffer.from(text, "utf8"));
 }
 
-const withSections = (text: string, sections: [string, string[]][]) => sections.reduce((t, [h, l]) => withIniSection(t, h, l), text);
-
 export async function pointXmppAtRelay(relayPort: number, configDir = defaultGameConfigDir()): Promise<void> {
-  // Voice first so the XMPP section stays at the top.
-  await editIni(path.join(configDir, "Engine.ini"), (t) => withXmppSection(withSections(t, VOICE_ENGINE_SECTIONS), relayPort));
+  await editIni(path.join(configDir, "Engine.ini"), (t) => withXmppSection(t, relayPort));
 }
 
 export function maskArgs(args: string[]): string[] {

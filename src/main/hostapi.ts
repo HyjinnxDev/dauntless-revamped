@@ -148,7 +148,8 @@ export interface RuntimeArtifact {
   sha256: string;
 }
 
-export type ExchangeResult = { ok: true; exchangeCode: string } | ApiFailure;
+// voice: the party voice relay's ticket and UDP port, when the server runs one.
+export type ExchangeResult = { ok: true; exchangeCode: string; voice?: { ticket: string; port: number } } | ApiFailure;
 
 // A one-time code (60 s) the game trades for its game token. The server checks the exe hash and the
 // exact runtime release this launcher installed.
@@ -178,7 +179,11 @@ export async function requestGameSession(
   if (res.status !== 200) return apiFailure(res);
   const body = parseJsonBody(res);
   const code = isObject(body) && typeof body.exchangeCode === "string" ? body.exchangeCode : "";
-  return /^[A-Za-z0-9_-]{16,256}$/.test(code) ? { ok: true, exchangeCode: code } : { ok: false, error: "server_error" };
+  if (!/^[A-Za-z0-9_-]{16,256}$/.test(code)) return { ok: false, error: "server_error" };
+  const ticket = isObject(body) && typeof body.voiceTicket === "string" ? body.voiceTicket : "";
+  const port = isObject(body) ? body.voicePort : undefined;
+  const voiceOk = /^[A-Za-z0-9_.-]{20,4096}$/.test(ticket) && Number.isInteger(port) && (port as number) > 0 && (port as number) < 65536;
+  return voiceOk ? { ok: true, exchangeCode: code, voice: { ticket, port: port as number } } : { ok: true, exchangeCode: code };
 }
 
 // ---------------------------------------------------------------- runtime (MysticParadox.dll + winmm.dll)
