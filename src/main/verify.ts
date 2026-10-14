@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, promises as fsp, readFileSync } from "node:fs";
 import path from "node:path";
+import { isIntroFile } from "./intro";
 import { resolveInside, type ManifestFile } from "./manifest";
 
 export class AbortedError extends Error {
@@ -80,10 +81,10 @@ export async function checkFile(
   } catch {
     return "missing";
   }
-  if (size !== f.size) return "size";
+  if (size !== f.size) return isIntroFile(f.path) ? null : "size";
   if (!fullHash || trusted?.(f, size, mtimeMs)) return null;
   const digest = await hashFile(full, signal, onBytes);
-  return digest === f.sha256 ? null : "hash";
+  return digest === f.sha256 || isIntroFile(f.path) ? null : "hash";
 }
 
 // Checks every file. With fullHash=false only presence and size are checked (a quick look before

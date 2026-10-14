@@ -158,7 +158,7 @@ export interface Snapshot {
   task: TaskProgress | null;
   game: { running: boolean; relayPort: number | null };
   settings: Settings;
-  app: { version: string; packaged: boolean; updateReady: boolean };
+  app: { version: string; packaged: boolean; updateReady: boolean; runtimeVersion?: string | null };
   status: ServerStatus | null;
   statusUnsupported: boolean; // the server answers but lists nobody (Mystic Paradox has no player list)
   lastError: LauncherError | null;

@@ -58,6 +58,7 @@ import { contentDownloadBase, DownloadError, DownloadJob } from "./downloader";
 import { AbortedError, hashFile, removePartFiles, verifyInstall, VerifiedCache } from "./verify";
 import { installRuntime, installedRuntime, runtimeMatches, RuntimeError, win64Dir } from "./runtime";
 import { locateExistingGame } from "./game-folder";
+import { applyIntro, isIntroFile } from "./intro";
 import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, pointXmppAtRelay, relayEnv, type SpawnFn } from "./launch";
 import { KeyStore, serverId, type Encryptor, type KeySlot } from "./keystore";
 import { SettingsStore, type StoredServer, type StoredSettings } from "./settings";
@@ -82,6 +83,8 @@ export interface Platform {
   relayPort?: number;
   // The game's user config folder, where chat is pointed at the relay (tests use a temporary one).
   gameConfigDir?: string;
+  // The bundled intro that replaces the game's Logo.mp4 at launch.
+  introFile?: string;
   // The file checked by hash before every launch (tests use a fake game).
   exePin?: { relativePath: string; sha256: string };
   chooseFolder(title: string, defaultPath: string): Promise<string | null>;
@@ -279,7 +282,7 @@ export class Controller {
       task: this.task,
       game: { running: this.game.running, relayPort: this.relay?.port ?? null },
       settings: this.settingsView(),
-      app: { version: this.p.appVersion, packaged: this.p.packaged, updateReady: this.updateReady },
+      app: { version: this.p.appVersion, packaged: this.p.packaged, updateReady: this.updateReady, runtimeVersion: this.runtimeRelease?.version ?? null },
       // Mystic Paradox has no public player list: a reachable server is shown as "online".
       status: null,
       statusUnsupported: this.reachable === true,
@@ -706,7 +709,7 @@ export class Controller {
       const full = resolveInside(dir, f.path);
       try {
         const st = await fsp.stat(full);
-        if (st.isFile() && st.size === f.size) {
+        if (st.isFile() && (st.size === f.size || isIntroFile(f.path))) {
           present++;
           continue;
         }
@@ -1014,6 +1017,7 @@ export class Controller {
         });
         log.info(`starting ${describeLaunch(EXE_NAME, args)} (relay 127.0.0.1:${relayPort} -> ${sv.host}:${sv.port})`);
         try {
+          await applyIntro(dir, this.p.introFile).catch((e) => log.warn(`intro not applied: ${describeError(e)}`));
           await pointXmppAtRelay(relayPort, this.p.gameConfigDir);
           await this.game.start(win64Dir(dir), args, relayEnv(relayPort));
         } catch (e) {

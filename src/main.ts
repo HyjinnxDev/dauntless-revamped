@@ -29,6 +29,8 @@ app.enableSandbox();
 if (process.argv.includes("--safe-mode")) app.disableHardwareAcceleration();
 nativeTheme.themeSource = "dark";
 app.setAppUserModelId(app.isPackaged ? `com.squirrel.${SQUIRREL_NAME}.${SQUIRREL_NAME}` : APP_ID);
+// userData follows productName; 0.1.8 renamed the product, so pin the folder 0.1.7 and earlier used (login, settings).
+app.setPath("userData", path.join(app.getPath("appData"), "Dauntless Forever 1.14.7 Launcher"));
 
 // Art from the host's art pack is served to the renderer through this app-internal scheme.
 protocol.registerSchemesAsPrivileged([{ scheme: "dr-art", privileges: { standard: true, secure: true } }]);
@@ -319,6 +321,7 @@ function makePlatform(): Platform {
   if (relayPort !== undefined) log.warn(`relay port overridden to ${relayPort}`);
   return {
     userDataDir: app.getPath("userData"),
+    introFile: path.join(resourcesDir(), "intro-Logo.mp4"),
     defaultInstallDir: path.join(localAppData, "DauntlessForever1147", "Game"),
     appVersion: app.getVersion(),
     packaged: app.isPackaged,

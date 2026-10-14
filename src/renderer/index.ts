@@ -1590,8 +1590,9 @@ function renderRail(): void {
   );
   // Always visible, so a self-update can be seen to have landed.
   const ver = $("#app-version");
-  ver.textContent = snap ? `v${snap.app.version}` : "";
-  ver.title = snap ? t("about_version", { v: snap.app.version }) : "";
+  const rt = snap?.app.runtimeVersion ? ` · runtime ${snap.app.runtimeVersion}` : "";
+  ver.textContent = snap ? `v${snap.app.version}${rt}` : "";
+  ver.title = snap ? t("about_version", { v: snap.app.version }) + rt : "";
   const chip = $("#account-chip");
   const user = snap?.account.signedIn ? snap.account.username : null;
   // With other servers saved, the chip is also the server switcher: a click lists them, one more click joins.
