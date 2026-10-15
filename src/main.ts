@@ -4,7 +4,7 @@
 // (every request is made here, in the main process, and only to the host from the invite). It can
 // only call the small typed API in preload.ts, and every argument is checked again here.
 
-import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, protocol, safeStorage, screen, session, shell, type IpcMainInvokeEvent } from "electron";
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, protocol, safeStorage, screen, session, shell, Tray, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { existsSync, promises as fsp } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -17,7 +17,7 @@ import { findTailscale } from "./main/system";
 import { describeError, log, logToFile } from "./main/log";
 import { boundedString, externalTarget, isTrustedPageUrl, relayPortOverride, settingsPatch } from "./main/ipc-validate";
 import { INVITE_SCHEME, parseInvite } from "./shared/invite";
-import { IPC, type Snapshot, type TaskProgress } from "./shared/types";
+import { IPC, type Language, type Snapshot, type TaskProgress } from "./shared/types";
 import { systemLanguage, translate } from "./shared/i18n";
 import { APP_ID, SQUIRREL_NAME, UPDATE_FEED_URL } from "./main/constants";
 
@@ -48,6 +48,8 @@ let mainWindow: BrowserWindow | null = null;
 let controller: Controller | null = null;
 let pendingInviteLink: string | null = null;
 let quitting = false;
+let tray: Tray | null = null;
+let trayHintShown = false;
 
 function resourcesDir(): string {
   return app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), "assets");
@@ -132,24 +134,17 @@ function createWindow(): void {
   mainWindow.on("unmaximize", () => mainWindow?.webContents.send(IPC.windowState, false));
 
   // The launcher carries the game's connection to the server. Closing it would cut the game off,
-  // so ask first.
+  // so while the game runs the window only hides to the tray (quitting from there asks first).
   mainWindow.on("close", (event) => {
     if (quitting || !controller?.relayActive || !mainWindow) return;
+    event.preventDefault();
     const lang = controller.snapshot().settings.language;
-    const choice = dialog.showMessageBoxSync(mainWindow, {
-      type: "warning",
-      title: translate(lang, "app_title"),
-      message: translate(lang, "close_title"),
-      detail: translate(lang, "close_text"),
-      buttons: [translate(lang, "close_keep"), translate(lang, "close_anyway")],
-      defaultId: 0,
-      cancelId: 0,
-      noLink: true,
-    });
-    if (choice === 0) {
-      event.preventDefault();
-      mainWindow.minimize();
-      controller.setNotice("keep_open");
+    syncTray(true, lang);
+    mainWindow.hide();
+    controller.setNotice("keep_open");
+    if (tray && !trayHintShown) {
+      trayHintShown = true;
+      tray.displayBalloon({ iconType: "info", title: translate(lang, "close_title"), content: translate(lang, "tray_hidden") });
     }
   });
   mainWindow.on("closed", () => {
@@ -161,6 +156,60 @@ function createWindow(): void {
     log.error(`launcher page failed: ${describeError(error)}`);
     dialog.showErrorBox("Dauntless Forever could not open", "The launcher page could not load. Reinstall the latest launcher. Your sign-in and game files are kept.");
   });
+}
+
+function showWindow(): void {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function quitFromTray(lang: Language): void {
+  const choice = dialog.showMessageBoxSync({
+    type: "warning",
+    title: translate(lang, "app_title"),
+    message: translate(lang, "close_title"),
+    detail: translate(lang, "close_text"),
+    buttons: [translate(lang, "close_keep"), translate(lang, "close_anyway")],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  });
+  if (choice === 1) {
+    quitting = true;
+    app.quit();
+  }
+}
+
+// A tray icon while the game runs. When the game ends with the window closed to the tray, the
+// launcher finishes closing (or comes back, when there is an error to show).
+function syncTray(running: boolean, lang: Language, failed = false): void {
+  if (!running) {
+    if (!tray) return;
+    tray.destroy();
+    tray = null;
+    if (mainWindow && !mainWindow.isVisible()) {
+      if (failed) showWindow();
+      else {
+        quitting = true;
+        app.quit();
+      }
+    }
+    return;
+  }
+  if (tray) return;
+  tray = new Tray(nativeImage.createFromPath(path.join(resourcesDir(), "icon.png")).resize({ width: 16, height: 16 }));
+  tray.setToolTip(translate(lang, "tray_running"));
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: translate(lang, "tray_running"), enabled: false },
+      { label: translate(lang, "tray_show"), click: showWindow },
+      { type: "separator" },
+      { label: translate(lang, "tray_quit"), click: () => quitFromTray(lang) },
+    ]),
+  );
+  tray.on("click", showWindow);
 }
 
 function hardenSessions(): void {
@@ -295,6 +344,7 @@ function registerIpc(c: Controller): void {
   handle(IPC.installUpdate, () => c.installUpdate());
   handle(IPC.dismissNotice, () => c.dismissNotice());
   handle(IPC.dismissError, () => c.dismissError());
+  handle(IPC.closeStrayGames, () => c.closeStrayGames());
   handle(IPC.windowMinimize, () => mainWindow?.minimize());
   handle(IPC.windowMaximize, () => {
     if (!mainWindow) return false;
@@ -348,7 +398,10 @@ function makePlatform(): Platform {
     openPath: async (dir) => {
       await shell.openPath(dir);
     },
-    emitSnapshot: (s) => send(IPC.snapshot, s),
+    emitSnapshot: (s) => {
+      syncTray(s.game.running, s.settings.language, s.lastError !== null);
+      send(IPC.snapshot, s);
+    },
     emitProgress: (p) => send(IPC.progress, p),
     findTailscale: () => findTailscale(process.env, existsSync, process.platform),
     findRunningClients: () => findRunningClients(process.platform),
@@ -371,10 +424,7 @@ if (!started) {
     pendingInviteLink = inviteFromArgv(process.argv);
 
     app.on("second-instance", (_event, argv) => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.focus();
-      }
+      showWindow();
       deliverInviteLink(inviteFromArgv(argv));
     });
 
@@ -392,7 +442,10 @@ if (!started) {
       createWindow();
       await controller.init();
 
-      if (app.isPackaged && process.platform === "win32" && UPDATE_FEED_URL) {
+      // Only a Squirrel install has Update.exe one folder up; the portable zip would fail every check.
+      const squirrel = existsSync(path.resolve(path.dirname(process.execPath), "..", "Update.exe"));
+      if (!squirrel && app.isPackaged) log.info("not a Squirrel install: self-update is off");
+      if (app.isPackaged && process.platform === "win32" && UPDATE_FEED_URL && squirrel) {
         updateElectronApp({
           updateSource: { type: UpdateSourceType.StaticStorage, baseUrl: UPDATE_FEED_URL },
           updateInterval: "5 minutes", // the library minimum: a release reaches open launchers quickly

@@ -94,6 +94,8 @@ export interface Platform {
   emitProgress(p: TaskProgress): void;
   findTailscale(): string | null;
   findRunningClients(): Promise<number[]>;
+  // Ends a process (default process.kill); tests pass a fake.
+  killProcess?(pid: number): void;
   spawn?: SpawnFn;
   installUpdate?(): void;
 }
@@ -826,6 +828,8 @@ export class Controller {
       await installRuntime(ep, dir, release);
     } catch (e) {
       log.error(`runtime install failed: ${describeError(e)}`);
+      // A Dauntless left running (a crashed or hung game) keeps the old DLL loaded: offer to close it.
+      if (e instanceof RuntimeError && e.code === "in_use" && (await this.p.findRunningClients()).length > 0) return { ok: false, error: "already_running" };
       const map = { download: "runtime_unavailable", in_use: "runtime_in_use", hash: "runtime_failed", disk: "runtime_failed" } as const;
       return { ok: false, error: e instanceof RuntimeError ? map[e.code] : "runtime_failed", detail: e instanceof RuntimeError ? e.file : undefined };
     }
@@ -1030,6 +1034,34 @@ export class Controller {
         if (!launched) await this.stopRelay();
       }
     });
+  }
+
+  // Ends Dauntless clients this launcher did not start (game servers are never listed, see
+  // findRunningClients), then waits up to 5 s for them to go so their files are free again.
+  async closeStrayGames(): Promise<ActionResult> {
+    if (this.busy || this.task || this.game.running) return err("busy");
+    const kill = this.p.killProcess ?? ((pid: number) => process.kill(pid));
+    const pids = await this.p.findRunningClients();
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (e) {
+        return (e as NodeJS.ErrnoException).code === "EPERM";
+      }
+    };
+    for (const pid of pids) {
+      try {
+        kill(pid);
+      } catch (e) {
+        log.warn(`could not close Dauntless (pid ${pid}): ${describeError(e)}`);
+      }
+    }
+    for (let i = 0; i < 20 && pids.some(alive); i++) await new Promise((r) => setTimeout(r, 250));
+    log.info(`closed ${pids.length} Dauntless process(es) the launcher did not start`);
+    this.lastError = null;
+    this.publish();
+    return OK;
   }
 
   private async startRelay(sv: StoredServer): Promise<ActionResult> {

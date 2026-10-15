@@ -1520,6 +1520,8 @@ function renderBanners(): void {
           icon("warning"),
           h("span", { class: "banner-text" }, errorText(error)),
           ...(error.code === 'account_banned' ? [linkButton('Go to support',()=>open('discord'),{fk:'ban-support'})] : []),
+          // A Dauntless this launcher did not start (left hanging, or crashed) blocks Play and runtime updates.
+          ...(error.code === "already_running" && !snap?.game.running ? [button(t("err_close_stray"), () => void api.closeStrayGames(), { cls: "btn-primary", fk: "close-stray" })] : []),
           linkButton(t("err_dismiss"), () => {
             state.localError = null;
             void api.dismissError();

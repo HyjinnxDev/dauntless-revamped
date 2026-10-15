@@ -230,6 +230,7 @@ export const IPC = {
   takeInviteLink: "dr:take-invite-link",
   dismissNotice: "dr:dismiss-notice",
   dismissError: "dr:dismiss-error",
+  closeStrayGames: "dr:close-stray-games",
   // events
   inviteLink: "dr:invite-link",
   snapshot: "dr:snapshot",

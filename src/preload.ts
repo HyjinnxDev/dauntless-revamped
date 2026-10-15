@@ -54,6 +54,7 @@ const api = {
   installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.installUpdate),
   dismissNotice: (): Promise<void> => ipcRenderer.invoke(IPC.dismissNotice),
   dismissError: (): Promise<void> => ipcRenderer.invoke(IPC.dismissError),
+  closeStrayGames: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.closeStrayGames),
   minimize: (): Promise<void> => ipcRenderer.invoke(IPC.windowMinimize),
   toggleMaximize: (): Promise<boolean> => ipcRenderer.invoke(IPC.windowMaximize),
   close: (): Promise<void> => ipcRenderer.invoke(IPC.windowClose),

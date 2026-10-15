@@ -83,7 +83,7 @@ interface Harness {
 }
 
 // userDataDir: reuse another harness's settings and sign-in (the launcher opened again).
-function harness(userDataDir?: string, relayPort: number | undefined = RELAY_PORT): Harness {
+function harness(userDataDir?: string, relayPort: number | undefined = RELAY_PORT, extra: Partial<Platform> = {}): Harness {
   let snap: Snapshot | null = null;
   const spawns: Harness["spawns"] = [];
   let child: EventEmitter | null = null;
@@ -121,6 +121,7 @@ function harness(userDataDir?: string, relayPort: number | undefined = RELAY_POR
     findTailscale: () => null,
     findRunningClients: async () => [],
     spawn: fakeSpawn,
+    ...extra,
   };
   const c = new Controller(p);
   return { c, last: () => snap ?? c.snapshot(), spawns, child: () => child, installDir, userData };
@@ -263,4 +264,14 @@ test("a server with another certificate gets nothing", async () => {
   assert.equal(h.last().phase, "connect");
   assert.equal(h.last().connect.problem, "cert_mismatch");
   assert.equal(mystic.calls.length, before, "no request reached the server");
+});
+
+test("Close Dauntless ends the clients the launcher did not start", async () => {
+  const killed: number[] = [];
+  // 999999: no such process, so the wait for it to go ends at once.
+  const h = harness(undefined, RELAY_PORT, { findRunningClients: async () => [999999], killProcess: (pid) => void killed.push(pid) });
+  await h.c.init();
+  assert.deepEqual(await h.c.closeStrayGames(), { ok: true });
+  assert.deepEqual(killed, [999999]);
+  assert.equal(h.last().lastError, null);
 });
