@@ -138,14 +138,7 @@ function createWindow(): void {
   mainWindow.on("close", (event) => {
     if (quitting || !controller?.relayActive || !mainWindow) return;
     event.preventDefault();
-    const lang = controller.snapshot().settings.language;
-    syncTray(true, lang);
-    mainWindow.hide();
-    controller.setNotice("keep_open");
-    if (tray && !trayHintShown) {
-      trayHintShown = true;
-      tray.displayBalloon({ iconType: "info", title: translate(lang, "close_title"), content: translate(lang, "tray_hidden") });
-    }
+    hideToTray(controller.snapshot().settings.language);
   });
   mainWindow.on("closed", () => {
     mainWindow = null;
@@ -182,20 +175,23 @@ function quitFromTray(lang: Language): void {
   }
 }
 
-// A tray icon while the game runs. When the game ends with the window closed to the tray, the
-// launcher finishes closing (or comes back, when there is an error to show).
-function syncTray(running: boolean, lang: Language, failed = false): void {
+function hideToTray(lang: Language): void {
+  syncTray(true, lang);
+  mainWindow?.hide();
+  if (tray && !trayHintShown) {
+    trayHintShown = true;
+    tray.displayBalloon({ iconType: "info", title: translate(lang, "close_title"), content: translate(lang, "tray_hidden") });
+  }
+}
+
+// While the game runs the launcher lives in the tray: it hides when the game starts and comes back
+// when the game closes.
+function syncTray(running: boolean, lang: Language): void {
   if (!running) {
     if (!tray) return;
     tray.destroy();
     tray = null;
-    if (mainWindow && !mainWindow.isVisible()) {
-      if (failed) showWindow();
-      else {
-        quitting = true;
-        app.quit();
-      }
-    }
+    showWindow();
     return;
   }
   if (tray) return;
@@ -210,6 +206,7 @@ function syncTray(running: boolean, lang: Language, failed = false): void {
     ]),
   );
   tray.on("click", showWindow);
+  hideToTray(lang);
 }
 
 function hardenSessions(): void {
@@ -399,7 +396,7 @@ function makePlatform(): Platform {
       await shell.openPath(dir);
     },
     emitSnapshot: (s) => {
-      syncTray(s.game.running, s.settings.language, s.lastError !== null);
+      syncTray(s.game.running, s.settings.language);
       send(IPC.snapshot, s);
     },
     emitProgress: (p) => send(IPC.progress, p),
