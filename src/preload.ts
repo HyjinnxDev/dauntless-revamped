@@ -26,6 +26,7 @@ const api = {
   forgetServer: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.forgetServer),
   switchServer: (id: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.switchServer, String(id)),
   removeSavedServer: (id: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.removeSavedServer, String(id)),
+  addServer: (invite: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.addServer, String(invite)),
   register: (username: string, password: string): Promise<RegisterOutcome> => ipcRenderer.invoke(IPC.register, String(username), String(password)),
   signIn: (identifier: string, password: string): Promise<RegisterOutcome> => ipcRenderer.invoke(IPC.signIn, String(identifier), String(password)),
   chooseInstallDir: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.chooseInstallDir),

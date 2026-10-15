@@ -1343,14 +1343,6 @@ img {
   height: 14px;
 }
 
-.badge-public {
-  color: var(--dr-glow);
-}
-
-.badge-private {
-  color: var(--dr-ice);
-}
-
 .hero-title {
   margin: 0;
   font-family: var(--font-display);

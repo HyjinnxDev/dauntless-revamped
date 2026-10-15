@@ -275,3 +275,21 @@ test("Close Dauntless ends the clients the launcher did not start", async () => 
   assert.deepEqual(killed, [999999]);
   assert.equal(h.last().lastError, null);
 });
+
+test("Add server puts an invite's server on the list without leaving the current one; cards show the owner's text", async () => {
+  const h = harness();
+  await opened(h);
+  await h.c.submitInvite(invite());
+  const other = formatInvite({ host: "127.0.0.2", port: BACKEND_PORT, fp: cert.fingerprint, code: "WXYZ-1234", name: "Elsewhere" });
+  assert.deepEqual(await h.c.addServer(other), { ok: true });
+  assert.deepEqual(await h.c.addServer(other), { ok: true }, "adding it again only replaces the entry");
+  assert.equal((await h.c.addServer("nope")).ok, false);
+  await h.c.refreshCards(true);
+  const list = h.last().savedServers;
+  assert.equal(list.length, 2);
+  const [here, there] = [list.find((s) => s.current)!, list.find((s) => !s.current)!];
+  assert.equal(h.last().server?.host, "127.0.0.1", "still on the first server");
+  assert.deepEqual([here.name, here.motd, here.online, here.players], ["Friday Night Hunts", "Hunts at 8.\nBe nice.", true, 3]);
+  assert.ok(here.pingMs !== null && here.pingMs >= 1);
+  assert.deepEqual([there.name, there.online], ["Elsewhere", false], "nobody answers on 127.0.0.2: offline, invite name kept");
+});

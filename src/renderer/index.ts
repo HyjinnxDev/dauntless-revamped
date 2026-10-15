@@ -16,14 +16,14 @@ import { localized, MYSTIC_PEOPLE, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPS
 import { isTailnetHost, parseInvite } from "../shared/invite";
 import { checkUsername, isValidPassword } from "../shared/username";
 import { primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
-import { formatBytes, formatDate, formatDuration, formatRunningTime } from "../shared/format";
+import { formatBytes, formatDate, formatRunningTime } from "../shared/format";
 import { sortInstances, type InstanceKind, type ServerStatus, type StatusInstance } from "../shared/status";
 import { GAME_LANGUAGES, LANGUAGES, type Branding, type ExternalTarget, type GameLanguage, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
 
 type View = "play" | "news" | "server" | "settings" | "credits";
 const VIEWS: readonly View[] = ["play", "news", "server", "settings", "credits"];
 type Modal =
-  | { kind: "invite"; link: string; name: string; host: string; tailnet: boolean; fp: string }
+  | { kind: "invite"; link: string; name: string; host: string }
   // An invite whose certificate is not the one this PC's sign-in for that server belongs to.
   | { kind: "cert_changed"; link: string; name: string; host: string; oldFp: string | null; newFp: string }
   | { kind: "logout" }
@@ -49,6 +49,7 @@ const state = {
   news: [] as NewsItem[],
   newsSeen: false,
   serverMenu: false, // the rail's server switcher is open
+  addMsg: null as { ok: boolean; text: string } | null, // the Servers page's add-a-server result
   branding: { backgrounds: [], accent: null } as Branding,
   extrasFor: "",
   extrasAt: 0,
@@ -85,6 +86,8 @@ const inviteInput = h("textarea", {
   "aria-describedby": "invite-hint",
 });
 const inviteHint = h("div", { class: "hint", id: "invite-hint", "aria-live": "polite" });
+// Kept across re-renders of the Servers page (every 30 s), so typing is never lost.
+const addInput = h("input", { class: "input", id: "add-input", spellcheck: "false", autocomplete: "off", "data-fk": "add-input" }) as HTMLInputElement;
 const invitePreview = h("div", { class: "preview", hidden: true });
 
 const usernameInput = h("input", {
@@ -181,18 +184,6 @@ function groupedFingerprint(fp: string): string {
   return fp.match(/.{1,4}/g)?.join(" ") ?? fp;
 }
 
-// The first 16 hex digits, enough to compare with what the host shows.
-function shortFingerprint(fp: string): string {
-  return `${groupedFingerprint(fp.slice(0, 16))}…`;
-}
-
-// Every server is reached over pinned TLS; the badge says whether that goes through Tailscale.
-function modeBadge(tailnet: boolean): HTMLElement {
-  return tailnet
-    ? h("span", { class: "badge badge-private" }, icon("tunnel"), t("mode_private"))
-    : h("span", { class: "badge badge-public" }, icon("shield"), t("mode_public"));
-}
-
 function updateInviteFeedback(): void {
   const text = state.inviteText.trim();
   invitePreview.replaceChildren();
@@ -214,9 +205,7 @@ function updateInviteFeedback(): void {
         { class: "preview-text" },
         h("div", { class: "preview-name" }, r.invite.name),
         h("div", { class: "preview-host" }, secret(`${r.invite.host}:${r.invite.port}`, "invite-host")),
-        h("div", { class: "preview-host mono" }, t("link_fingerprint", { fp: hideText(shortFingerprint(r.invite.fp)) })),
       ),
-      h("span", {}, modeBadge(isTailnetHost(r.invite.host))),
     );
     inviteHint.className = "hint hint-ok";
     inviteHint.replaceChildren(t(isTailnetHost(r.invite.host) ? "join_ok_private" : "join_ok_public"));
@@ -300,6 +289,7 @@ function secret(text: string, key: string, cls = ""): HTMLElement {
 function refreshSecrets(): void {
   document.documentElement.classList.toggle("streamer", streamer());
   inviteInput.classList.toggle("masked", streamer());
+  addInput.type = streamer() ? "password" : "text"; // the invite holds the code
   for (const sel of ["#view-play", "#view-server", "#view-settings", "#server-panel", "#account-chip"]) forceRender($(sel));
   updateInviteFeedback();
   renderAll();
@@ -330,7 +320,7 @@ function stat(label: string, value: string, small = false): HTMLElement {
 }
 
 function serverName(): string {
-  return state.snap?.status?.name ?? state.snap?.server?.name ?? "";
+  return state.snap?.server?.name ?? state.snap?.status?.name ?? "";
 }
 
 function open(target: ExternalTarget): void {
@@ -401,25 +391,79 @@ function savedServersCard(snap: Snapshot): HTMLElement | null {
   const others = snap.savedServers.filter((sv) => !sv.current);
   if (others.length === 0) return null;
   const locked = snap.busy || snap.task !== null || snap.game.running;
-  const rows = others.map((sv) =>
+  return card("", h("h2", { class: "card-title" }, t("saved_title")), h("p", { class: "card-text" }, t("saved_text")), h("div", { class: "srv-list" }, ...others.map((sv) => serverCard(sv, locked))));
+}
+
+// ------------------------------------------------------------------ server cards
+
+type SavedServer = Snapshot["savedServers"][number];
+
+// The owner's logo, or the name's first letter on a tile.
+function serverLogo(sv: SavedServer): HTMLElement {
+  if (sv.logo?.startsWith("dr-art:")) return h("img", { class: "srv-logo", src: sv.logo, alt: "", draggable: "false" });
+  return h("span", { class: "srv-logo srv-logo-letter", "aria-hidden": "true" }, (Array.from(sv.name)[0] ?? "?").toUpperCase());
+}
+
+function serverStatus(sv: SavedServer): HTMLElement {
+  if (sv.online === null) return h("span", { class: "srv-status" }, t("srv_checking"));
+  if (!sv.online) return h("span", { class: "srv-status" }, h("span", { class: "dot offline", "aria-hidden": "true" }), t("sp_offline"));
+  const bits = [t("sp_online"), sv.players !== null ? t("srv_players", { n: sv.players }) : null, sv.pingMs !== null ? t("srv_ping", { ms: sv.pingMs }) : null];
+  return h("span", { class: "srv-status" }, h("span", { class: "dot online", "aria-hidden": "true" }), bits.filter(Boolean).join(" · "));
+}
+
+function serverCard(sv: SavedServer, locked: boolean): HTMLElement {
+  const details = h(
+    "details",
+    { class: "srv-details" },
+    h("summary", { "data-fk": `srv-more-${sv.id}` }, t("srv_details")),
+    h("dl", { class: "kv" }, h("dt", {}, t("server_address")), h("dd", {}, secret(`${sv.host}:${sv.port}`, `srv-addr-${sv.id}`, "mono")), h("dt", {}, t("srv_account")), h("dd", {}, sv.username ?? "–")),
+  );
+  const actions = sv.current
+    ? null
+    : h(
+        "div",
+        { class: "srv-actions" },
+        button(t("saved_switch_to"), () => void switchTo(sv.id), { cls: "btn-primary", fk: `saved-${sv.id}`, disabled: locked }),
+        linkButton(t("saved_remove"), () => showModal({ kind: "remove_server", id: sv.id, name: sv.name }), { icon: "close", fk: `saved-rm-${sv.id}`, disabled: locked }),
+      );
+  return h(
+    "article",
+    { class: `srv-card${sv.current ? " is-current" : ""}` },
+    serverLogo(sv),
     h(
       "div",
-      { class: "settings-row" },
-      h(
-        "div",
-        { class: "settings-row-text" },
-        h("span", { class: "settings-row-title" }, sv.name, " ", modeBadge(isTailnetHost(sv.host))),
-        h("span", { class: "settings-row-sub mono" }, savedServerSub(sv)),
-      ),
-      h(
-        "div",
-        { class: "settings-actions" },
-        button(t("saved_join"), () => void switchTo(sv.id), { cls: "btn-primary", fk: `saved-${sv.id}`, disabled: locked }),
-        linkButton(t("saved_remove"), () => showModal({ kind: "remove_server", id: sv.id, name: sv.name }), { icon: "close", fk: `saved-rm-${sv.id}`, disabled: locked }),
-      ),
+      { class: "srv-main" },
+      h("h2", { class: "srv-title" }, sv.name, sv.current ? h("span", { class: "srv-current" }, t("srv_current")) : null),
+      sv.motd ? h("p", { class: "srv-motd" }, sv.motd) : null,
+      serverStatus(sv),
+      actions,
+      details,
     ),
   );
-  return card("", h("h2", { class: "card-title" }, t("saved_title")), h("p", { class: "card-text" }, t("saved_text")), ...rows);
+}
+
+async function addServer(): Promise<void> {
+  const text = addInput.value.trim();
+  const parsed = parseInvite(text);
+  if (!parsed.ok) state.addMsg = { ok: false, text: tk(`invite_err_${parsed.error}`) };
+  else {
+    const r = await api.addServer(text);
+    if (r.ok) {
+      addInput.value = "";
+      state.addMsg = { ok: true, text: t("add_done", { name: parsed.invite.name }) };
+    } else state.addMsg = { ok: false, text: tk(`err_${r.error.code}`) };
+  }
+  renderServer();
+}
+
+function addServerCard(): HTMLElement {
+  const go = button(t("add_button"), () => void addServer(), { cls: "btn-primary", fk: "add-go" });
+  addInput.placeholder = t("join_placeholder");
+  addInput.onkeydown = (e) => {
+    if (e.key === "Enter") void addServer();
+  };
+  const msg = state.addMsg ? h("div", { class: `hint ${state.addMsg.ok ? "hint-ok" : "hint-bad"}`, "aria-live": "polite" }, state.addMsg.ok ? null : icon("warning"), state.addMsg.text) : null;
+  return card("", h("h2", { class: "card-title" }, t("add_title")), h("p", { class: "card-text" }, t("add_text")), h("div", { class: "card-row srv-add" }, addInput, go), msg);
 }
 
 function playJoin(snap: Snapshot): HTMLElement[] {
@@ -1108,47 +1152,18 @@ function renderNews(): void {
 function renderServer(): void {
   const container = $("#view-server");
   const snap = state.snap;
-  const minute = Math.floor(Date.now() / 30000);
-  const sig = JSON.stringify([state.lang, snap?.server ?? null, snap?.savedServers ?? [], snap?.status ?? null, snap?.phase, snap?.connect.problem, snap?.busy, !!snap?.task, snap?.game.running, minute]);
+  const sig = JSON.stringify([state.lang, snap?.savedServers ?? [], snap?.busy, !!snap?.task, snap?.game.running, state.addMsg]);
   renderRegion(container, sig, () => {
-    if (!snap?.server) {
-      return [h("div", { class: "page" }, h("h1", { class: "page-title", id: "server-title" }, t("nav_server")), card("", h("p", { class: "card-text" }, t("sp_nojoin"))))];
-    }
-    const sv = snap.server;
-    const status = snap.status;
-    const rows: [string, Node | string][] = [
-      [t("server_address"), secret(`${sv.host}:${sv.port}`, "server-address", "mono")],
-      [t("server_connection"), sv.tailnet ? t("server_connection_private") : t("server_connection_public")],
-      [t("server_fingerprint"), secret(groupedFingerprint(sv.fingerprint), "server-fp", "fingerprint")],
-    ];
-    if (status) {
-      rows.push([t("server_registration"), status.registration ? tk(`reg_mode_${status.registration}`) : "–"]);
-      rows.push([t("server_version"), [status.version, status.commit].filter(Boolean).join(" · ") || "–"]);
-      rows.push([t("server_uptime"), formatDuration(status.uptimeSeconds, state.lang)]);
-    }
-    const kv = h("dl", { class: "kv" });
-    for (const [k, v] of rows) kv.append(h("dt", {}, k), h("dd", {}, v));
+    const locked = !snap || snap.busy || snap.task !== null || snap.game.running;
+    const list = snap?.savedServers ?? [];
+    // The current server first, then the rest in the order they were added.
+    const sorted = [...list.filter((sv) => sv.current), ...list.filter((sv) => !sv.current)];
     const parts: HTMLElement[] = [
-      h("h1", { class: "page-title", id: "server-title" }, serverName()),
-      h("p", { class: "page-sub" }, t("server_auto")),
-      card("", kv, h("div", { class: "card-row", style: undefined }, button(t("sp_refresh"), () => void api.refreshStatus(), { icon: "refresh", fk: "srv-refresh" }), status?.sourceUrl ? linkButton(t("sp_source"), () => open("server_source"), { icon: "external", fk: "srv-source" }) : null)),
+      h("h1", { class: "page-title", id: "server-title" }, t("servers_title")),
+      h("p", { class: "page-sub" }, t(list.length ? "servers_sub" : "sp_nojoin")),
     ];
-    if (status?.limited) {
-      parts.push(card("", h("h2", { class: "card-title" }, t("server_players")), h("p", { class: "card-text" }, t("sp_signin"))));
-    } else if (status) {
-      const instances = sortInstances(status.instances);
-      parts.push(
-        h(
-          "div",
-          { class: "grid-2" },
-          card("", h("h2", { class: "card-title" }, t("server_players_count", { n: status.playersOnline })), status.players.length ? playerList(status, 100) : h("p", { class: "card-text" }, t("sp_nobody"))),
-          card("", h("h2", { class: "card-title" }, t("server_worlds")), instances.length ? h("div", { class: "instances" }, ...instances.map(instanceCard)) : h("p", { class: "card-text" }, t("sp_no_worlds"))),
-        ),
-      );
-    }
-    const saved = savedServersCard(snap);
-    if (saved) parts.push(saved);
-    parts.push(h("div", { class: "card-row" }, leaveLink(snap)));
+    if (sorted.length) parts.push(h("div", { class: "srv-list" }, ...sorted.map((sv) => serverCard(sv, locked))));
+    parts.push(addServerCard());
     return [h("div", { class: "page page-server" }, ...parts)];
   });
 }
@@ -1335,7 +1350,7 @@ function renderSettings(): void {
             button(t("set_logout"), () => showModal({ kind: "logout" }), { cls: "btn-danger", fk: "set-logout", disabled: busy }),
           )
         : settingsRow(t("set_not_signed"), null),
-      snap.server ? settingsRow(t("set_server_current"), h("span", {}, `${serverName()} (`, secret(`${snap.server.host}:${snap.server.port}`, "server-address"), ")"), button(t("set_add_server"), () => showModal({ kind: "leave" }), { fk: "set-leave", disabled: busy })) : null,
+      snap.server ? settingsRow(t("set_server_current"), h("span", {}, `${serverName()} (`, secret(`${snap.server.host}:${snap.server.port}`, "server-address"), ")"), button(t("set_add_server"), () => openAddServer(), { fk: "set-leave" })) : null,
     );
 
     // Other servers joined before: switch to one, or take it off the list (its key stays on this PC).
@@ -1631,7 +1646,7 @@ function renderRail(): void {
         return h("li", { role: "none" }, item);
       }),
       snap?.server
-        ? h("li", { role: "none", class: "server-menu-actions" }, menuAction(t("nav_server"), () => setView("server"), "server-details"), menuAction(t("set_add_server"), () => showModal({ kind: "leave" }), "server-add", locked))
+        ? h("li", { role: "none", class: "server-menu-actions" }, menuAction(t("nav_server"), () => setView("server"), "server-details"), menuAction(t("set_add_server"), () => openAddServer(), "server-add"))
         : null,
     );
     return [toggle, menu];
@@ -1642,6 +1657,12 @@ function renderRail(): void {
   const credits = $("#credits-btn");
   if (state.view === "credits") credits.setAttribute("aria-current", "page");
   else credits.removeAttribute("aria-current");
+}
+
+function openAddServer(): void {
+  state.serverMenu = false;
+  setView("server");
+  addInput.focus();
 }
 
 function setView(v: View): void {
@@ -1753,8 +1774,7 @@ function renderModal(): void {
   switch (m.kind) {
     case "invite":
       title = t("link_title", { name: m.name });
-      text = [h("p", { class: "modal-text" }, t("link_text", { name: m.name, host: hideText(m.host) })), h("div", {}, modeBadge(m.tailnet))];
-      text.push(h("p", { class: "modal-text mono" }, t("link_fingerprint", { fp: hideText(shortFingerprint(m.fp)) })));
+      text = [h("p", { class: "modal-text" }, t("link_text", { name: m.name, host: hideText(m.host) }))];
       if (state.snap?.server) text.push(h("p", { class: "modal-text" }, t("link_switch_note")));
       confirmLabel = t("link_join");
       onConfirm = async () => {
@@ -1905,7 +1925,7 @@ async function inviteModal(link: string): Promise<Modal | null> {
   if (check.ok && check.certificateChanged) {
     return { kind: "cert_changed", link, name: inv.name, host: inv.host, oldFp: check.previousFingerprint, newFp: inv.fp };
   }
-  return { kind: "invite", link, name: inv.name, host: inv.host, tailnet: isTailnetHost(inv.host), fp: inv.fp };
+  return { kind: "invite", link, name: inv.name, host: inv.host };
 }
 
 async function checkInviteLink(): Promise<void> {

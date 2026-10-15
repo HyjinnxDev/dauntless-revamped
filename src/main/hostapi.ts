@@ -2,6 +2,7 @@
 // content routes (/content/v1/*). Every request goes over the TLS connection pinned to the invite's
 // certificate (http.ts). Passwords, refresh tokens and access tokens go nowhere else.
 
+import net from "node:net";
 import { Endpoint, HttpError, HttpResponse, parseJsonBody, request } from "./http";
 import { cleanText } from "../shared/status";
 import type { ErrorCode, NewsItem } from "../shared/types";
@@ -75,6 +76,56 @@ export async function fetchServerStatus(ep: Endpoint, timeoutMs = CONNECT_TIMEOU
   if (res.status !== 200 || !isObject(body) || body.supportedBuildChangelist !== TARGET_CHANGELIST) return { kind: "bad_answer" };
   // online:false = the server's database is down: reachable, but nothing will work yet.
   return body.online === true ? { kind: "ok" } : { kind: "unreachable" };
+}
+
+// ---------------------------------------------------------------- server card
+
+// What the owner shows on the server's card (backend routes/launcherCard.ts). Public: no sign-in.
+export interface ServerCard {
+  title: string | null;
+  motd: string | null;
+  logo: string | null; // host path of the logo image
+  playersOnline: number | null;
+}
+
+const INFO_LOGO_PATH = /^\/launcher\/v1\/info\/logo\?v=[0-9a-f]{16}$/;
+
+export function parseServerCard(raw: unknown): ServerCard | null {
+  if (!isObject(raw)) return null;
+  const motd = cleanNewsBody(raw.motd);
+  const players = raw.playersOnline;
+  return {
+    title: cleanText(raw.title, 48),
+    motd: motd ? motd.slice(0, 300) : null,
+    logo: typeof raw.logo === "string" && INFO_LOGO_PATH.test(raw.logo) ? raw.logo : null,
+    playersOnline: typeof players === "number" && Number.isInteger(players) && players >= 0 && players < 1e6 ? players : null,
+  };
+}
+
+// null = no answer. A server without the card route (404) is online with an empty card.
+export async function fetchServerCard(ep: Endpoint): Promise<ServerCard | null> {
+  try {
+    const res = await request(ep, "/launcher/v1/info", { timeoutMs: 6000, maxBytes: 16 * 1024 });
+    if (res.status === 404) return { title: null, motd: null, logo: null, playersOnline: null };
+    return res.status === 200 ? parseServerCard(parseJsonBody(res)) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Round trip to the server in ms: the time a TCP connection takes to open (one SYN / SYN-ACK).
+export function tcpPing(host: string, port: number, timeoutMs = 3000): Promise<number | null> {
+  return new Promise((resolve) => {
+    const start = process.hrtime.bigint();
+    const socket = net.connect({ host, port });
+    const done = (ms: number | null) => {
+      socket.destroy();
+      resolve(ms);
+    };
+    socket.setTimeout(timeoutMs, () => done(null));
+    socket.once("error", () => done(null));
+    socket.once("connect", () => done(Math.max(1, Math.round(Number(process.hrtime.bigint() - start) / 1e6))));
+  });
 }
 
 // ---------------------------------------------------------------- accounts
@@ -342,9 +393,9 @@ export function sniffImage(data: Buffer): ImageType | null {
 
 export const MAX_ART_BYTES = 15 * 1024 * 1024;
 
-// A branding background or a news picture.
+// A branding background, a news picture or a server logo.
 export async function fetchBrandingImage(ep: Endpoint, urlPath: string): Promise<{ type: ImageType; data: Buffer } | null> {
-  if ((!BRANDING_PATH.test(urlPath) && !NEWS_IMAGE_PATH.test(urlPath)) || urlPath.includes("..")) return null;
+  if ((!BRANDING_PATH.test(urlPath) && !NEWS_IMAGE_PATH.test(urlPath) && !INFO_LOGO_PATH.test(urlPath)) || urlPath.includes("..")) return null;
   try {
     const res = await request(ep, urlPath, { timeoutMs: 30000, maxBytes: MAX_ART_BYTES });
     if (res.status !== 200) return null;

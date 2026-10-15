@@ -293,6 +293,9 @@ export class FakeMystic {
     if (p === "/launcher/v1/status") {
       return this.json(res, 200, { online: this.opts.online ?? true, supportedBuildChangelist: this.opts.changelist ?? 647472 });
     }
+    if (p === "/launcher/v1/info") {
+      return this.json(res, 200, { title: "Friday Night Hunts", motd: "Hunts at 8.\r\nBe nice.", logo: null, playersOnline: 3 });
+    }
     if (p === "/launcher/v1/auth/register" && req.method === "POST") {
       const name = String(body.displayName ?? "");
       if (!/^[A-Za-z0-9]{3,16}$/.test(name)) return this.error(res, 400, "AUTH_VALIDATION_FAILED", "Username can only contain letters and numbers.");

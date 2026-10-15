@@ -30,6 +30,7 @@ export type ConnectProblem =
 
 export type ErrorCode =
   | "account_banned"
+  | "server_list_full"
   | "approval_pending" // registered without a valid invite: the host has to approve the account
   | "invite_invalid_format"
   | "invite_invalid"
@@ -116,9 +117,14 @@ export interface SavedServerInfo {
   id: string; // the session slot id (not secret)
   host: string;
   port: number;
-  name: string;
+  name: string; // the owner's title when the server has one, else the invite's name
   current: boolean;
   username: string | null;
+  motd: string | null;
+  logo: string | null; // dr-art:// URL
+  online: boolean | null; // null = not checked yet
+  players: number | null;
+  pingMs: number | null;
 }
 
 export interface Settings {
@@ -205,6 +211,7 @@ export const IPC = {
   forgetServer: "dr:forget-server",
   switchServer: "dr:switch-server",
   removeSavedServer: "dr:remove-saved-server",
+  addServer: "dr:add-server",
   register: "dr:register",
   signIn: "dr:sign-in",
   chooseInstallDir: "dr:choose-install-dir",

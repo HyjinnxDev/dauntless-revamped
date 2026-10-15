@@ -37,6 +37,8 @@ import { GAME_LANGUAGES, LANGUAGES } from "../shared/types";
 import type { Endpoint } from "./http";
 import {
   fetchBrandingImage,
+  fetchServerCard,
+  tcpPing,
   fetchBrandingIndex,
   fetchContentManifest,
   fetchNews,
@@ -61,7 +63,7 @@ import { locateExistingGame } from "./game-folder";
 import { applyIntro, isIntroFile } from "./intro";
 import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, pointXmppAtRelay, relayEnv, type SpawnFn } from "./launch";
 import { KeyStore, serverId, type Encryptor, type KeySlot } from "./keystore";
-import { SettingsStore, type StoredServer, type StoredSettings } from "./settings";
+import { MAX_SAVED_SERVERS, SettingsStore, type StoredServer, type StoredSettings } from "./settings";
 import { freeBytes } from "./system";
 import { fixedLinkUrl, isAllowedExternalUrl } from "./links";
 import { describeError, log } from "./log";
@@ -162,6 +164,10 @@ export class Controller {
   private newsImages = new Map<string, string>(); // host path -> dr-art:// URL
   private branding: Branding | null = null;
   private art = new Map<string, { file: string; type: string }>();
+  // Per saved server (by id): what its owner shows, and whether it answered the last check.
+  private cards = new Map<string, { title: string | null; motd: string | null; logoPath: string | null; logo: string | null; online: boolean; players: number | null; pingMs: number | null }>();
+  private cardsCheckedAt = -Infinity;
+  private cardsPending: Promise<void> | null = null;
   private relay: Relay | null = null;
   private phase: Phase = "loading";
 
@@ -252,13 +258,26 @@ export class Controller {
       busy: this.busy,
       savedServers: this.s.savedServers.map((o) => {
         const id = serverId(o.host, o.port);
-        return { id, host: o.host, port: o.port, name: o.name, current: sid === id, username: this.s.usernames[id] ?? null };
+        const c = this.cards.get(id);
+        return {
+          id,
+          host: o.host,
+          port: o.port,
+          name: c?.title || o.name,
+          current: sid === id,
+          username: this.s.usernames[id] ?? null,
+          motd: c?.motd ?? null,
+          logo: c?.logo ?? null,
+          online: c ? c.online : null,
+          players: c?.players ?? null,
+          pingMs: c?.pingMs ?? null,
+        };
       }),
       server: sv
         ? {
             host: sv.host,
             port: sv.port,
-            name: sv.name,
+            name: (sid ? this.cards.get(sid)?.title : null) || sv.name,
             hasPendingInvite: sv.code !== null,
             tailnet: isTailnetHost(sv.host),
             loopback: isLoopbackHost(sv.host),
@@ -380,6 +399,65 @@ export class Controller {
     return this.join({ ...saved });
   }
 
+  // Puts an invite's server on the list without leaving the current one. A newer invite for a server
+  // already on the list replaces its entry (as joining does).
+  async addServer(text: unknown): Promise<ActionResult> {
+    const parsed = parseInvite(text);
+    if (!parsed.ok) return err("invite_invalid_format", parsed.error);
+    const inv = parsed.invite;
+    const id = serverId(inv.host, inv.port);
+    if (id === this.sid()) return OK;
+    const known = this.s.savedServers.some((sv) => serverId(sv.host, sv.port) === id);
+    if (!known && this.s.savedServers.length >= MAX_SAVED_SERVERS) return err("server_list_full");
+    const signedInThere = await this.keys.has(inv);
+    await this.settings.update((s) => {
+      const entry = { host: inv.host, port: inv.port, name: inv.name, fp: inv.fp, code: signedInThere ? null : inv.code };
+      const i = s.savedServers.findIndex((sv) => serverId(sv.host, sv.port) === id);
+      if (i >= 0) s.savedServers[i] = entry;
+      else s.savedServers.push(entry);
+    });
+    this.cards.delete(id);
+    log.info(`added server ${inv.host}:${inv.port} to the list`);
+    this.publish();
+    void this.refreshCards(true);
+    return OK;
+  }
+
+  // Checks every saved server's card: online, players, ping, title, MOTD and logo. Every 30 s at most
+  // while the window is open (from pollStatus), and right away after a server is added.
+  // A call while a check runs waits for that one (forced: and then checks again, for a server just added).
+  refreshCards(force = false): Promise<void> {
+    if (this.cardsPending) return force ? this.cardsPending.then(() => this.refreshCards(true)) : this.cardsPending;
+    if (!force && Date.now() - this.cardsCheckedAt < 30000) return Promise.resolve();
+    this.cardsCheckedAt = Date.now();
+    this.cardsPending = this.checkCards().finally(() => {
+      this.cardsPending = null;
+    });
+    return this.cardsPending;
+  }
+
+  private async checkCards(): Promise<void> {
+    await Promise.all(
+      this.s.savedServers.map(async (sv) => {
+        const id = serverId(sv.host, sv.port);
+        const ep = endpointFor(sv);
+        const [info, pingMs] = await Promise.all([fetchServerCard(ep), tcpPing(sv.host, sv.port)]);
+        const old = this.cards.get(id);
+        if (!info) {
+          this.cards.set(id, { title: old?.title ?? null, motd: old?.motd ?? null, logoPath: old?.logoPath ?? null, logo: old?.logo ?? null, online: false, players: null, pingMs: null });
+          return;
+        }
+        let logo = info.logo && info.logo === old?.logoPath ? old.logo : null;
+        if (info.logo && !logo) {
+          const img = await fetchBrandingImage(ep, info.logo);
+          logo = img ? await this.keepArt(img) : null;
+        }
+        this.cards.set(id, { title: info.title, motd: info.motd, logoPath: logo ? info.logo : null, logo, online: true, players: info.playersOnline, pingMs });
+      }),
+    );
+    this.publish();
+  }
+
   async removeSavedServer(id: string): Promise<ActionResult> {
     if (id === this.sid()) return err("busy"); // the current server stays in the list
     await this.settings.update((s) => {
@@ -486,6 +564,7 @@ export class Controller {
   }
 
   async pollStatus(): Promise<void> {
+    void this.refreshCards();
     const ep = this.endpoint();
     if (!ep || this.checking) return;
     if (this.reachable !== true) {

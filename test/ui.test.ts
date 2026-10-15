@@ -20,6 +20,7 @@ const ROOT = path.resolve(__dirname, "..", "..");
 // Records over the union types: the compiler fails this file if a new code is added without text.
 const ERROR_CODES: Record<ErrorCode, true> = {
   account_banned: true,
+  server_list_full: true,
   approval_pending: true,
   invite_invalid_format: true,
   invite_invalid: true,
@@ -105,7 +106,6 @@ test("every dynamic key family is complete", () => {
   for (const e of Object.keys(INVITE_ERRORS)) assert.ok(isStringKey(`invite_err_${e}`), `invite_err_${e}`);
   for (const c of Object.keys(USERNAME_CHECKS)) assert.ok(isStringKey(`reg_check_${c}`), `reg_check_${c}`);
   for (const n of Object.keys(NOTICES)) assert.ok(isStringKey(`notice_${n}`), `notice_${n}`);
-  for (const m of ["OPEN", "INVITECODE", "NONE"]) assert.ok(isStringKey(`reg_mode_${m}`));
   for (const w of ["menu", "city", "hunt", "dojo", "tutorial", "unknown"]) assert.ok(isStringKey(`where_${w}`));
   for (const k of ["city", "hunt", "dojo", "tutorial"]) assert.ok(isStringKey(`kind_${k}`));
 });

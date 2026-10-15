@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkUsername, isValidPassword } from "../src/shared/username";
 import { limitedView, parseServerStatus, sortInstances } from "../src/shared/status";
-import { parseBranding, parseNews, sniffImage } from "../src/main/hostapi";
+import { parseBranding, parseNews, parseServerCard, sniffImage } from "../src/main/hostapi";
 import { BELL, RLO } from "../src/shared/text";
 
 test("username rules (the Mystic Paradox backend's: letters and digits, 3-16)", () => {
@@ -173,4 +173,11 @@ test("news and branding parsing", () => {
   assert.equal(parseBranding({ accent: "red; background:url(x)" }).accent, null);
   assert.equal(sniffImage(Buffer.from([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
   assert.equal(sniffImage(Buffer.from("<svg onload=alert(1)>")), null);
+});
+
+test("server card: owner text is cleaned and capped, only the backend's own logo path is followed", () => {
+  const c = parseServerCard({ title: `Ramsgate${RLO}`, motd: "x".repeat(400), logo: "https://evil.example/x.png", playersOnline: -1 });
+  assert.deepEqual(c && { ...c, motd: c.motd?.length }, { title: "Ramsgate", motd: 300, logo: null, playersOnline: null });
+  assert.equal(parseServerCard({ title: "Hunts", motd: "", logo: "/launcher/v1/info/logo?v=0123456789abcdef", playersOnline: 4 })?.logo, "/launcher/v1/info/logo?v=0123456789abcdef");
+  assert.equal(parseServerCard("junk"), null);
 });
