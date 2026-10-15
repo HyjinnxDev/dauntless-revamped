@@ -159,6 +159,7 @@ export class Controller {
   private news: NewsItem[] | null = null;
   private newsCheckedAt = -Infinity;
   private newsLoading = false;
+  private newsImages = new Map<string, string>(); // host path -> dr-art:// URL
   private branding: Branding | null = null;
   private art = new Map<string, { file: string; type: string }>();
   private relay: Relay | null = null;
@@ -417,6 +418,7 @@ export class Controller {
     this.contentProbe = null;
     this.connectProblem = null;
     this.news = null;
+    this.newsImages.clear();
     this.branding = null;
     this.account = null;
     this.refreshing = null;
@@ -525,7 +527,16 @@ export class Controller {
     const gen = this.generation;
     this.newsCheckedAt = Date.now();
     try {
-      const items = await fetchNews(ep, this.news ?? []);
+      const old = this.news ?? [];
+      const items = await fetchNews(ep, old);
+      if (items !== old) {
+        for (const n of items) {
+          if (!n.image) continue;
+          const url = await this.newsImage(ep, n.image);
+          if (url) n.image = url;
+          else delete n.image;
+        }
+      }
       if (gen === this.generation) {
         this.news = items;
         this.publish();
@@ -535,6 +546,28 @@ export class Controller {
     }
   }
 
+  // Downloads a news picture once per server visit; a failed one is tried again with the next news check.
+  private async newsImage(ep: Endpoint, hostPath: string): Promise<string | null> {
+    const known = this.newsImages.get(hostPath);
+    if (known) return known;
+    const img = await fetchBrandingImage(ep, hostPath);
+    if (!img) return null;
+    const url = await this.keepArt(img);
+    this.newsImages.set(hostPath, url);
+    return url;
+  }
+
+  // Stores a downloaded image for the dr-art:// protocol and returns its URL.
+  private async keepArt(img: { type: string; data: Buffer }): Promise<string> {
+    const cacheDir = path.join(this.p.userDataDir, "art-cache");
+    await fsp.mkdir(cacheDir, { recursive: true });
+    const id = createHash("sha256").update(img.data).digest("hex");
+    const file = path.join(cacheDir, id);
+    await fsp.writeFile(file, img.data);
+    this.art.set(id, { file, type: img.type });
+    return `dr-art://bg/${id}`;
+  }
+
   private async loadExtras(): Promise<void> {
     const ep = this.contentEndpoint();
     if (!ep) return;
@@ -542,16 +575,9 @@ export class Controller {
     if (this.branding === null) {
       const index = await fetchBrandingIndex(ep);
       const backgrounds: Branding["backgrounds"] = [];
-      const cacheDir = path.join(this.p.userDataDir, "art-cache");
-      await fsp.mkdir(cacheDir, { recursive: true });
       for (const b of index.backgrounds) {
         const img = await fetchBrandingImage(ep, b.path);
-        if (!img) continue;
-        const id = createHash("sha256").update(img.data).digest("hex");
-        const file = path.join(cacheDir, id);
-        await fsp.writeFile(file, img.data);
-        this.art.set(id, { file, type: img.type });
-        backgrounds.push({ url: `dr-art://bg/${id}`, credit: b.credit });
+        if (img) backgrounds.push({ url: await this.keepArt(img), credit: b.credit });
       }
       this.branding = { backgrounds, accent: index.accent };
     }

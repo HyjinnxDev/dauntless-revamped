@@ -1092,7 +1092,8 @@ function renderNews(): void {
             { class: "card news-item" },
             n.date ? h("time", { class: "news-date", datetime: n.date }, formatDate(n.date, state.lang)) : null,
             h("h2", { class: "news-title" }, n.title),
-            h("p", { class: "news-body" }, n.body),
+            n.body ? h("p", { class: "news-body" }, n.body) : null,
+            n.image?.startsWith("dr-art:") ? h("img", { class: "news-image", src: n.image, alt: "", draggable: "false" }) : null,
           ),
         );
       }

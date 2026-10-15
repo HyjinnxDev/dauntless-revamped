@@ -2619,6 +2619,13 @@ img {
   user-select: text;
 }
 
+.news-image {
+  max-width: 100%;
+  max-height: 420px;
+  justify-self: start;
+  border-radius: 6px;
+}
+
 .kv {
   display: grid;
   grid-template-columns: 170px 1fr;

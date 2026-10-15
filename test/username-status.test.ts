@@ -153,6 +153,12 @@ test("news and branding parsing", () => {
   assert.equal(news.length, 1);
   assert.equal(news[0].body, "Line one\nLine two");
   assert.deepEqual(parseNews(null), []);
+  const pics = parseNews({ items: [
+    { title: "Shot", body: "", image: "/content/v1/news/image/1234567" },
+    { title: "Bad", body: "x", image: "https://evil.example/x.png" },
+    { title: "No pic, no text", body: "", image: "/content/v1/news/image/../x" },
+  ] });
+  assert.deepEqual(pics, [{ date: null, title: "Shot", body: "", image: "/content/v1/news/image/1234567" }, { date: null, title: "Bad", body: "x" }]);
   const b = parseBranding({
     backgrounds: [
       { url: "/content/v1/branding/dusk.jpg", credit: "Painted by a friend" },

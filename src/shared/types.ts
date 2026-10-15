@@ -169,6 +169,7 @@ export interface NewsItem {
   date: string | null;
   title: string;
   body: string;
+  image?: string; // host path from the server; a dr-art:// URL once handed to the renderer
 }
 
 export interface Branding {

@@ -274,16 +274,19 @@ export function cleanNewsBody(v: unknown): string | null {
   return text.length > 4000 ? text.slice(0, 4000) + "…" : text;
 }
 
+const NEWS_IMAGE_PATH = /^\/content\/v1\/news\/image\/\d{5,25}$/;
+
 export function parseNews(raw: unknown): NewsItem[] {
   if (!isObject(raw) || !Array.isArray(raw.items)) return [];
   const items: NewsItem[] = [];
   for (const item of raw.items.slice(0, 30)) {
     if (!isObject(item)) continue;
     const title = cleanText(item.title, 120);
-    const body = cleanNewsBody(item.body);
+    const image = typeof item.image === "string" && NEWS_IMAGE_PATH.test(item.image) ? item.image : undefined;
+    const body = cleanNewsBody(item.body) ?? (image ? "" : null); // a picture-only post has no text
     if (title === null || body === null) continue;
     const t = typeof item.date === "string" ? Date.parse(item.date) : NaN;
-    items.push({ date: Number.isFinite(t) ? new Date(t).toISOString() : null, title, body });
+    items.push({ date: Number.isFinite(t) ? new Date(t).toISOString() : null, title, body, ...(image ? { image } : {}) });
   }
   return items;
 }
@@ -326,20 +329,22 @@ export async function fetchBrandingIndex(ep: Endpoint): Promise<BrandingIndex> {
   }
 }
 
-export type ImageType = "image/jpeg" | "image/png" | "image/webp";
+export type ImageType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
 
 // Decides the image type from its first bytes; the server's Content-Type is not trusted.
 export function sniffImage(data: Buffer): ImageType | null {
   if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "image/jpeg";
   if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
   if (data.length >= 12 && data.toString("latin1", 0, 4) === "RIFF" && data.toString("latin1", 8, 12) === "WEBP") return "image/webp";
+  if (data.length >= 6 && /^GIF8[79]a$/.test(data.toString("latin1", 0, 6))) return "image/gif";
   return null;
 }
 
 export const MAX_ART_BYTES = 15 * 1024 * 1024;
 
+// A branding background or a news picture.
 export async function fetchBrandingImage(ep: Endpoint, urlPath: string): Promise<{ type: ImageType; data: Buffer } | null> {
-  if (!BRANDING_PATH.test(urlPath) || urlPath.includes("..")) return null;
+  if ((!BRANDING_PATH.test(urlPath) && !NEWS_IMAGE_PATH.test(urlPath)) || urlPath.includes("..")) return null;
   try {
     const res = await request(ep, urlPath, { timeoutMs: 30000, maxBytes: MAX_ART_BYTES });
     if (res.status !== 200) return null;
