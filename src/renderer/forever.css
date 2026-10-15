@@ -199,9 +199,21 @@ body {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  padding: 0 var(--edge) 12px;
+  padding: 0 var(--edge) 4px; /* room for the focus outline */
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+/* Nothing under the text column in the action bar (ready to play): end just above the PLAY button
+   (its top sits 122px up), or, wide enough that the column clears the button, share its bottom edge. */
+#view-play.bar-clear {
+  bottom: 140px;
+}
+
+@media (min-width: 1220px) {
+  #view-play.bar-clear {
+    bottom: 40px;
+  }
 }
 
 #view-play > :first-child {

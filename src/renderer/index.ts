@@ -830,6 +830,7 @@ function renderActionBar(): void {
   primary.classList.toggle("is-pause", b.action === "pause" || b.action === "resume");
   primary.classList.toggle("is-ready", b.action === "play" && !b.disabled && !reducedMotion.matches);
   primary.setAttribute("data-action", b.action);
+  $("#view-play").classList.toggle("bar-clear", snap.phase === "ready");
 
   const task = snap.phase === "installing" ? state.task ?? snap.task : null;
   if (task) {
