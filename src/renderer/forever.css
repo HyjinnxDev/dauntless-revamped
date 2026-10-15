@@ -605,6 +605,8 @@ body {
 
 .srv-add {
   flex-wrap: nowrap;
+  align-items: stretch; /* the Add button takes the input's height */
+  margin-top: 12px;
 }
 
 .srv-add .input {

@@ -2923,8 +2923,7 @@ img {
 }
 
 .credit-role.role-maintainer,
-.credit-role.role-creator,
-.credit-note {
+.credit-role.role-creator {
   margin: 0;
   color: var(--dr-steel);
   font-size: 13px;

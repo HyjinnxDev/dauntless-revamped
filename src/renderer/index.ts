@@ -463,7 +463,7 @@ function addServerCard(): HTMLElement {
     if (e.key === "Enter") void addServer();
   };
   const msg = state.addMsg ? h("div", { class: `hint ${state.addMsg.ok ? "hint-ok" : "hint-bad"}`, "aria-live": "polite" }, state.addMsg.ok ? null : icon("warning"), state.addMsg.text) : null;
-  return card("", h("h2", { class: "card-title" }, t("add_title")), h("p", { class: "card-text" }, t("add_text")), h("div", { class: "card-row srv-add" }, addInput, go), msg);
+  return card("", h("h2", { class: "card-title" }, t("add_title")), h("div", { class: "card-row srv-add" }, addInput, go), msg);
 }
 
 function playJoin(snap: Snapshot): HTMLElement[] {
@@ -1429,7 +1429,6 @@ function creditPeople(people: readonly CreditPerson[]): HTMLElement {
             h("span", { class: `badge credit-role role-${p.role}` }, t(ROLE_KEY[p.role])),
             p.github !== p.name ? h("span", { class: "credit-handle" }, t("credits_github_handle", { handle: p.github })) : null,
           ),
-          h("p", { class: "credit-note" }, localized(p.note, state.lang)),
         ),
       ),
     ),
@@ -1451,7 +1450,6 @@ function creditSoftware(): HTMLElement {
           h("span", { class: "credit-handle" }, localized(sw.author, state.lang)),
           h("span", { class: "badge software-license" }, sw.license ?? t("credits_no_license")),
         ),
-        h("p", { class: "credit-note" }, localized(sw.note, state.lang)),
       ),
     ),
   );
