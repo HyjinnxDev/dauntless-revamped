@@ -1465,7 +1465,7 @@ function renderCredits(): void {
       h("p", { class: "page-sub" }, t("credits_intro")),
       card(
         "settings-section",
-        h("h2", { class: "card-title" }, "Dauntless Forever"),
+        h("h2", { class: "card-title" }, "Dauntless Revamped"),
         h("p", { class: "card-text" }, t("credits_project_text")),
         creditPeople(PROJECT_PEOPLE),
         h("div", { class: "card-row" }, linkButton(t("credits_all_contributors"), () => open("project_contributors"), { icon: "external", fk: "cr-contributors" })),

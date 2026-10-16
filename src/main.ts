@@ -1,4 +1,4 @@
-// Dauntless Forever 1.14.7 Launcher - Electron main process.
+// Dauntless Revamped Launcher - Electron main process.
 //
 // Security model: the renderer is sandboxed, has no Node access and no network access at all
 // (every request is made here, in the main process, and only to the host from the invite). It can
@@ -16,10 +16,11 @@ import { findRunningClients } from "./main/launch";
 import { findTailscale } from "./main/system";
 import { describeError, log, logToFile } from "./main/log";
 import { boundedString, externalTarget, isTrustedPageUrl, relayPortOverride, settingsPatch } from "./main/ipc-validate";
-import { INVITE_SCHEME, parseInvite } from "./shared/invite";
+import { INVITE_SCHEME, LEGACY_INVITE_SCHEME, parseInvite } from "./shared/invite";
 import { IPC, type Language, type Snapshot, type TaskProgress } from "./shared/types";
 import { systemLanguage, translate } from "./shared/i18n";
 import { APP_ID, SQUIRREL_NAME, UPDATE_FEED_URL } from "./main/constants";
+import { migrateUserData, uninstallOldLauncher } from "./main/migrate";
 
 // Squirrel install / update / uninstall events: create or remove shortcuts, then quit.
 if (started) app.quit();
@@ -29,8 +30,17 @@ app.enableSandbox();
 if (process.argv.includes("--safe-mode")) app.disableHardwareAcceleration();
 nativeTheme.themeSource = "dark";
 app.setAppUserModelId(app.isPackaged ? `com.squirrel.${SQUIRREL_NAME}.${SQUIRREL_NAME}` : APP_ID);
-// userData follows productName; 0.1.8 renamed the product, so pin the folder 0.1.7 and earlier used (login, settings).
-app.setPath("userData", path.join(app.getPath("appData"), "Dauntless Forever 1.14.7 Launcher"));
+const localAppData = process.env.LOCALAPPDATA ?? path.join(app.getPath("home"), "AppData", "Local");
+// Pinned, not productName, so a later rename cannot lose the sign-in and settings again.
+const userDataDir = path.join(app.getPath("appData"), "Dauntless Revamped Launcher");
+let migrateError: unknown = null;
+let migrated = false;
+try {
+  migrated = !started && migrateUserData(app.getPath("appData"), localAppData, userDataDir) === "copied";
+} catch (error) {
+  migrateError = error; // logged once logging is up; the launcher still starts, just signed out
+}
+app.setPath("userData", userDataDir);
 
 // Art from the host's art pack is served to the renderer through this app-internal scheme.
 protocol.registerSchemesAsPrivileged([{ scheme: "dr-art", privileges: { standard: true, secure: true } }]);
@@ -59,7 +69,7 @@ function resourcesDir(): string {
 
 function inviteFromArgv(argv: string[]): string | null {
   for (const arg of argv) {
-    if (typeof arg === "string" && arg.toLowerCase().startsWith(`${INVITE_SCHEME}:`)) {
+    if (typeof arg === "string" && [INVITE_SCHEME, LEGACY_INVITE_SCHEME].some((s) => arg.toLowerCase().startsWith(`${s}:`))) {
       return parseInvite(arg).ok ? arg.trim() : null;
     }
   }
@@ -77,7 +87,9 @@ function registerProtocolClient(): void {
   // Squirrel keeps a stub exe one folder up that always starts the newest version.
   const stub = path.resolve(path.dirname(process.execPath), "..", path.basename(process.execPath));
   const target = existsSync(stub) ? stub : process.execPath;
-  if (!app.setAsDefaultProtocolClient(INVITE_SCHEME, target, [])) log.warn("could not register the invite link handler");
+  for (const scheme of [INVITE_SCHEME, LEGACY_INVITE_SCHEME]) {
+    if (!app.setAsDefaultProtocolClient(scheme, target, [])) log.warn(`could not register the ${scheme}: link handler`);
+  }
 }
 
 // ------------------------------------------------------------------ window
@@ -97,7 +109,7 @@ function createWindow(): void {
     show: false,
     // The page's ink (styles.css), so nothing flashes before it paints.
     backgroundColor: "#01090D",
-    title: "Dauntless Forever Launcher",
+    title: "Dauntless Revamped Launcher",
     icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -127,7 +139,7 @@ function createWindow(): void {
       app.relaunch({ args: [...process.argv.slice(1), "--safe-mode"] });
       app.exit(0);
     } else {
-      dialog.showErrorBox("Dauntless Forever could not open", "The launcher renderer stopped. Reinstall the latest launcher and send the launcher logs to your host.");
+      dialog.showErrorBox("Dauntless Revamped could not open", "The launcher renderer stopped. Reinstall the latest launcher and send the launcher logs to your host.");
     }
   });
   mainWindow.on("maximize", () => mainWindow?.webContents.send(IPC.windowState, true));
@@ -147,7 +159,7 @@ function createWindow(): void {
   const loaded = DEV_SERVER_URL ? mainWindow.loadURL(DEV_SERVER_URL) : mainWindow.loadFile(RENDERER_INDEX);
   void loaded.catch((error) => {
     log.error(`launcher page failed: ${describeError(error)}`);
-    dialog.showErrorBox("Dauntless Forever could not open", "The launcher page could not load. Reinstall the latest launcher. Your sign-in and game files are kept.");
+    dialog.showErrorBox("Dauntless Revamped could not open", "The launcher page could not load. Reinstall the latest launcher. Your sign-in and game files are kept.");
   });
 }
 
@@ -364,13 +376,12 @@ function makePlatform(): Platform {
   const send = (channel: string, payload: Snapshot | TaskProgress) => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
   };
-  const localAppData = process.env.LOCALAPPDATA ?? path.join(app.getPath("home"), "AppData", "Local");
-  const relayPort = relayPortOverride(process.env.DAUNTLESS_FOREVER_RELAY_PORT);
+  const relayPort = relayPortOverride(process.env.DAUNTLESS_REVAMPED_RELAY_PORT);
   if (relayPort !== undefined) log.warn(`relay port overridden to ${relayPort}`);
   return {
     userDataDir: app.getPath("userData"),
     introFile: path.join(resourcesDir(), "intro-Logo.mp4"),
-    defaultInstallDir: path.join(localAppData, "DauntlessForever1147", "Game"),
+    defaultInstallDir: path.join(localAppData, "DauntlessRevamped", "Game"),
     appVersion: app.getVersion(),
     packaged: app.isPackaged,
     defaultLanguage: systemLanguage(app.getLocale()),
@@ -429,11 +440,20 @@ if (!started) {
     app.whenReady().then(async () => {
       Menu.setApplicationMenu(null);
       logToFile(path.join(app.getPath("userData"), "logs"));
-      log.info(`Dauntless Forever 1.14.7 Launcher ${app.getVersion()} starting`);
+      log.info(`Dauntless Revamped Launcher ${app.getVersion()} starting`);
+      if (migrated) log.info("carried the Dauntless Forever launcher's settings and sign-ins over");
+      if (migrateError) log.error(`could not carry the Dauntless Forever launcher's data over: ${describeError(migrateError)}`);
       if (GAME_MANIFEST) log.info(`game manifest ${GAME_MANIFEST.files.length} files, fingerprint ${GAME_MANIFEST_FINGERPRINT}`);
       else log.error(`compiled-in game manifest is not usable: ${GAME_MANIFEST_PROBLEM}`);
 
       registerProtocolClient();
+      // The old launcher's links now open this one; its install (shortcuts, program folder) goes away.
+      if (app.isPackaged) {
+        uninstallOldLauncher(localAppData).then(
+          (removed) => removed && log.info("removed the old Dauntless Forever launcher install"),
+          (error) => log.warn(`could not remove the old Dauntless Forever launcher install: ${describeError(error)}`),
+        );
+      }
       hardenSessions();
       controller = new Controller(makePlatform());
       registerIpc(controller);
@@ -473,7 +493,7 @@ if (!started) {
       }
     }).catch((error) => {
       log.error(`launcher startup failed: ${describeError(error)}`);
-      dialog.showErrorBox("Dauntless Forever could not open", `Startup failed. Send the launcher logs to your host.\n${describeError(error)}`);
+      dialog.showErrorBox("Dauntless Revamped could not open", `Startup failed. Send the launcher logs to your host.\n${describeError(error)}`);
       app.exit(1);
     });
 

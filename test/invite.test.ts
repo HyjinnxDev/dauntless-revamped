@@ -6,7 +6,7 @@ import { RLO } from "../src/shared/text";
 const FP = "3f".repeat(32);
 const base = { v: "1", host: "100.101.102.103", port: "443", fp: FP, code: "ABCD-EFGH-JKLM", name: "Friday%20Hunts" };
 const build = (over: Record<string, string | null>) =>
-  "dauntless-forever-1147://join?" +
+  "dauntless-revamped://join?" +
   Object.entries({ ...base, ...over })
     .filter(([, v]) => v !== null)
     .map(([k, v]) => `${k}=${v}`)
@@ -24,6 +24,11 @@ test("the port defaults to 443; DNS names, whitespace, any order and an upper-ca
   if (!r.ok) return;
   assert.equal(r.invite.port, 443);
   assert.equal(r.invite.host, "play.example.org");
+});
+
+test("links of the Dauntless Forever releases (dauntless-forever-1147:) still parse; new ones use dauntless-revamped:", () => {
+  assert.equal(parseInvite(build({}).replace("dauntless-revamped:", "dauntless-forever-1147:")).ok, true);
+  assert.match(formatInvite({ host: "1.2.3.4", port: 443, code: "abcd", name: "x", fp: FP }), /^dauntless-revamped:\/\/join\?/);
 });
 
 test("round-trips through formatInvite", () => {

@@ -1,18 +1,20 @@
 // Invite strings for Dauntless 1.14.7 servers (Mystic Paradox backend):
 //
-//   dauntless-forever-1147://join?v=1&host=<IPv4 or DNS name>&port=<backend HTTPS port, default 443>
+//   dauntless-revamped://join?v=1&host=<IPv4 or DNS name>&port=<backend HTTPS port, default 443>
 //     &fp=<SHA-256 of the backend's TLS certificate (DER), 64 lower-case hex>&code=<invite code>
 //     &name=<url-encoded server name>
 //
 // The host may be a Tailscale address or a public one: every connection is TLS pinned to fp either
 // way, so a self-signed certificate is fine and nothing is ever sent to a server with another one.
-// The same string arrives pasted or through the dauntless-forever-1147: protocol handler. It is parsed
+// The same string arrives pasted or through the dauntless-revamped: protocol handler. It is parsed
 // strictly, because the host, port and fingerprint decide where the account password is sent later.
 
 import { UNSAFE_CHAR } from "./text";
 
 // Its own scheme, so it never takes over the links of a Dauntless Forever 1.4.4 launcher on the same PC.
-export const INVITE_SCHEME = "dauntless-forever-1147";
+export const INVITE_SCHEME = "dauntless-revamped";
+// The scheme of this launcher's Dauntless Forever releases: links already shared with it keep working.
+export const LEGACY_INVITE_SCHEME = "dauntless-forever-1147";
 export const DEFAULT_PORT = 443;
 
 export interface Invite {
@@ -84,7 +86,7 @@ export function parseInvite(input: unknown): InviteResult {
   if (text.length === 0) return { ok: false, error: "empty" };
   if (text.length > MAX_INVITE_LENGTH) return { ok: false, error: "too_long" };
 
-  const prefix = /^dauntless-forever-1147:\/\/join\/?\?/i.exec(text);
+  const prefix = /^(?:dauntless-revamped|dauntless-forever-1147):\/\/join\/?\?/i.exec(text);
   if (!prefix) return { ok: false, error: "not_invite" };
   const query = text.slice(prefix[0].length);
   if (query.includes("#")) return { ok: false, error: "params" };

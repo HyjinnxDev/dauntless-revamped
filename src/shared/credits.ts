@@ -24,7 +24,7 @@ export interface CreditSoftware {
   license: string | null; // SPDX identifier; null when the project publishes no license file
 }
 
-// Dauntless Forever (everyone: the "project_contributors" link).
+// Dauntless Revamped (everyone: the "project_contributors" link).
 export const PROJECT_PEOPLE: readonly CreditPerson[] = [
   { name: "Hyjinnx", github: "HyjinnxDev", role: "maintainer" },
 ];

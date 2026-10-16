@@ -27,4 +27,4 @@ const fp = new X509Certificate(pem).fingerprint256.replace(/:/g, "").toLowerCase
 if (!/^[A-Za-z0-9-]{4,64}$/.test(code)) throw new Error("invite codes are 4-64 letters, digits or -");
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("bad port");
 const q = ["v=1", `host=${encodeURIComponent(host)}`, `port=${port}`, `fp=${fp}`, `code=${encodeURIComponent(code)}`, `name=${encodeURIComponent(name)}`];
-console.log(`dauntless-forever-1147://join?${q.join("&")}`);
+console.log(`dauntless-revamped://join?${q.join("&")}`);

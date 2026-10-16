@@ -1,5 +1,5 @@
 THIRD-PARTY NOTICES
-Dauntless Forever Launcher
+Dauntless Revamped Launcher
 
 The launcher is free software under the GNU AGPL-3.0 (AGPL-3.0-only): a modified version of the
 Dauntless Revived launcher (https://github.com/mixutin/dauntless-revived), which is in turn a

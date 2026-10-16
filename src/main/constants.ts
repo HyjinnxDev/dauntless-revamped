@@ -1,11 +1,11 @@
 // Fixed values: pinned hashes, file locations and the few public URLs the launcher may open.
 
-export const APP_ID = "io.github.hyjinnxdev.dauntlessforever1147";
-export const SQUIRREL_NAME = "DauntlessForever1147Launcher";
+export const APP_ID = "io.github.hyjinnxdev.dauntlessrevamped";
+export const SQUIRREL_NAME = "DauntlessRevampedLauncher";
 export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revived";
 export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt";
 export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors";
-// Dauntless Revived, the project the Dauntless Forever launcher is a modified version of (AGPL-3.0).
+// Dauntless Revived, the project the Dauntless Revamped launcher is a modified version of (AGPL-3.0).
 export const REVIVED_URL = "https://github.com/mixutin/dauntless-revived";
 export const REVIVED_CONTRIBUTORS_URL = "https://github.com/mixutin/dauntless-revived/graphs/contributors";
 // Undaunted, the project Dauntless Revived is in turn a modified version of.
@@ -17,7 +17,7 @@ export const TAILSCALE_DOWNLOAD_URL = "https://tailscale.com/download";
 export const VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 // Self-update feed: the latest release of the releases repo (RELEASES and the full .nupkg, published by
 // `npm run release`). Squirrel checks it hourly; installs from the portable zip do not update.
-export const UPDATE_FEED_URL = "https://github.com/HyjinnxDev/dauntless-forever-1147-releases/releases/latest/download";
+export const UPDATE_FEED_URL = "https://github.com/HyjinnxDev/dauntless-revamped-releases/releases/latest/download";
 
 // Dauntless 1.14.7 (rel-1.14.7-Archon, CL 647472). Paths are relative to the folder that contains Archon/.
 export const TARGET_CHANGELIST = 647472;

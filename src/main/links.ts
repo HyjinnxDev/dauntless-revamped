@@ -18,7 +18,7 @@ import {
 // Every target opens one fixed URL ("server_source" is the project's own source).
 export type FixedTarget = Exclude<ExternalTarget, "server_source">;
 
-// TODO(owner): this is still the Dauntless Revived community invite. Put the Dauntless Forever one here.
+// TODO(owner): this is still the Dauntless Revived community invite. Put the Dauntless Revamped one here.
 const DISCORD_URL = "https://discord.gg/dauntlessrevived";
 
 export const FIXED_LINKS: Readonly<Record<FixedTarget, string>> = Object.freeze({

@@ -226,7 +226,7 @@ export class Controller {
   }
 
   private device(): { deviceId: string; deviceName: string } {
-    return { deviceId: this.s.deviceId, deviceName: this.p.deviceName ?? "Dauntless Forever launcher" };
+    return { deviceId: this.s.deviceId, deviceName: this.p.deviceName ?? "Dauntless Revamped launcher" };
   }
 
   async init(): Promise<void> {

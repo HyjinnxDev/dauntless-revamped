@@ -5,26 +5,26 @@ import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
 
-// Windows only: Squirrel plus a portable ZIP. Every name differs from the 1.4.4 Dauntless Forever
-// launcher's, so both can be installed on one PC with their own settings, sign-ins and link scheme.
+// Windows only: Squirrel plus a portable ZIP. Every name differs from the 1.4.4 Dauntless Forever and the
+// old Dauntless Forever 1.14.7 launchers (src/main/migrate.ts carries the latter's data over).
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
-    name: "Dauntless Forever 1.14.7 Launcher",
-    executableName: "DauntlessForever1147Launcher",
-    appBundleId: "io.github.hyjinnxdev.dauntlessforever1147",
-    appCopyright: "Dauntless Forever contributors, based on Dauntless Revived and Undaunted. Free software under the GNU AGPL-3.0.",
+    name: "Dauntless Revamped Launcher",
+    executableName: "DauntlessRevampedLauncher",
+    appBundleId: "io.github.hyjinnxdev.dauntlessrevamped",
+    appCopyright: "Dauntless Revamped contributors, based on Dauntless Revived and Undaunted. Free software under the GNU AGPL-3.0.",
     // assets/icon.ico (the exe, and below the installer) and assets/icon.png (the window) are copies of
     // the brand icons in brand/launcher/, made by npm run icon.
     icon: "assets/icon",
     // The window icon and the third-party license texts. The game's runtime comes from each server.
     extraResource: ["assets/icon.png", "assets/intro-Logo.mp4", "THIRD-PARTY-NOTICES.txt"],
     win32metadata: {
-      CompanyName: "Dauntless Forever",
-      FileDescription: "Dauntless Forever 1.14.7 Launcher",
-      ProductName: "Dauntless Forever 1.14.7 Launcher",
-      InternalName: "DauntlessForever1147Launcher",
-      OriginalFilename: "DauntlessForever1147Launcher.exe",
+      CompanyName: "Dauntless Revamped",
+      FileDescription: "Dauntless Revamped Launcher",
+      ProductName: "Dauntless Revamped Launcher",
+      InternalName: "DauntlessRevampedLauncher",
+      OriginalFilename: "DauntlessRevampedLauncher.exe",
     },
   },
   rebuildConfig: {
@@ -32,10 +32,10 @@ const config: ForgeConfig = {
   },
   makers: [
     new MakerSquirrel({
-      name: "DauntlessForever1147Launcher",
+      name: "DauntlessRevampedLauncher",
       authors: "Hyjinnx",
-      description: "Dauntless Forever 1.14.7 Launcher",
-      setupExe: "DauntlessForever1147Launcher-Setup.exe",
+      description: "Dauntless Revamped Launcher",
+      setupExe: "DauntlessRevampedLauncher-Setup.exe",
       setupIcon: "assets/icon.ico",
       noMsi: true,
     }, ["win32"]),
