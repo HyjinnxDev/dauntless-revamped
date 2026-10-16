@@ -4,10 +4,11 @@
 // (every request is made here, in the main process, and only to the host from the invite). It can
 // only call the small typed API in preload.ts, and every argument is checked again here.
 
-import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, protocol, safeStorage, screen, session, shell, Tray, type IpcMainInvokeEvent } from "electron";
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, protocol, safeStorage, screen, session, shell, Tray, type IpcMainInvokeEvent } from "electron";
 import path from "node:path";
 import { existsSync, promises as fsp } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { spawn } from "node:child_process";
 import started from "electron-squirrel-startup";
 import { updateElectronApp, UpdateSourceType } from "update-electron-app";
 import { Controller, type Platform } from "./main/controller";
@@ -78,6 +79,39 @@ function registerProtocolClient(): void {
   const stub = path.resolve(path.dirname(process.execPath), "..", path.basename(process.execPath));
   const target = existsSync(stub) ? stub : process.execPath;
   if (!app.setAsDefaultProtocolClient(INVITE_SCHEME, target, [])) log.warn("could not register the invite link handler");
+}
+
+// ------------------------------------------------------------------ hand-over to Dauntless Revamped
+
+// The launcher is now Dauntless Revamped, a new app identity. This last Dauntless Forever release only
+// starts it (installing it first if needed) and quits; Revamped copies this launcher's settings and
+// sign-ins on its first start and then uninstalls this one. Returns false if that could not happen.
+const REVAMPED_SETUP_URL = "https://github.com/HyjinnxDev/dauntless-revamped-releases/releases/latest/download/DauntlessRevampedLauncher-Setup.exe";
+
+async function handOverToRevamped(localAppData: string): Promise<boolean> {
+  const exe = path.join(localAppData, "DauntlessRevampedLauncher", "DauntlessRevampedLauncher.exe");
+  try {
+    if (existsSync(exe)) {
+      const link = inviteFromArgv(process.argv);
+      spawn(exe, link ? [link] : [], { detached: true, stdio: "ignore" }).unref();
+      return true;
+    }
+    void dialog.showMessageBox({
+      type: "info",
+      title: "Dauntless Revamped",
+      message: "Dauntless Forever is now Dauntless Revamped.",
+      detail: "The new launcher is downloading and installs itself in a moment. Your sign-in, servers and game files come with you.",
+    });
+    const res = await net.fetch(REVAMPED_SETUP_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const setup = path.join(app.getPath("temp"), "DauntlessRevampedLauncher-Setup.exe");
+    await fsp.writeFile(setup, Buffer.from(await res.arrayBuffer()));
+    spawn(setup, [], { detached: true, stdio: "ignore" }).unref();
+    return true;
+  } catch (error) {
+    log.error(`could not hand over to Dauntless Revamped: ${describeError(error)}`);
+    return false;
+  }
 }
 
 // ------------------------------------------------------------------ window
@@ -432,6 +466,14 @@ if (!started) {
       log.info(`Dauntless Forever 1.14.7 Launcher ${app.getVersion()} starting`);
       if (GAME_MANIFEST) log.info(`game manifest ${GAME_MANIFEST.files.length} files, fingerprint ${GAME_MANIFEST_FINGERPRINT}`);
       else log.error(`compiled-in game manifest is not usable: ${GAME_MANIFEST_PROBLEM}`);
+
+      // Only an installed launcher hands over (it is the one that self-updated to this release).
+      const installed = existsSync(path.resolve(path.dirname(process.execPath), "..", "Update.exe"));
+      if (app.isPackaged && installed && (await handOverToRevamped(process.env.LOCALAPPDATA ?? path.join(app.getPath("home"), "AppData", "Local")))) {
+        quitting = true;
+        app.exit(0);
+        return;
+      }
 
       registerProtocolClient();
       hardenSessions();
