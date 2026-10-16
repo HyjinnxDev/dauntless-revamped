@@ -35,11 +35,6 @@ const localAppData = process.env.LOCALAPPDATA ?? path.join(app.getPath("home"), 
 const userDataDir = path.join(app.getPath("appData"), "Dauntless Revamped Launcher");
 let migrateError: unknown = null;
 let migrated = false;
-try {
-  migrated = !started && migrateUserData(app.getPath("appData"), localAppData, userDataDir) === "copied";
-} catch (error) {
-  migrateError = error; // logged once logging is up; the launcher still starts, just signed out
-}
 app.setPath("userData", userDataDir);
 
 // Art from the host's art pack is served to the renderer through this app-internal scheme.
@@ -430,6 +425,12 @@ if (!started) {
   if (!gotLock) {
     app.quit();
   } else {
+    // Only the instance holding the lock, and before Chromium reads userData (the app is not ready yet).
+    try {
+      migrated = migrateUserData(app.getPath("appData"), localAppData, userDataDir) === "copied";
+    } catch (error) {
+      migrateError = error; // logged once logging is up; the launcher still starts, just signed out
+    }
     pendingInviteLink = inviteFromArgv(process.argv);
 
     app.on("second-instance", (_event, argv) => {
