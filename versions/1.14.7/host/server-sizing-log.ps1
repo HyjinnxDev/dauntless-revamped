@@ -54,23 +54,28 @@ while ($true) {
   # game servers identified by the UDP game port they own (command line is unreadable across elevation)
   $udp = @{}; Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge 8780 -and $_.LocalPort -le 8790 } | ForEach-Object { $udp[[int]$_.OwningProcess] = $_.LocalPort }
   $g = @{ mongo = @(0, 0); backend = @(0, 0); director = @(0, 0); hub = @(0, 0); hunt = @(0, 0) }; $hunts = 0
-  foreach ($p in Get-Process -ErrorAction SilentlyContinue) {
-    $grp = $null
-    if ($p.ProcessName -eq 'mongod') { $grp = 'mongo' }
-    elseif ($p.Id -eq $own[443] -or $p.Id -eq $own[3000]) { $grp = 'backend' }
-    elseif ($p.Id -eq $own[3001]) { $grp = 'director' }
-    elseif ($udp.ContainsKey($p.Id)) {
-      $grp = if ($udp[$p.Id] -ge 8789) { 'hub' } else { 'hunt'; $hunts++ }
+  # CIM, not Get-Process: TotalProcessorTime needs a process handle, which a non-elevated logger cannot open
+  # on the elevated stack (it read 0 for every row); CIM's times come from the system snapshot instead.
+  foreach ($p in Get-CimInstance Win32_Process -Property ProcessId, Name, KernelModeTime, UserModeTime, WorkingSetSize -ErrorAction SilentlyContinue) {
+    $id = [int]$p.ProcessId; $grp = $null
+    if ($p.Name -eq 'mongod.exe') { $grp = 'mongo' }
+    elseif ($id -eq $own[443] -or $id -eq $own[3000]) { $grp = 'backend' }
+    elseif ($id -eq $own[3001]) { $grp = 'director' }
+    elseif ($udp.ContainsKey($id)) {
+      $grp = if ($udp[$id] -ge 8789) { 'hub' } else { 'hunt'; $hunts++ }
     }
     if (-not $grp) { continue }
-    $t = try { $p.TotalProcessorTime.TotalSeconds } catch { 0 }
-    if ($prev.ContainsKey($p.Id)) { $g[$grp][0] += [math]::Max(0.0, ($t - $prev[$p.Id]) / $dt) }
-    $prev[$p.Id] = $t
-    $g[$grp][1] += $p.WorkingSet64 / 1MB
+    $t = ([double]$p.KernelModeTime + $p.UserModeTime) / 1e7  # 100 ns units
+    if ($prev.ContainsKey($id)) { $g[$grp][0] += [math]::Max(0.0, ($t - $prev[$id]) / $dt) }
+    $prev[$id] = $t
+    $g[$grp][1] += $p.WorkingSetSize / 1MB
   }
   $n = NetNow
   $inK = ($n.i - $prevNet.i) / 1KB / $dt; $outK = ($n.o - $prevNet.o) / 1KB / $dt; $prevNet = $n
   $players = @(Get-NetTCPConnection -State Established -LocalPort 443 -ErrorAction SilentlyContinue | Where-Object { $_.RemoteAddress -notin '127.0.0.1', '::1' }).Count
-  $row = @($now.ToString('s'), $players, $hunts) + ('mongo', 'backend', 'director', 'hub', 'hunt' | ForEach-Object { '{0:F2}' -f $g[$_][0] }) + ('mongo', 'backend', 'director', 'hub', 'hunt' | ForEach-Object { '{0:F0}' -f $g[$_][1] }) + ('{0:F0}' -f $inK), ('{0:F0}' -f $outK)
+  if (-not $primed) { $primed = $true; continue }  # first pass only seeds CPU times; its row would read 0
+  # invariant culture: a host locale with a decimal comma would split fields
+  $inv = [cultureinfo]::InvariantCulture
+  $row = @($now.ToString('s'), $players, $hunts) + ('mongo', 'backend', 'director', 'hub', 'hunt' | ForEach-Object { ([double]$g[$_][0]).ToString('F2', $inv) }) + ('mongo', 'backend', 'director', 'hub', 'hunt' | ForEach-Object { ([double]$g[$_][1]).ToString('F0', $inv) }) + ([double]$inK).ToString('F0', $inv), ([double]$outK).ToString('F0', $inv)
   Add-Content $csv ($row -join ',')
 }
