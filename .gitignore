@@ -1,0 +1,24 @@
+# Secrets & config (NEVER commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.pfx
+.secrets/
+
+# Build output / deps / indexes
+node_modules/
+out/
+release/
+release-linux/
+.vite/
+.test-build/
+dist/
+x64/
+.codegraph/
+
+# Player crash dumps and local game-data backups
+MysticCrashReports/
+*.bak*
