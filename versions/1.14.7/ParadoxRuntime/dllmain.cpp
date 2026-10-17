@@ -260,14 +260,14 @@ bool IsReadablePointer(const void* Ptr, size_t Size) {
     // [perf 2026-10-18] Profiled hubs/hunts spent ~3-8% of their CPU in VirtualQuery's system call from here.
     // Server only (the client has no frame counter): a hit inside a region already confirmed readable this frame
     // skips the call.
+    // Direct-mapped on the 64 KB allocation granule: objects are spread over many regions, so a handful of
+    // most-recent entries missed most of the time.
     struct Region { uintptr_t Lo, Hi; uint64_t Gen; };
-    static thread_local Region t_ok[4] = {};
-    static thread_local unsigned t_next = 0;
+    static thread_local Region t_ok[256] = {};
+    Region& Slot = t_ok[(Start >> 16) & 255];
     const uint64_t Gen = g_mpFrameGen.load(std::memory_order_relaxed);
-    if (Globals::AmServer && Gen != 0) {
-        for (const Region& R : t_ok) {
-            if (R.Gen == Gen && Start >= R.Lo && End <= R.Hi) return true;
-        }
+    if (Globals::AmServer && Gen != 0 && Slot.Gen == Gen && Start >= Slot.Lo && End <= Slot.Hi) {
+        return true;
     }
 
     MEMORY_BASIC_INFORMATION Info{};
@@ -282,7 +282,7 @@ bool IsReadablePointer(const void* Ptr, size_t Size) {
     uintptr_t RegionEnd = reinterpret_cast<uintptr_t>(Info.BaseAddress) + Info.RegionSize;
     if (End > RegionEnd) return false;
     if (Globals::AmServer && Gen != 0) {
-        t_ok[t_next++ & 3] = { reinterpret_cast<uintptr_t>(Info.BaseAddress), RegionEnd, Gen };
+        Slot = { reinterpret_cast<uintptr_t>(Info.BaseAddress), RegionEnd, Gen };
     }
     return true;
 }
@@ -16370,6 +16370,26 @@ static void TraceTempestDamageExit(UObject* Object, void* Parms, const TempestDa
         + " return=" + TempestDamageDataSummary(P->ReturnValue));
 }
 
+// [perf 2026-10-18] ProcessEventHook runs for every reflected call (thousands a frame) and rebuilt the function's full
+// path with GetFullName each time: the profile of a hunt server put that string work at ~5% of its CPU. A function's
+// full name does not change, so it is built once per function. The entry is keyed on the pointer and re-checked
+// against the object's own FName and Outer, so an address reused after a map change gets its new name.
+static const std::string& MpCachedFullName(UFunction* Function) {
+    static const std::string Null = "null";
+    if (!Function) return Null;
+    struct Entry { uint64_t Name = 0; const void* Outer = nullptr; std::string Full; };
+    static thread_local std::unordered_map<const void*, Entry> s_names;
+    uint64_t NameBits = 0;
+    std::memcpy(&NameBits, &Function->Name, sizeof(NameBits));
+    Entry& E = s_names[Function];
+    if (E.Full.empty() || E.Name != NameBits || E.Outer != Function->Outer) {
+        E.Name = NameBits;
+        E.Outer = Function->Outer;
+        E.Full = Function->GetFullName();
+    }
+    return E.Full;
+}
+
 void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     // [1.12.0 REENTRANCY GUARD 2026-07-10] Safety-net against runaway ProcessEvent
     // recursion. Root cause of the FTUE crash was
@@ -16412,7 +16432,7 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     static UFunction* OnAirshipUpdated = nullptr;
     static UFunction* OnPostMitDealtAnyDamage = nullptr;
 
-    std::string FunctionName = Function ? Function->GetFullName() : "null";
+    const std::string& FunctionName = MpCachedFullName(Function);
     MpHuntPassProbe(Object, FunctionName);
     MpCoinTossProbe(FunctionName, Parms);
     MpServerProjectileTickFix(Object, FunctionName);
