@@ -5673,6 +5673,21 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     }
     static uint64_t tickCounter = 0;    ++tickCounter;
 
+    // [perf 2026-10-18] Server frame rate, once a minute: sizing needs to know whether the engine runs above the
+    // 30 Hz net rate (CPU spent on frames nobody receives). Cheap: one clock read per tick.
+    if (Globals::AmServer) {
+        static uint64_t s_rateStartMs = 0, s_rateTicks = 0;
+        const uint64_t NowMs = GetTickCount64();
+        if (s_rateStartMs == 0) s_rateStartMs = NowMs;
+        ++s_rateTicks;
+        if (NowMs - s_rateStartMs >= 60000) {
+            MpLog("[TickRate] engine " + std::to_string(s_rateTicks * 1000.0 / (NowMs - s_rateStartMs)) + " Hz over "
+                + std::to_string((NowMs - s_rateStartMs) / 1000) + " s, last DeltaTime=" + std::to_string(DeltaTime));
+            s_rateStartMs = NowMs;
+            s_rateTicks = 0;
+        }
+    }
+
     // [DIAG 2026-07-09] Record the game-tick thread once so the exit-path hooks can
     // report whether TerminateProcess/ExitProcess is being called from the tick thread
     // (normal shutdown) or a background thread (libcef watchdog, etc.).
