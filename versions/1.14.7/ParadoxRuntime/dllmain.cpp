@@ -8997,6 +8997,16 @@ void __fastcall PlayerControllerSetChannelActorGuardHook(
                 ActorConnectionValid ? ActorConnection : nullptr,
                 "set-channel-actor", CallerRva);
             const int EmergencyClose = Queued ? 0 : SafeCloseQuarantinedActorChannel(Channel);
+            // [2026-10-17 MULTICAST NULL-ACTOR FIX] The RepGraph multicast path (caller RVA 0xF27D45)
+            // stores the new channel in ConnActorInfo BEFORE SetChannelActor, then reloads that slot and
+            // calls ProcessRemoteFunctionForChannel (0x3FA09B0). With the bind skipped the channel's
+            // Actor is null and that send AVs, aborting the whole server RPC - Blaze Escalation's
+            // ServerSelectRelicOption(advances=1) died here, so round 2 never opened its path. Clearing
+            // the slot makes the caller skip the send for this wrong connection only.
+            void* Graph = reinterpret_cast<void*>(
+                SafeReadPtr(reinterpret_cast<uintptr_t>(Networking::NetDriver), 0x6E8));
+            const int ActorInfoCleared = Graph
+                ? ClearRepGraphConnActorInfoChannel(Graph, ChannelConnection, Actor, Channel) : 0;
             MpLog("[PCChannelBind] BLOCK actor=" + MpPtr(Actor)
                 + " actorConnection=" + MpPtr(ActorConnection)
                 + " channel=" + MpPtr(Channel)
@@ -9011,6 +9021,7 @@ void __fastcall PlayerControllerSetChannelActorGuardHook(
                     : "target-identity-mismatch")
                 + " queued=" + std::to_string(Queued ? 1 : 0)
                 + " emergencyClose=" + std::to_string(EmergencyClose)
+                + " actorInfoCleared=" + std::to_string(ActorInfoCleared)
                 + " decision=SKIP_BIND");
             return;
         }
@@ -12479,6 +12490,97 @@ static void MpServerProjectileTickFix(UObject* Object, const std::string& Functi
     Proj->SetActorTickEnabled(true);
     static std::atomic<int> s_logged{ 0 };
     if (s_logged.fetch_add(1) < 20) MpLog("[ProjTickFix] enabled tick on " + SafeObjectNameForDiagnostic(Object));
+}
+
+// [1.14.7 2026-10-17 HUNT COMBAT LOG] "Behemoth attacks don't feel right". Read-only, server only: one file per hunt
+// process (<exe dir>\HuntCombat\hunt_<start>_port<N>.log, created on the first behemoth event, so hubs write none):
+//   montage  - a behemoth DamageComponent saw a montage start (= an attack began)
+//   try      - UDamageComponent::ServerTryDoDamage (client-predicted hit) with key/bone/target/impact
+//   ok/REJECT- the server's ClientDoDamageSucceed/Failed answer for that prediction key
+//   dmg      - post-mitigation damage a non-behemoth took from a behemoth (or its projectile)
+// host\hunt-combat-report.ps1 summarizes a file. DISABLE_HUNT_COMBAT_LOG.flag (beside the exe) turns it off.
+static std::string TempestDiagTags(const FGameplayTagContainer& Container);
+static void MpHuntCombatLog(UObject* Object, const std::string& FunctionName, void* Parms) {
+    static const bool s_on = Globals::AmServer && !MpExeRelativeFlagPresent(L"DISABLE_HUNT_COMBAT_LOG.flag");
+    if (!s_on || !Object || !Parms) return;
+    const bool IsDamageComp = FunctionName.find("Archon.DamageComponent.") != std::string::npos;
+    if (!IsDamageComp && FunctionName.find("OnPostMitigationReceivedDamage") == std::string::npos) return;
+
+    static SDK::UClass* s_Behemoth = SDK::AArchonBehemoth::StaticClass();
+    auto IsBehemoth = [](const UObject* O) { return O && s_Behemoth && O->IsA(s_Behemoth); };
+    auto Name = [](const void* O) { return O ? SafeObjectNameForDiagnostic(const_cast<void*>(O)) : std::string("-"); };
+    auto Vec = [](const SDK::FVector& V) {
+        char B[64]; sprintf_s(B, "(%.0f,%.0f,%.0f)", V.X, V.Y, V.Z); return std::string(B);
+    };
+    static std::ofstream s_file;
+    static ULONGLONG s_startMs = 0;
+    auto Write = [&](const std::string& Line) {
+        if (!s_file.is_open()) {
+            SYSTEMTIME T{}; GetLocalTime(&T);
+            const std::string Dir = std::string(MpLogDir()) + "HuntCombat\\";
+            CreateDirectoryA(Dir.c_str(), nullptr);
+            char Path[MAX_PATH];
+            sprintf_s(Path, "%shunt_%04d%02d%02d-%02d%02d%02d_port%d.log", Dir.c_str(),
+                T.wYear, T.wMonth, T.wDay, T.wHour, T.wMinute, T.wSecond, Globals::Port);
+            s_file.open(Path, std::ios::app);
+            s_startMs = GetTickCount64();
+            const std::wstring Map = Globals::MapPath ? Globals::MapPath : L"?";
+            const std::wstring Beh = Globals::BehemothPath ? Globals::BehemothPath : L"?";
+            s_file << "# map=" << std::string(Map.begin(), Map.end()) << " behemoth=" << std::string(Beh.begin(), Beh.end())
+                << " pid=" << GetCurrentProcessId() << "\n";
+        }
+        char T[32]; sprintf_s(T, "t=%.2f ", (GetTickCount64() - s_startMs) / 1000.0);
+        s_file << T << Line << "\n";
+        s_file.flush();
+    };
+
+    // ponytail: prediction key -> try line, never pruned; one hunt sends a few thousand at most.
+    static std::unordered_map<uint64_t, std::string> s_pending;
+    auto KeyOf = [&](int16_t Key) { return (reinterpret_cast<uint64_t>(Object) << 16) ^ static_cast<uint16_t>(Key); };
+    UObject* Owner = Object->Outer;
+    const std::string Fn = FunctionName.substr(FunctionName.rfind('.') + 1);
+
+    auto Fits = [&](size_t Size) { return IsReadablePointer(Parms, Size); };
+
+    if (IsDamageComp && Fn == "OnMontageStarted") {
+        if (!IsBehemoth(Owner) || !Fits(sizeof(Params::DamageComponent_OnMontageStarted))) return;
+        auto* P = static_cast<Params::DamageComponent_OnMontageStarted*>(Parms);
+        Write("montage owner=" + Name(Owner) + " montage=" + Name(P->Montage)
+            + " at=" + Vec(static_cast<SDK::AActor*>(static_cast<void*>(Owner))->K2_GetActorLocation()));
+    } else if (IsDamageComp && Fn == "ServerTryDoDamage") {
+        if (!Fits(sizeof(Params::DamageComponent_ServerTryDoDamage))) return;
+        auto* P = static_cast<Params::DamageComponent_ServerTryDoDamage*>(Parms);
+        const SDK::FHitResult& H = P->Payload.Hit;
+        std::string Line = "try owner=" + Name(Owner) + " key=" + P->Payload.DamageTypeName.ToString()
+            + " bone=" + P->Payload.BoneThatCausedHit.ToString() + " target=" + Name(H.Actor.Get())
+            + " targetComp=" + Name(H.Component.Get()) + " hitBone=" + H.BoneName.ToString()
+            + " impact=" + Vec(H.ImpactPoint) + " pk=" + std::to_string(P->PredictionKey.Current);
+        s_pending[KeyOf(P->PredictionKey.Current)] = Line;
+        if (IsBehemoth(Owner)) Write(Line);
+    } else if (IsDamageComp && (Fn == "ClientDoDamageSucceed" || Fn == "ClientDoDamageFailed")) {
+        const bool Ok = Fn == "ClientDoDamageSucceed";
+        if (!Fits(Ok ? sizeof(Params::DamageComponent_ClientDoDamageSucceed) : sizeof(Params::DamageComponent_ClientDoDamageFailed))) return;
+        const int16_t Key = Ok ? static_cast<Params::DamageComponent_ClientDoDamageSucceed*>(Parms)->PredictionKey.Current
+                               : static_cast<Params::DamageComponent_ClientDoDamageFailed*>(Parms)->PredictionKey;
+        auto It = s_pending.find(KeyOf(Key));
+        const std::string Try = It != s_pending.end() ? It->second : "owner=" + Name(Owner) + " pk=" + std::to_string(Key);
+        if (It != s_pending.end()) s_pending.erase(It);
+        // Player-side results only matter when rejected; behemoth-side are always logged.
+        if (IsBehemoth(Owner) || !Ok) Write(std::string(Ok ? "ok " : "REJECT ") + Try);
+    } else if (IsDamageComp) {
+        static std::unordered_map<std::string, int> s_seen;   // discovery: which other DamageComponent calls run
+        if (s_seen[Fn]++ < 3) Write("fn=" + Fn + " owner=" + Name(Owner));
+    } else {
+        if (!Fits(sizeof(Params::ArchonDamageTakerInterface_OnPostMitigationReceivedDamage))) return;
+        auto* P = static_cast<Params::ArchonDamageTakerInterface_OnPostMitigationReceivedDamage*>(Parms);
+        AActor* Giver = P->DamageGiver;
+        const bool FromBehemoth = IsBehemoth(Giver) || (Giver && IsBehemoth(Giver->Owner));
+        if (!FromBehemoth || IsBehemoth(Object)) return;
+        Write("dmg target=" + Name(Object) + " giver=" + Name(Giver)
+            + " amount=" + std::to_string(P->DamageEventData.MitigatedAttackDamage)
+            + " tags=" + TempestDiagTags(P->DamageTags)
+            + " targetAt=" + Vec(static_cast<SDK::AActor*>(static_cast<void*>(Object))->K2_GetActorLocation()));
+    }
 }
 
 // [1.14.7 2026-10-15 COIN TOSS PROBE] Ramsgate coin toss (coin_toss_interact_bp) does nothing: the backend has no
@@ -16246,6 +16348,7 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     MpHuntPassProbe(Object, FunctionName);
     MpCoinTossProbe(FunctionName, Parms);
     MpServerProjectileTickFix(Object, FunctionName);
+    MpHuntCombatLog(Object, FunctionName, Parms);
 
 
     // [1.14.7 HEADLESS AUDIO 2026-10-03] A dedicated hub must not play sound. Removing the Wwise
