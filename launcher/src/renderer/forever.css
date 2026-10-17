@@ -1,0 +1,615 @@
+/* Dauntless Revamped theme. Loaded after styles.css: it restyles the launcher into one main screen
+   (hero art, one PLAY button, a server pill) with every other page opening as a drawer over it.
+   The base styles.css still supplies cards, forms, modals and the progress bar. */
+
+:root {
+  --gold: #f2b84b;
+  --gold-hi: #ffd77a;
+  --gold-lo: #b9791d;
+  --drawer-w: 460px;
+  --dr-ink: #04090d;
+  --dr-navy: #071a29;
+  --title-h: 34px;
+  --cut: 10px;
+  --edge: 56px; /* the gap between the window edge and everything that sits near it */
+}
+
+html,
+body {
+  background: #000;
+}
+
+.titlebar {
+  background: #02070a;
+}
+
+.titlebar-title {
+  letter-spacing: 0.06em;
+}
+
+/* ------------------------------------------------------------------ world */
+
+.world {
+  display: block;
+}
+
+.hero-shade {
+  z-index: 1;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dr-ink) 70%, transparent) 0, transparent 20%, color-mix(in srgb, var(--dr-ink) 6%, transparent) 45%, color-mix(in srgb, var(--dr-ink) 88%, transparent) 82%, color-mix(in srgb, var(--dr-ink) 96%, transparent) 100%),
+    radial-gradient(ellipse at 50% 55%, transparent 30%, color-mix(in srgb, var(--dr-ink) 55%, transparent) 100%);
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.stage > * {
+  pointer-events: auto;
+}
+
+.server-panel {
+  display: none;
+}
+
+/* ------------------------------------------------------------------ top bar */
+
+.topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 34px var(--edge) 0;
+  pointer-events: none;
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.logo-btn {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  margin: 0 0 -22px;
+}
+
+.logo-btn:focus-visible {
+  outline: 2px solid var(--dr-glow);
+  outline-offset: 4px;
+}
+
+.topbar-logo {
+  display: block;
+  height: 96px;
+  width: auto;
+  filter: drop-shadow(0 4px 18px rgb(0 0 0 / 0.7)) drop-shadow(0 0 16px color-mix(in srgb, var(--dr-ice) 35%, transparent));
+}
+
+.account-chip,
+.gear-btn {
+  background: color-mix(in srgb, var(--dr-navy) 72%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in srgb, var(--dr-glow) 16%, transparent);
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  border-radius: 0;
+}
+
+.account-chip {
+  position: relative;
+  min-height: 52px;
+  padding: 0;
+  min-width: 250px;
+}
+
+.account-chip:hover {
+  border-color: var(--dr-ice);
+}
+
+.account-switch {
+  min-height: 52px;
+  padding: 8px 34px 8px 14px;
+}
+
+.account-chip .avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+.account-caret {
+  display: none;
+}
+
+.server-menu {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  width: 340px;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--dr-ink) 97%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dr-glow) 16%, transparent);
+}
+
+.server-menu-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px 6px 4px;
+  margin-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--dr-glow) 14%, transparent);
+}
+
+.server-menu-action {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--dr-glow) 18%, transparent);
+  background: transparent;
+  color: var(--dr-frost);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.server-menu-action:hover:not(:disabled) {
+  border-color: var(--dr-ice);
+  background: color-mix(in srgb, var(--dr-ice) 12%, transparent);
+}
+
+.server-menu-action:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.gear-btn {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  color: var(--dr-frost);
+  cursor: pointer;
+}
+
+.gear-btn .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.gear-btn:hover {
+  border-color: var(--dr-ice);
+  color: var(--dr-glow);
+}
+
+/* ------------------------------------------------------------------ main screen */
+
+#view-play {
+  position: absolute;
+  inset: 160px 0 200px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 0 var(--edge) 4px; /* room for the focus outline */
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Nothing under the text column in the action bar (ready to play): end just above the PLAY button
+   (its top sits 122px up), or, wide enough that the column clears the button, share its bottom edge. */
+#view-play.bar-clear {
+  bottom: 140px;
+}
+
+@media (min-width: 1220px) {
+  #view-play.bar-clear {
+    bottom: 40px;
+  }
+}
+
+#view-play > :first-child {
+  margin-top: auto;
+}
+
+.world.overlay-open #view-play,
+.world.overlay-open .actionbar {
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.play-content {
+  max-width: 760px;
+  gap: 18px;
+}
+
+.hero-title {
+  font-size: 66px;
+  line-height: 1.04;
+  text-shadow: 0 4px 30px rgb(0 0 0 / 0.7);
+}
+
+.hero-text {
+  font-size: 17px;
+  max-width: 620px;
+}
+
+.eyebrow {
+  font-size: 13.5px;
+  letter-spacing: 0.22em;
+  color: var(--dr-glow);
+}
+
+.news-dock {
+  display: flex;
+  gap: 12px;
+  max-width: 700px;
+}
+
+.news-dock-card {
+  all: unset;
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  max-width: 340px;
+  display: grid;
+  gap: 2px;
+  padding: 11px 14px;
+  background: color-mix(in srgb, var(--dr-navy) 70%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid color-mix(in srgb, var(--dr-glow) 16%, transparent);
+  border-left: 2px solid var(--dr-ice);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.news-dock-card:hover {
+  background: color-mix(in srgb, var(--dr-deep) 80%, transparent);
+}
+
+.news-dock-card:focus-visible {
+  outline: 2px solid var(--dr-glow);
+  outline-offset: 2px;
+}
+
+.news-dock-body {
+  color: var(--dr-steel);
+  font-size: 12px;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hero-status {
+  position: absolute;
+  right: var(--edge);
+  bottom: 200px;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: #b9c4cc;
+  font-size: 13px;
+}
+
+.hero-status[hidden] {
+  display: none;
+}
+
+.hero-status-num {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--dr-frost);
+}
+
+/* ------------------------------------------------------------------ action bar */
+
+.actionbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  min-height: 0;
+  padding: 24px var(--edge) 44px;
+  background: none;
+  border-top: 0;
+  gap: 32px;
+}
+
+.actionbar[hidden] {
+  display: none;
+}
+
+.big-button {
+  min-width: 340px;
+  height: 78px;
+  padding: 0 64px;
+  border-radius: 0;
+  font-size: 32px;
+  letter-spacing: 0.26em;
+  text-indent: 0.26em; /* the last letter's spacing would push the word off centre */
+  color: #2a1700;
+  text-shadow: 0 1px 0 rgb(255 232 170 / 0.55);
+  background: linear-gradient(180deg, var(--gold-hi), var(--gold) 55%, var(--gold-lo));
+  clip-path: polygon(24px 0, calc(100% - 24px) 0, 100% 50%, calc(100% - 24px) 100%, 24px 100%, 0 50%);
+  box-shadow: none;
+  filter: drop-shadow(0 0 24px color-mix(in srgb, var(--gold) 38%, transparent));
+}
+
+/* A faint sheen across the top half, so the plate reads as metal instead of a flat fill. */
+.big-button::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.4), rgb(255 255 255 / 0) 52%);
+  pointer-events: none;
+}
+
+.big-button:hover:not(:disabled) {
+  background: linear-gradient(180deg, #ffe6a8, var(--gold-hi) 55%, var(--gold));
+  box-shadow: none;
+}
+
+.big-button:active:not(:disabled) {
+  background: var(--gold-lo);
+  color: #fff;
+}
+
+.big-button:disabled {
+  filter: grayscale(0.7) brightness(0.7);
+}
+
+.big-button.is-pause,
+.big-button.is-running {
+  color: var(--dr-frost);
+  background: linear-gradient(180deg, var(--dr-azure), var(--dr-deep));
+}
+
+.action-hint {
+  color: #b9c4cc;
+}
+
+/* ------------------------------------------------------------------ top bar links */
+
+.footlinks {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.footlinks .nav {
+  display: flex;
+  flex-direction: row;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.footlinks .nav-item,
+.footlinks .rail-link {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  height: auto;
+  color: #b9c4cc;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 0.8);
+  cursor: pointer;
+}
+
+.footlinks .nav-item::before {
+  display: none;
+}
+
+.footlinks .nav-item:hover,
+.footlinks .rail-link:hover {
+  color: var(--dr-glow);
+}
+
+.footlinks .nav-item:focus-visible,
+.footlinks .rail-link:focus-visible {
+  outline: 2px solid var(--dr-glow);
+}
+
+.footlinks .nav-item .icon {
+  display: none;
+}
+
+.footlinks .icon-btn {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ drawers */
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: rgb(0 0 0 / 0.5);
+  display: none;
+}
+
+.world.overlay-open .scrim {
+  display: block;
+}
+
+.view:not(#view-play) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: min(var(--drawer-w), 100%);
+  padding: 64px 24px 24px;
+  background: color-mix(in srgb, var(--dr-ink) 97%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--dr-glow) 16%, transparent);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.view:not(#view-play)[hidden] {
+  display: none;
+}
+
+.drawer-close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 9;
+  width: 36px;
+  height: 36px;
+  display: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--dr-glow) 18%, transparent);
+  background: transparent;
+  color: var(--dr-frost);
+  cursor: pointer;
+}
+
+.drawer-close:hover {
+  border-color: var(--dr-ice);
+  color: var(--dr-glow);
+}
+
+.world.overlay-open .drawer-close {
+  display: grid;
+}
+
+.view:not(#view-play) .page,
+.view:not(#view-play) .page-wide {
+  max-width: none;
+}
+
+.settings-layout {
+  display: block;
+}
+
+/* ------------------------------------------------------------------ server cards (Servers page) */
+
+.srv-list {
+  display: grid;
+  gap: 12px;
+}
+
+.srv-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 16px 18px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.srv-card.is-current {
+  border-color: color-mix(in srgb, var(--dr-ice) 60%, transparent);
+  box-shadow: inset 3px 0 0 var(--dr-ice);
+}
+
+.srv-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: contain;
+  background: var(--dr-ink);
+}
+
+.srv-logo-letter {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  color: var(--dr-ink);
+  background: linear-gradient(160deg, var(--dr-glow), var(--dr-ice));
+}
+
+.srv-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.srv-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.srv-motd {
+  margin: 0;
+  color: var(--dr-frost);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.srv-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--dr-steel);
+}
+
+.srv-details summary {
+  width: max-content;
+  font-size: 12.5px;
+  color: var(--dr-steel);
+  cursor: pointer;
+}
+
+.srv-details .kv {
+  grid-template-columns: max-content 1fr;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.srv-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 4px;
+}
+
+.srv-current {
+  margin-left: 10px;
+  vertical-align: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dr-ice);
+}
+
+.srv-add {
+  flex-wrap: nowrap;
+  align-items: stretch; /* the Add button takes the input's height */
+  margin-top: 12px;
+}
+
+.srv-add .input {
+  flex: 1;
+  min-width: 0;
+}
