@@ -1,0 +1,69 @@
+/*
+ * Copyright (C) 2026 MysticFox / Pranav Karande (pranav158/Mystic-Paradox)
+ * Licensed under the GNU Affero General Public License v3.0.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * Additional terms under AGPLv3 Section 7 apply. See ADDITIONAL_TERMS.md.
+ */
+
+import { NextFunction, Request, Response } from "express";
+import { GetRepositories } from "../persistence";
+import { HashOpaqueToken } from "../security/launcherTokens";
+import { IsAccountEligible } from "../security/accountEligibility";
+import { HasStaffPermission, StaffPermission, StaffRank } from "../security/staffRoles";
+
+export const ADMIN_COOKIE_NAME = "mysticparadox_admin";
+
+function ReadCookie(req: Request, name: string): string | undefined {
+    const Header = req.headers.cookie;
+    if (!Header) return undefined;
+    for (const Part of Header.split(";")) {
+        const [Key, ...Value] = Part.trim().split("=");
+        if (Key === name) return decodeURIComponent(Value.join("="));
+    }
+    return undefined;
+}
+
+export async function HasAdminAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const RawToken = ReadCookie(req, ADMIN_COOKIE_NAME);
+    if (!RawToken) {
+        res.status(401).json({ error: { code: "ADMIN_UNAUTHORIZED", message: "Administrator sign-in required." } });
+        return;
+    }
+
+    const Repos = GetRepositories();
+    const Session = await Repos.admin.findActiveSessionByTokenHash(HashOpaqueToken(RawToken));
+    if (!Session) {
+        res.status(401).json({ error: { code: "ADMIN_UNAUTHORIZED", message: "Administrator session expired." } });
+        return;
+    }
+
+    const Account = await Repos.launcherAccounts.findByUserId(Session.userId);
+    if (!Account || StaffRank(Account.roles) === 0 || !IsAccountEligible(Account)) {
+        await Repos.admin.revokeSession(Session.id);
+        res.status(403).json({ error: { code: "ADMIN_FORBIDDEN", message: "Administrator access denied." } });
+        return;
+    }
+
+    if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
+        const Csrf = req.headers["x-csrf-token"];
+        if (typeof Csrf !== "string" || Csrf !== Session.csrfToken) {
+            res.status(403).json({ error: { code: "ADMIN_CSRF", message: "Invalid request token." } });
+            return;
+        }
+    }
+
+    (req as any).AdminAuth = { session: Session, account: Account };
+    next();
+}
+
+/** Use after HasAdminAuth: rejects staff whose tier lacks the permission. */
+export function RequireStaff(permission: StaffPermission) {
+    return (req: Request, res: Response, next: NextFunction): void => {
+        if (!HasStaffPermission((req as any).AdminAuth.account.roles, permission)) {
+            res.status(403).json({ error: { code: "ADMIN_FORBIDDEN", message: "Your staff role can't do that." } });
+            return;
+        }
+        next();
+    };
+}
