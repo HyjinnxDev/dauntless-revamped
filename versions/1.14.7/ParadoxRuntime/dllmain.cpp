@@ -5715,7 +5715,12 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     // player-data timeout: a ~60 s longer loading screen, then a client crash (null read +0x248 in a
     // ReceiveGameplayStart chain) on 13 Oct. With the config cached before anyone joins, ReadFromBackend
     // takes its loaded branch, as it does on the hub.
-    if (Globals::Listening && MpExeRelativeFlagPresent(L"CALL_HUNTPASS_QUERY.flag")) {
+    // [perf 2026-10-18] Flags below are read once: each MpExeRelativeFlagPresent is two system calls, and these
+    // ran every frame.
+    static const bool s_callHuntPassQuery = MpExeRelativeFlagPresent(L"CALL_HUNTPASS_QUERY.flag");
+    static const bool s_hubRepDiagnostics = MpExeRelativeFlagPresent(L"ENABLE_HUB_REP_DIAGNOSTICS.flag");
+    static const bool s_baseActorBootstrap = MpExeRelativeFlagPresent(L"ENABLE_BASE_ACTOR_BOOTSTRAP.flag");
+    if (Globals::Listening && s_callHuntPassQuery) {
         static bool s_bootQueryDone = false;
         if (!s_bootQueryDone) {
             UWorld* World = UWorld::GetWorld();
@@ -5742,12 +5747,10 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     // GObjects) and it carries the only fix lever this session produced, so it may run for either flag.
     // The membership report is the heavy one (a full GObjects walk plus an IsA pass per object, several
     // times a minute) and only ever runs for the diagnostics flag.
-    if (Globals::AmServer
-        && (MpExeRelativeFlagPresent(L"ENABLE_HUB_REP_DIAGNOSTICS.flag")
-            || MpExeRelativeFlagPresent(L"ENABLE_BASE_ACTOR_BOOTSTRAP.flag"))) {
+    if (Globals::AmServer && (s_hubRepDiagnostics || s_baseActorBootstrap)) {
         MpRouteBaseActorsToConnections();
     }
-    if (Globals::AmServer && MpExeRelativeFlagPresent(L"ENABLE_HUB_REP_DIAGNOSTICS.flag")) {
+    if (Globals::AmServer && s_hubRepDiagnostics) {
         MpReportReplicationMembership();
     }
 
@@ -5919,11 +5922,27 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
             static bool s_loggedGameMode  = false;
             static bool s_loggedGameState = false;
 
-            const int Count = SDK::UObject::GObjects->Num();
-            for (int i = 0; i < Count; i++) {
-                SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
-                if (!Obj) continue;
-                if (Obj->IsDefaultObject()) continue;
+            // [perf 2026-10-18] This walked all of GObjects (two IsA per object) EVERY frame: the profile of an
+            // idle hub put GameEngineTickHook + IsA + GetByIndex at ~35% of its CPU. The fields are still pinned
+            // every frame, on the instances found by a walk that now runs once a second (every frame only
+            // while none is found yet), so a new world's GameMode/GameState is picked up within a second.
+            static std::vector<SDK::UObject*> s_rosterObjects;
+            static uint64_t s_lastRosterScanMs = 0;
+            const uint64_t RosterNowMs = GetTickCount64();
+            if (s_rosterObjects.empty() || RosterNowMs - s_lastRosterScanMs >= 1000) {
+                s_lastRosterScanMs = RosterNowMs;
+                s_rosterObjects.clear();
+                const int Count = SDK::UObject::GObjects->Num();
+                for (int i = 0; i < Count; i++) {
+                    SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                    if (!Obj || Obj->IsDefaultObject()) continue;
+                    if (Obj->IsA(SDK::AArchonGameMode::StaticClass()) || Obj->IsA(SDK::AArchonGameState::StaticClass()))
+                        s_rosterObjects.push_back(Obj);
+                }
+            }
+
+            for (SDK::UObject* Obj : s_rosterObjects) {
+                if (!IsRegisteredLiveObject(Obj)) continue;
 
                 if (Obj->IsA(SDK::AArchonGameMode::StaticClass())) {
                     int32_t* Field = reinterpret_cast<int32_t*>(
