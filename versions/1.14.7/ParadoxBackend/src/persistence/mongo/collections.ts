@@ -78,5 +78,8 @@ export const Collections = {
     // Guilds (controllers/guild.ts). guildMembers _id = accountId (one guild per account); guildInvites purged by the expiresAt TTL.
     Guilds: "guilds",
     GuildMembers: "guildMembers",
-    GuildInvites: "guildInvites"
+    GuildInvites: "guildInvites",
+
+    // Extra characters per launcher account (src/characterSlots.ts). _id = the character's game userId.
+    CharacterSlots: "characterSlots"
 } as const;

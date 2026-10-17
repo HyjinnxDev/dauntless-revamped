@@ -41,6 +41,8 @@ const CODE_MAP: Record<string, ErrorCode> = {
   RUNTIME_BUILD_UNSUPPORTED: "runtime_rejected",
   AUTH_CHANNEL_MISMATCH: "runtime_rejected",
   AUTH_TESTER_REQUIRED: "runtime_rejected",
+  CHARACTER_LIMIT_REACHED: "character_limit",
+  CHARACTER_IN_USE: "character_in_use",
 };
 
 export function apiFailure(res: HttpResponse): ApiFailure {
@@ -199,15 +201,52 @@ export interface RuntimeArtifact {
   sha256: string;
 }
 
+// ---------------------------------------------------------------- characters
+
+// Each character is its own game save under the one account; slot 1 is the account's first.
+export interface CharacterList {
+  max: number;
+  lastSlot: number; // the one played last
+  slots: number[];
+}
+
+export type CharactersResult = { ok: true; characters: CharacterList } | ApiFailure;
+
+function parseCharacters(res: HttpResponse): CharactersResult {
+  if (res.status !== 200) return apiFailure(res);
+  const body = parseJsonBody(res);
+  const slot = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 32;
+  if (!isObject(body) || !slot(body.max) || !slot(body.lastSlot) || !Array.isArray(body.characters)) return { ok: false, error: "server_error" };
+  const slots = body.characters.map((c) => (isObject(c) ? c.slot : undefined)).filter(slot);
+  return { ok: true, characters: { max: body.max, lastSlot: body.lastSlot, slots } };
+}
+
+export async function listCharacters(ep: Endpoint, accessToken: string): Promise<CharactersResult> {
+  try {
+    return parseCharacters(await request(ep, "/launcher/v1/characters", { headers: bearer(accessToken), timeoutMs: 15000, maxBytes: 64 * 1024 }));
+  } catch (e) {
+    return networkFailure(e);
+  }
+}
+
+export async function createCharacter(ep: Endpoint, accessToken: string): Promise<CharactersResult> {
+  try {
+    return parseCharacters(await request(ep, "/launcher/v1/characters", { method: "POST", headers: bearer(accessToken), body: "{}", timeoutMs: 15000, maxBytes: 64 * 1024 }));
+  } catch (e) {
+    return networkFailure(e);
+  }
+}
+
 // voice: the party voice relay's ticket and UDP port, when the server runs one.
-export type ExchangeResult = { ok: true; exchangeCode: string; voice?: { ticket: string; port: number } } | ApiFailure;
+// gameUserId: the id the game logs in as (the chosen character's); servers without characters leave it out.
+export type ExchangeResult = { ok: true; exchangeCode: string; gameUserId?: string; voice?: { ticket: string; port: number } } | ApiFailure;
 
 // A one-time code (60 s) the game trades for its game token. The server checks the exe hash and the
 // exact runtime release this launcher installed.
 export async function requestGameSession(
   ep: Endpoint,
   accessToken: string,
-  g: { executableSha256: string; runtimeVersion: string; runtimeArtifacts: RuntimeArtifact[] },
+  g: { executableSha256: string; runtimeVersion: string; runtimeArtifacts: RuntimeArtifact[]; characterSlot: number },
 ): Promise<ExchangeResult> {
   let res: HttpResponse;
   try {
@@ -220,6 +259,7 @@ export async function requestGameSession(
         runtimeChannel: "stable",
         runtimeManifestVersion: g.runtimeVersion,
         runtimeArtifacts: g.runtimeArtifacts,
+        characterSlot: g.characterSlot,
       }),
       timeoutMs: 15000,
       maxBytes: 64 * 1024,
@@ -234,7 +274,8 @@ export async function requestGameSession(
   const ticket = isObject(body) && typeof body.voiceTicket === "string" ? body.voiceTicket : "";
   const port = isObject(body) ? body.voicePort : undefined;
   const voiceOk = /^[A-Za-z0-9_.-]{20,4096}$/.test(ticket) && Number.isInteger(port) && (port as number) > 0 && (port as number) < 65536;
-  return voiceOk ? { ok: true, exchangeCode: code, voice: { ticket, port: port as number } } : { ok: true, exchangeCode: code };
+  const gameUserId = isObject(body) && typeof body.gameUserId === "string" && /^[A-Za-z0-9-]{1,64}$/.test(body.gameUserId) ? { gameUserId: body.gameUserId } : {};
+  return voiceOk ? { ok: true, exchangeCode: code, ...gameUserId, voice: { ticket, port: port as number } } : { ok: true, exchangeCode: code, ...gameUserId };
 }
 
 // ---------------------------------------------------------------- runtime (MysticParadox.dll + winmm.dll)

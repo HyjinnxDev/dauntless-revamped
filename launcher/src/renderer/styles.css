@@ -736,6 +736,11 @@ img {
   color: var(--dr-frost);
 }
 
+.character-switch {
+  max-width: 420px;
+  margin-top: 16px;
+}
+
 .partner-mini {
   width: 100%;
   display: grid;

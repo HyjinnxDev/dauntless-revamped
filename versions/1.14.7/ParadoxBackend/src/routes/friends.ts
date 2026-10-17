@@ -15,6 +15,8 @@ import { GetRepositories, FriendEdgeRecord } from "../persistence";
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
 import { sessionRegistry } from "../realtime/SessionRegistry";
 import { escapeXml } from "../realtime/xml";
+import { PushFriendEvent, XMPP_DOMAIN } from "../realtime/friendEvents";
+import { OwnerOf } from "../characterSlots";
 
 // Epic MCP "friends-public-service" endpoints. The in-process DLL redirect rewrites
 // friends-public-service-*.ol.epicgames.com to paradox.mysticfox.dev/__origin/<host>/...,
@@ -26,21 +28,6 @@ import { escapeXml } from "../realtime/xml";
 // Blocklist/recentPlayers/settings remain benign stubs. See
 // Plans/MULTIPLAYER_AUTH_SOCIAL_LAUNCHER_PLAN.md.
 export const friendsRouter = express.Router();
-
-const XMPP_DOMAIN = "prod.ol.epicgames.com";
-
-// Epic friends-service XMPP push, parsed by the client's FOnlineFriendsMcp::OnXmppMessageReceived.
-// Without it the other player only sees an invite/accept/removal on their next friends-list fetch.
-function PushFriendEvent(to: string, type: "Friend" | "FriendRemoval", payload: Record<string, unknown>) {
-    const body = escapeXml(JSON.stringify({
-        payload,
-        type: `com.epicgames.friends.core.apiobjects.${type}`,
-        timestamp: new Date().toISOString()
-    }));
-    for (const conn of sessionRegistry.connectionsFor(to)) {
-        conn.send(`<message from="xmpp-admin@${XMPP_DOMAIN}" to="${escapeXml(to)}@${XMPP_DOMAIN}"><body>${body}</body></message>`);
-    }
-}
 
 // PresenceService only exchanges presence on login, so a fresh friendship between two online
 // players would show "offline" until one relogs. Swap current presence once on accept.
@@ -85,7 +72,7 @@ friendsRouter.post("/friends/api/public/friends/:accountId/:friendId", HasParado
     const Owner: string = req.AuthData.userId;
     const Friend: string = req.params.friendId;
 
-    if (!Friend || Friend === Owner) {
+    if (!Friend || Friend === Owner || await OwnerOf(Friend) === await OwnerOf(Owner)) {
         res.status(400).send();
         return;
     }

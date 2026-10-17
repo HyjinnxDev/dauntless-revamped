@@ -240,6 +240,7 @@ export class FakeMystic {
   readonly accessTokens = new Map<string, string>(); // token -> userId
   readonly revokedFamilies = new Set<string>();
   readonly exchangeCodes: string[] = [];
+  readonly characterSlots = new Map<string, number[]>(); // userId -> slots (2 at most, like the backend default)
   private counter = 0;
 
   constructor(public opts: MysticOptions = {}) {}
@@ -327,15 +328,31 @@ export class FakeMystic {
       return this.json(res, 200, this.session(a, r.family));
     }
     if (p === "/launcher/v1/auth/logout" && req.method === "POST") return this.json(res, 200, {});
+    if (p === "/launcher/v1/characters") {
+      const a = this.userFor(req.headers.authorization);
+      if (!a) return this.error(res, 401, "AUTH_UNAUTHORIZED");
+      const slots = this.characterSlots.get(a.userId) ?? [1];
+      if (req.method === "POST") {
+        if (slots.length >= 2) return this.error(res, 409, "CHARACTER_LIMIT_REACHED");
+        slots.push(slots.length + 1);
+        this.characterSlots.set(a.userId, slots);
+      }
+      return this.json(res, 200, { max: 2, lastSlot: 1, characters: slots.map((slot) => ({ slot, lastPlayedAt: null })) });
+    }
     if (p === "/launcher/v1/game-sessions" && req.method === "POST") {
-      if (!this.userFor(req.headers.authorization)) return this.error(res, 401, "AUTH_UNAUTHORIZED");
+      const player = this.userFor(req.headers.authorization);
+      if (!player) return this.error(res, 401, "AUTH_UNAUTHORIZED");
       if (body.buildChangelist !== 647472 || typeof body.executableSha256 !== "string") return this.error(res, 400, "AUTH_VALIDATION_FAILED");
       const artifacts = body.runtimeArtifacts as { name: string; sha256: string }[];
       const want = [{ name: "MysticParadox.dll", sha256: sha256(RUNTIME_DLL) }, { name: "winmm.dll", sha256: sha256(RUNTIME_WINMM) }];
       if (body.runtimeManifestVersion !== "1.2.3" || JSON.stringify(artifacts) !== JSON.stringify(want)) return this.error(res, 403, "RUNTIME_BUILD_UNSUPPORTED");
       const code = randomBytes(32).toString("hex");
       this.exchangeCodes.push(code);
-      return this.json(res, 200, { exchangeCode: code, expiresInSeconds: 60 });
+      const slot = Number(body.characterSlot ?? 1);
+      if (!(this.characterSlots.get(player.userId) ?? [1]).includes(slot)) return this.error(res, 404, "NOT_FOUND");
+      // Slot 1 is the account's own id; later characters get their own.
+      const gameUserId = slot === 1 ? player.userId : `${player.userId.slice(0, -1)}${slot}`;
+      return this.json(res, 200, { exchangeCode: code, expiresInSeconds: 60, gameUserId });
     }
     const base = "/launcher/v1/runtime/client/stable/windows-x86_64";
     if (this.opts.runtime !== false) {

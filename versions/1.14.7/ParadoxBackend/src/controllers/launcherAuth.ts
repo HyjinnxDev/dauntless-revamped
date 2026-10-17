@@ -17,6 +17,9 @@ import { LauncherApiError } from "../security/launcherErrors";
 import { IsRateLimited } from "../security/rateLimit";
 import { logger } from "../logger";
 import { SignVoiceTicket, VoicePort } from "../voiceRelay";
+import { ActiveCharacters, InsertNextSlot, ListSlots, MarkLaunched, MaxCharacterSlots } from "../characterSlots";
+import { sessionRegistry } from "../realtime/SessionRegistry";
+import { AnnounceCharacterSwitch } from "../realtime/friendEvents";
 import { MongoServerError } from "mongodb";
 import { AssertAccountAdmitted, AssertAccountEligible, EffectiveApprovalStatus } from "../security/accountEligibility";
 import {
@@ -381,8 +384,9 @@ export async function RequestGameExchangeCode(
     executableSha256: string,
     runtimeChannel: RuntimeChannel,
     runtimeManifestVersion: unknown,
-    runtimeArtifacts: unknown
-): Promise<{ exchangeCode: string; expiresInSeconds: number; voiceTicket: string; voicePort: number }> {
+    runtimeArtifacts: unknown,
+    characterSlot: unknown = 1
+): Promise<{ exchangeCode: string; expiresInSeconds: number; voiceTicket: string; voicePort: number; gameUserId: string }> {
     if (IsRateLimited(`game-session:${userId}`, 10, 5 * 60 * 1000)) {
         throw new LauncherApiError("AUTH_RATE_LIMITED", "Too many launch attempts. Try again in a few minutes.");
     }
@@ -413,13 +417,25 @@ export async function RequestGameExchangeCode(
         throw new LauncherApiError("GAME_BUILD_UNSUPPORTED", "This Dauntless installation isn't recognized. Verify or repair your installation.");
     }
 
+    // The game logs in as the chosen character's game userId (src/characterSlots.ts). Launchers
+    // older than character slots send none and get slot 1, the account's own id.
+    const Slots = await ListSlots(userId);
+    const SlotRow = Slots.find((Row) => Row.slot === Number(characterSlot));
+    if (SlotRow == undefined) {
+        throw new LauncherApiError("NOT_FOUND", "That character doesn't exist.");
+    }
+    if (Slots.some((Row) => Row._id !== SlotRow._id && sessionRegistry.isOnline(Row._id))) {
+        throw new LauncherApiError("CHARACTER_IN_USE", "Another of your characters is still in game. Close it first, or wait a few minutes after a crash.");
+    }
+    const GameUserId = SlotRow._id;
+
     const Code = GenerateOpaqueToken();
     const Now = new Date();
     const ExpiresAt = new Date(Now.getTime() + EXCHANGE_CODE_TTL_MS);
 
     await GetRepositories().gameExchangeCodes.create({
         codeHash: HashOpaqueToken(Code),
-        userId,
+        userId: GameUserId,
         launcherSessionId,
         buildChangelist,
         executableSha256: NormalizedHash,
@@ -431,9 +447,52 @@ export async function RequestGameExchangeCode(
         expiresAt: ExpiresAt.toISOString()
     });
 
+    // Friends see the character launched last; tell online friends when that changes.
+    const Previous = await MarkLaunched(userId, SlotRow);
+    if (Previous !== GameUserId) await AnnounceCharacterSwitch(Previous, GameUserId).catch((e) => logger.warn(`character switch announce failed for ${userId}: ${e}`));
+
     // The game's runtime authenticates to the party voice relay (voiceRelay.ts) with this; the launcher
     // hands it over in the environment.
-    return { exchangeCode: Code, expiresInSeconds: EXCHANGE_CODE_TTL_MS / 1000, voiceTicket: SignVoiceTicket(userId), voicePort: VoicePort() };
+    return { exchangeCode: Code, expiresInSeconds: EXCHANGE_CODE_TTL_MS / 1000, voiceTicket: SignVoiceTicket(GameUserId), voicePort: VoicePort(), gameUserId: GameUserId };
+}
+
+// [Revamped 2026-10-17] Character slots (src/characterSlots.ts). Slot 1 always exists.
+export async function ListCharacters(userId: string): Promise<{ max: number; lastSlot: number; characters: { slot: number; lastPlayedAt: string | null }[] }> {
+    const Rows = await ListSlots(userId);
+    const Active = (await ActiveCharacters([userId])).get(userId);
+    return {
+        max: MaxCharacterSlots(),
+        lastSlot: Rows.find((Row) => Row._id === Active)?.slot ?? 1,
+        characters: Rows.map((Row) => ({ slot: Row.slot, lastPlayedAt: Row.lastLaunchedAt ?? null }))
+    };
+}
+
+export async function CreateCharacter(userId: string): Promise<Awaited<ReturnType<typeof ListCharacters>>> {
+    const Account = await GetRepositories().launcherAccounts.findByUserId(userId);
+    if (Account == undefined) {
+        throw new LauncherApiError("AUTH_UNAUTHORIZED", "Sign in required.");
+    }
+    AssertAccountEligible(Account);
+    if (IsRateLimited(`character-create:${userId}`, 5, 60 * 60 * 1000)) {
+        throw new LauncherApiError("AUTH_RATE_LIMITED", "Too many attempts. Try again later.");
+    }
+
+    let Row;
+    try {
+        Row = await InsertNextSlot(userId);
+    } catch (error) {
+        // Two creates at once: the unique (ownerUserId, slot) index lets only one through.
+        if (!(error instanceof MongoServerError && error.code === 11000)) throw error;
+    }
+    if (Row == undefined) {
+        throw new LauncherApiError("CHARACTER_LIMIT_REACHED", "You already have the most characters this server allows.");
+    }
+
+    // The game's /login needs an account row for the new game id. The in-game name still comes from
+    // the owner (GetUsernameForUserId resolves through launcherAccounts).
+    await GetRepositories().accounts.create({ userId: Row._id, name: Account.displayName, notes: 0 });
+    logger.info(`Character slot ${Row.slot} created for ${userId} (game id ${Row._id})`);
+    return ListCharacters(userId);
 }
 
 // Registration-time (pre-auth) availability check: is this username valid and free?

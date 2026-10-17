@@ -144,6 +144,8 @@ export async function EnsureMongoIndexes(Db: Db): Promise<void> {
     await Db.collection(Collections.GuildInvites).createIndex({ guildId: 1, inviteeId: 1 });
     await Db.collection(Collections.GuildInvites).createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+    await Db.collection(Collections.CharacterSlots).createIndex({ ownerUserId: 1, slot: 1 }, { unique: true });
+
     await Db.collection(Collections.LauncherGuardSessions).createIndex({ accountId: 1, status: 1, expiresAt: -1 });
     // Role is part of the authorization predicate: a healthy client session must never
     // satisfy a host-process check (or vice versa). Keep the older index for rolling

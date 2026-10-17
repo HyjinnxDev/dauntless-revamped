@@ -69,6 +69,8 @@ export type ErrorCode =
   | "rate_limited"
   | "relay_port_busy"
   | "relay_failed"
+  | "character_limit" // the server allows no more characters on this account
+  | "character_in_use" // another character of this account is still in game
   | "unknown";
 
 // Short messages that are not errors.
@@ -148,6 +150,9 @@ export interface Snapshot {
   account: {
     username: string | null;
     signedIn: boolean;
+    characters: number[]; // character slots on this server (1 = the account's first); empty until loaded
+    maxCharacters: number;
+    character: number | null; // the one Play starts
   };
   install: {
     dir: string;
@@ -223,6 +228,8 @@ export const IPC = {
   cancelTask: "dr:cancel-task",
   repair: "dr:repair",
   play: "dr:play",
+  selectCharacter: "dr:select-character",
+  createCharacter: "dr:create-character",
   setSettings: "dr:set-settings",
   setStatusPolling: "dr:set-status-polling",
   refreshStatus: "dr:refresh-status",

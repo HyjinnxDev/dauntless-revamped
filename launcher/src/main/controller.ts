@@ -50,7 +50,10 @@ import {
   refreshSession,
   registerAccount,
   requestGameSession,
+  listCharacters,
+  createCharacter as apiCreateCharacter,
   type ApiFailure,
+  type CharacterList,
   type RuntimeRelease,
   type Session,
   type SessionResult,
@@ -115,6 +118,8 @@ interface Account {
   username: string;
   accessToken: string;
   expiresAt: number;
+  characters: CharacterList | null; // null until loaded (or a server without characters)
+  character: number | null; // picked on the Play screen; null = the one played last
 }
 
 // The backend's access tokens last 12 minutes; renew a little before that.
@@ -288,6 +293,9 @@ export class Controller {
       account: {
         username: this.account?.username ?? (sid ? this.s.usernames[sid] ?? null : null),
         signedIn: this.account !== null,
+        characters: this.account?.characters?.slots ?? [],
+        maxCharacters: this.account?.characters?.max ?? 1,
+        character: this.account ? this.chosenCharacter() : null,
       },
       install: {
         dir: this.installDir,
@@ -686,7 +694,16 @@ export class Controller {
     const sid = this.sid();
     if (!slot || !sid) throw new Error("no server");
     await this.keys.save(slot, session.refreshToken);
-    this.account = { userId: session.userId, username: session.username, accessToken: session.accessToken, expiresAt: Date.now() + ACCESS_TOKEN_LIFETIME_MS };
+    const same = this.account?.userId === session.userId ? this.account : null;
+    this.account = {
+      userId: session.userId,
+      username: session.username,
+      accessToken: session.accessToken,
+      expiresAt: Date.now() + ACCESS_TOKEN_LIFETIME_MS,
+      characters: same?.characters ?? null,
+      character: same?.character ?? null,
+    };
+    if (!same?.characters) void this.loadCharacters(this.account);
     if (this.s.usernames[sid] !== session.username || this.s.server?.code) {
       await this.settings.update((s) => {
         s.usernames[sid] = session.username;
@@ -724,6 +741,49 @@ export class Controller {
       this.refreshing = null;
     });
     return this.refreshing;
+  }
+
+  // ------------------------------------------------------------------ characters
+
+  private async loadCharacters(account: Account): Promise<void> {
+    const ep = this.endpoint();
+    if (!ep) return;
+    const res = await listCharacters(ep, account.accessToken);
+    // A server from before characters answers 404: it keeps the one character.
+    if (res.ok && this.account === account) {
+      account.characters = res.characters;
+      this.publish();
+    }
+  }
+
+  // The character Play starts: the one picked, else the one played last.
+  private chosenCharacter(): number {
+    const list = this.account?.characters;
+    if (!list) return 1;
+    const picked = this.account?.character;
+    return picked !== null && picked !== undefined && list.slots.includes(picked) ? picked : list.lastSlot;
+  }
+
+  selectCharacter(slot: unknown): void {
+    if (this.account?.characters?.slots.includes(slot as number)) this.account.character = slot as number;
+    this.publish();
+  }
+
+  async createCharacter(): Promise<ActionResult> {
+    if (this.busy || this.task || this.game.running) return err("busy");
+    const ep = this.endpoint();
+    if (!ep) return this.fail("server_unreachable");
+    return this.withBusy(async () => {
+      const token = await this.accessToken();
+      const account = this.account;
+      if (!token || !account) return this.fail(this.lastError?.code ?? "session_expired");
+      const res = await apiCreateCharacter(ep, token);
+      if (!res.ok) return this.fail(res.error, res.detail);
+      account.characters = res.characters;
+      account.character = Math.max(...res.characters.slots);
+      log.info(`character ${account.character} created`);
+      return OK;
+    });
   }
 
   // A current access token, refreshing when needed. null = not signed in (any more).
@@ -1103,12 +1163,15 @@ export class Controller {
       const token = await this.accessToken();
       if (!token || !this.account) return this.fail(this.lastError?.code ?? "session_expired", this.lastError?.detail);
       const { userId, username } = this.account;
+      const character = this.chosenCharacter();
       const ticket = await requestGameSession(ep, token, {
         executableSha256: exeHash,
         runtimeVersion: release.version,
         runtimeArtifacts: release.files.map((f) => ({ name: f.name, sha256: f.sha256 })),
+        characterSlot: character,
       });
       if (!ticket.ok) return this.fail(ticket.error, ticket.detail);
+      if (this.account?.characters) this.account.characters.lastSlot = character;
 
       // The relay first: the game talks to it from its first request.
       const started = await this.startRelay(sv);
@@ -1119,7 +1182,7 @@ export class Controller {
       try {
         const args = buildLaunchArgs({
           exchangeCode: ticket.exchangeCode,
-          userId,
+          userId: ticket.gameUserId ?? userId, // the game logs in as the character
           username,
           windowed: this.s.windowed,
           gameLocale: gameLocale(this.s.gameLanguage, this.p.systemLocale ?? "en-US"),

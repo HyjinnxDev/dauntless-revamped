@@ -35,6 +35,7 @@ import { MongoCooldownStateRepository } from "./repositories/MongoCooldownStateR
 import { MongoEntitlementRepository } from "./repositories/MongoEntitlementRepository";
 import { MongoPartyRepository } from "./repositories/MongoPartyRepository";
 import { MongoLauncherGuardRepository } from "./repositories/MongoLauncherGuardRepository";
+import { CharacterAwareFriendships } from "../../characterSlots";
 
 // Builds the MongoDB-backed RepositoryProvider. Each repository lazily resolves
 // the shared pooled Db handle (src/persistence/mongo/client.ts) on first use.
@@ -60,7 +61,7 @@ export function CreateMongoRepositoryProvider(): RepositoryProvider {
         gameExchangeCodes: new MongoGameExchangeCodeRepository(),
         discordOAuthTransactions: new MongoDiscordOAuthTransactionRepository(),
         inventoryTransactions: new MongoInventoryTransactionRepository(),
-        friendships: new MongoFriendshipRepository(),
+        friendships: new CharacterAwareFriendships(new MongoFriendshipRepository()),
         admin: new MongoAdminRepository(),
         entitlements: new MongoEntitlementRepository(),
         parties: new MongoPartyRepository(),

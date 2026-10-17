@@ -93,8 +93,12 @@ export class MongoAdminRepository implements AdminRepository {
         try {
             await Session.withTransaction(async () => {
                 const Db = await GetMongoDb();
+                // Every character slot is its own game userId (src/characterSlots.ts); game data goes for all of them.
+                const SlotIds = (await Db.collection(Collections.CharacterSlots).find({ ownerUserId: userId }, { session: Session }).toArray())
+                    .map((Row) => String(Row._id));
+                const Ids = [userId, ...SlotIds.filter((Id) => Id !== userId)];
                 const Characters = await Db.collection(Collections.Characters)
-                    .find({ userId }, { session: Session })
+                    .find({ userId: { $in: Ids } }, { session: Session })
                     .project({ _id: 1, characterId: 1 })
                     .toArray();
                 const CharacterIds = Characters.map((Character) => String(Character.characterId ?? Character._id));
@@ -104,10 +108,10 @@ export class MongoAdminRepository implements AdminRepository {
                     const Result = await Db.collection(collection).deleteMany(filter, { session: Session });
                     DeletedCounts[collection] = Result.deletedCount;
                 };
-                const UserOwned = { $or: [{ userId }, { _id: userId as any }] };
+                const UserOwned = { $or: [{ userId: { $in: Ids } }, { _id: { $in: Ids as any[] } }] };
                 const CharacterOwned = {
                     $or: [
-                        { userId },
+                        { userId: { $in: Ids } },
                         { characterId: { $in: CharacterIds } },
                         { _id: { $in: CharacterIds } }
                     ]
@@ -116,7 +120,7 @@ export class MongoAdminRepository implements AdminRepository {
                 // Authentication and live-session state first. The transaction means
                 // none of these removals become visible unless the full cascade commits.
                 await Remove(Collections.RefreshSessions, { userId });
-                await Remove(Collections.GameExchangeCodes, { userId });
+                await Remove(Collections.GameExchangeCodes, { userId: { $in: Ids } });
                 await Remove(Collections.AdminSessions, { userId });
                 await Remove(Collections.AuthIdentities, { userId });
                 await Remove(Collections.DiscordOAuthTransactions, { userId });
@@ -128,19 +132,21 @@ export class MongoAdminRepository implements AdminRepository {
                 await Remove(Collections.Loadouts, CharacterOwned);
                 await Remove(Collections.Breadcrumbs, CharacterOwned);
                 await Remove(Collections.EncounteredContent, CharacterOwned);
-                await Remove(Collections.ProgressionTracks, { userId });
-                await Remove(Collections.ProgressionObjectives, { userId });
-                await Remove(Collections.ProgressionObjectiveEvents, { userId });
+                await Remove(Collections.ProgressionTracks, { userId: { $in: Ids } });
+                await Remove(Collections.ProgressionObjectives, { userId: { $in: Ids } });
+                await Remove(Collections.ProgressionObjectiveEvents, { userId: { $in: Ids } });
                 await Remove(Collections.PlayerJourney, UserOwned);
                 await Remove(Collections.Wallets, UserOwned);
-                await Remove(Collections.Characters, { userId });
+                await Remove(Collections.Characters, { userId: { $in: Ids } });
+                await Remove(Collections.CharacterSlots, { ownerUserId: userId });
+                if (SlotIds.length > 0) await Remove(Collections.Accounts, { _id: { $in: SlotIds.filter((Id) => Id !== userId) as any[] } });
 
                 const AccountResult = await Db.collection(Collections.Accounts)
                     .deleteOne({ _id: userId as any, displayNameNormalized: { $exists: true } }, { session: Session });
                 if (AccountResult.deletedCount !== 1) {
                     throw new Error("Player account disappeared before deletion completed.");
                 }
-                DeletedCounts[Collections.Accounts] = AccountResult.deletedCount;
+                DeletedCounts[Collections.Accounts] = AccountResult.deletedCount + (DeletedCounts[Collections.Accounts] ?? 0);
 
                 // Retain one minimal operational tombstone. It contains opaque IDs
                 // and state only—never the deleted email, username, password hash,

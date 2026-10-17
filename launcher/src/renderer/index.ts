@@ -708,7 +708,26 @@ function newsDock(): HTMLElement | null {
 
 function playReady(snap: Snapshot): HTMLElement[] {
   const user = snap.account.username;
-  return [eyebrow(snap), ...heading(user ? t("ready_title", { user }) : t("ready_title_nouser"), t("ready_text"))];
+  const picker = characterPicker(snap);
+  return [eyebrow(snap), ...heading(user ? t("ready_title", { user }) : t("ready_title_nouser"), t("ready_text")), ...(picker ? [picker] : [])];
+}
+
+// One button per character on this server (each its own game save), and "New character" while there is room.
+function characterPicker(snap: Snapshot): HTMLElement | null {
+  const a = snap.account;
+  if (a.maxCharacters <= 1 && a.characters.length <= 1) return null;
+  const row = h("div", { class: "lang-switch character-switch", role: "group", "aria-label": t("character_group") });
+  for (const n of a.characters) {
+    const b = h("button", { type: "button", class: "lang-btn", "aria-pressed": a.character === n ? "true" : "false", "data-fk": `character-${n}`, disabled: snap.busy }, t("character_slot", { n }));
+    b.addEventListener("click", () => void api.selectCharacter(n));
+    row.appendChild(b);
+  }
+  if (a.characters.length < a.maxCharacters) {
+    const b = h("button", { type: "button", class: "lang-btn", "data-fk": "character-new", disabled: snap.busy }, t("character_new"));
+    b.addEventListener("click", () => void api.createCharacter());
+    row.appendChild(b);
+  }
+  return row;
 }
 
 function playRunning(snap: Snapshot): HTMLElement[] {

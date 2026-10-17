@@ -24,7 +24,9 @@ import {
     RequestGameExchangeCode,
     GetAccountView,
     CheckUsernameAvailable,
-    SetUsername
+    SetUsername,
+    ListCharacters,
+    CreateCharacter
 } from "../controllers/launcherAuth";
 import { StartDiscordAuth, HandleDiscordCallback, CompleteDiscordLogin } from "../controllers/discordAuth";
 import { GetLauncherPolicy } from "../controllers/launcherPolicy";
@@ -225,9 +227,18 @@ launcherAuthRouter.post("/launcher/v1/game-sessions", HasLauncherAuth, (req, res
             ExecutableSha256,
             RuntimeChannel,
             RuntimeManifestVersion,
-            RuntimeArtifacts
+            RuntimeArtifacts,
+            req.body?.characterSlot ?? 1
         );
     })
+);
+
+launcherAuthRouter.get("/launcher/v1/characters", HasLauncherAuth, (req, res) =>
+    Handle(req, res, () => ListCharacters((req as any).LauncherAuthData.userId))
+);
+
+launcherAuthRouter.post("/launcher/v1/characters", HasLauncherAuth, (req, res) =>
+    Handle(req, res, () => CreateCharacter((req as any).LauncherAuthData.userId))
 );
 
 launcherAuthRouter.get("/launcher/v1/policy", HasLauncherAuth, (req, res) =>

@@ -330,6 +330,8 @@ function registerIpc(c: Controller): void {
   handle(IPC.cancelTask, () => c.cancelTask());
   handle(IPC.repair, () => c.repair());
   handle(IPC.play, () => c.play());
+  handle(IPC.selectCharacter, (_e, slot) => c.selectCharacter(slot));
+  handle(IPC.createCharacter, () => c.createCharacter());
   handle(IPC.setSettings, (_e, patch) => {
     const p = settingsPatch(patch);
     return p === null ? c.setSettings({}) : c.setSettings(p);

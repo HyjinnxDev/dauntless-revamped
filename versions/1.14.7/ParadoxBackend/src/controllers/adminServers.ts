@@ -13,6 +13,7 @@ import { GetMongoDb } from "../persistence/mongo/client";
 import { Collections } from "../persistence/mongo/collections";
 import { sessionRegistry } from "../realtime/SessionRegistry";
 import { HasStaffPermission } from "../security/staffRoles";
+import { ListSlots } from "../characterSlots";
 
 const DIRECTOR = process.env.DEPLOYSERVER_URL;
 // The key the Director's gameservers already use (Director METAGAME_API_KEY = first GAMESERVER_API_KEYS entry).
@@ -259,15 +260,24 @@ export function GetLog(req: Request, res: Response): void {
 export async function ListOnlinePlayersDetailed(req: Request, res: Response): Promise<void> {
     const ShowIp = HasStaffPermission((req as any).AdminAuth.account.roles, "players.access");
     const Ids = sessionRegistry.onlineAccountIds();
+    const Db = await GetMongoDb();
+    // An online id may be a character slot (src/characterSlots.ts): list it under its owner's account.
+    const Slots = new Map((await Db.collection(Collections.CharacterSlots).find({ _id: { $in: Ids as any[] } }).toArray())
+        .map((Row) => [String(Row._id), Row]));
+    const OwnerIds = Ids.map((Id) => Slots.get(Id)?.ownerUserId ?? Id);
     const [Docs, Dir] = await Promise.all([
-        (await GetMongoDb()).collection(Collections.Accounts).find({ _id: { $in: Ids as any[] } })
+        Db.collection(Collections.Accounts).find({ _id: { $in: OwnerIds as any[] }, displayName: { $exists: true } })
             .project({ displayName: 1, roles: 1, lastSeenAt: 1, lastSeenIp: 1 }).toArray(),
         DirectorStatus()
     ]);
-    const Players = Docs.map((D) => ({
-        userId: String(D._id), displayName: D.displayName, roles: D.roles ?? [], onlineSince: D.lastSeenAt,
-        ip: ShowIp ? D.lastSeenIp : undefined, server: ServerFor(Dir, String(D._id))
-    })).sort((A, B) => A.displayName.localeCompare(B.displayName, undefined, { sensitivity: "base" }));
+    const DocById = new Map(Docs.map((D) => [String(D._id), D]));
+    const Players = Ids.flatMap((Id, I) => {
+        const D = DocById.get(OwnerIds[I]);
+        return D ? [{
+            userId: OwnerIds[I], displayName: D.displayName, characterSlot: Slots.get(Id)?.slot ?? 1, roles: D.roles ?? [], onlineSince: D.lastSeenAt,
+            ip: ShowIp ? D.lastSeenIp : undefined, server: ServerFor(Dir, Id)
+        }] : [];
+    }).sort((A, B) => A.displayName.localeCompare(B.displayName, undefined, { sensitivity: "base" }));
     res.json({ count: Players.length, players: Players });
 }
 
@@ -296,12 +306,16 @@ export async function GetPlayerDetail(req: Request, res: Response): Promise<void
     const SameIp = IsAdmin && Account.lastSeenIp
         ? await Db.collection(Collections.Accounts).find({ lastSeenIp: Account.lastSeenIp, _id: { $ne: UserId as any } }).project({ displayName: 1 }).limit(20).toArray()
         : [];
-    const Online = sessionRegistry.isOnline(UserId);
+    // Each character slot is its own game id; the drawer's game data below is slot 1's.
+    const SlotRows = await ListSlots(UserId);
+    const OnlineId = SlotRows.map((Row) => Row._id).find((Id) => sessionRegistry.isOnline(Id));
+    const Online = OnlineId !== undefined;
     res.json({
         online: Online,
+        characterSlots: SlotRows.map((Row) => ({ slot: Row.slot, gameUserId: Row._id, lastLaunchedAt: Row.lastLaunchedAt, online: Row._id === OnlineId })),
         lastSeenAt: Account.lastSeenAt,
         lastSeenIp: IsAdmin ? Account.lastSeenIp : undefined,
-        server: Online ? ServerFor(Dir, UserId, ...Characters.map((C) => String(C._id))) : undefined,
+        server: Online ? ServerFor(Dir, OnlineId, ...Characters.map((C) => String(C._id))) : undefined,
         characters: Characters.map((C) => ({ characterId: String(C._id), name: C.name, created: C.createdDate, modified: C.lastModifiedDate })),
         wallet: Wallet?.balances ?? {},
         guild: Guild ? { name: GuildDoc?.name, tag: GuildDoc?.nameplate, rank: Guild.rank, joinedAt: Guild.joinedAt } : undefined,

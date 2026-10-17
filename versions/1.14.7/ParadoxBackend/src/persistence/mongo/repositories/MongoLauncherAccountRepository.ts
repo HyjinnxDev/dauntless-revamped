@@ -12,6 +12,7 @@
 import { ClientSession } from "mongodb";
 import { GetMongoDb } from "../client";
 import { Collections } from "../collections";
+import { OwnerOf } from "../../../characterSlots";
 import {
     AccountApprovalStatus,
     AccountOperationalStatus,
@@ -54,8 +55,14 @@ export class MongoLauncherAccountRepository implements LauncherAccountRepository
             { _id: { $eq: userId as any }, displayNameNormalized: { $exists: true } },
             { session }
         );
+        if (Doc == undefined) {
+            // A character slot's game id answers as its owner, so game-side name, staff tag,
+            // ban and eligibility checks all apply to every character of the account.
+            const Owner = await OwnerOf(userId);
+            return Owner === userId ? undefined : await this.findByUserId(Owner, session);
+        }
 
-        return Doc == undefined ? undefined : ToRecord(Doc);
+        return ToRecord(Doc);
     }
 
     async findByEmail(normalizedEmail: string): Promise<LauncherAccountRecord | undefined> {

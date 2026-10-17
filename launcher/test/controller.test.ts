@@ -235,6 +235,36 @@ test("without a fixed relay port the relay takes any free one and the game is to
   await new Promise((r) => setTimeout(r, 50));
 });
 
+test("a second character plays as its own game id under the same name; a third is refused", async () => {
+  const h = harness(firstUserData);
+  await opened(h);
+  await h.c.accessToken();
+  for (let i = 0; i < 200 && h.last().account.characters.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual([h.last().account.characters, h.last().account.maxCharacters, h.last().account.character], [[1], 2, 1]);
+
+  assert.deepEqual(await h.c.createCharacter(), { ok: true });
+  assert.deepEqual([h.last().account.characters, h.last().account.character], [[1, 2], 2], "the new character is picked");
+  const refused = await h.c.createCharacter();
+  assert.equal(!refused.ok && refused.error.code, "character_limit");
+
+  assert.deepEqual(await h.c.startInstall(), { ok: true });
+  const play = async (slot: number) => {
+    h.c.selectCharacter(slot);
+    assert.deepEqual(await h.c.play(), { ok: true });
+    const session = mystic.calls.filter((c) => c.path === "/launcher/v1/game-sessions").at(-1)!;
+    assert.equal(session.body?.characterSlot, slot);
+    const args = h.spawns.at(-1)!.args;
+    h.child()!.emit("exit", 0);
+    await new Promise((r) => setTimeout(r, 50));
+    return args;
+  };
+  const owner = mystic.accounts.get("slayer42")!.userId;
+  const second = await play(2);
+  assert.ok(second.includes(`-AUTH_LOGIN=${owner.slice(0, -1)}2`));
+  assert.ok(second.includes("-epicusername=Slayer42"), "both characters keep the account's name");
+  assert.ok((await play(1)).includes(`-AUTH_LOGIN=${owner}`));
+});
+
 test("signing out removes the stored sign-in; signing in by username brings it back", async () => {
   const h = harness(firstUserData);
   await opened(h);

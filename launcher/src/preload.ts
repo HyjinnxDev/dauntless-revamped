@@ -38,6 +38,8 @@ const api = {
   cancelTask: (): Promise<void> => ipcRenderer.invoke(IPC.cancelTask),
   repair: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.repair),
   play: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.play),
+  selectCharacter: (slot: number): Promise<void> => ipcRenderer.invoke(IPC.selectCharacter, Number(slot)),
+  createCharacter: (): Promise<ActionResult> => ipcRenderer.invoke(IPC.createCharacter),
   setSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke(IPC.setSettings, {
       ...(patch.windowed !== undefined ? { windowed: patch.windowed } : {}),
