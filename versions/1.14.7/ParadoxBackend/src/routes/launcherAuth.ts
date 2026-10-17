@@ -24,10 +24,9 @@ import {
     RequestGameExchangeCode,
     GetAccountView,
     CheckUsernameAvailable,
-    SetUsername,
-    ListCharacters,
-    CreateCharacter
+    SetUsername
 } from "../controllers/launcherAuth";
+import { CreateCharacter, DeleteCharacter, ListCharacters, RenameCharacter } from "../controllers/characters";
 import { StartDiscordAuth, HandleDiscordCallback, CompleteDiscordLogin } from "../controllers/discordAuth";
 import { GetLauncherPolicy } from "../controllers/launcherPolicy";
 import { ParseRuntimeChannel } from "../security/runtimeAuthorization";
@@ -86,7 +85,7 @@ launcherAuthRouter.use((req, res, next) => {
         }
         res.header("Access-Control-Allow-Origin", Origin);
         res.header("Vary", "Origin");
-        res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.header("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
         res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
         logger.info(`[CORS] Allowed origin: ${Origin}`);
     }
@@ -238,7 +237,15 @@ launcherAuthRouter.get("/launcher/v1/characters", HasLauncherAuth, (req, res) =>
 );
 
 launcherAuthRouter.post("/launcher/v1/characters", HasLauncherAuth, (req, res) =>
-    Handle(req, res, () => CreateCharacter((req as any).LauncherAuthData.userId))
+    Handle(req, res, () => CreateCharacter((req as any).LauncherAuthData.userId, req.body?.label))
+);
+
+launcherAuthRouter.patch("/launcher/v1/characters/:slot", HasLauncherAuth, (req, res) =>
+    Handle(req, res, () => RenameCharacter((req as any).LauncherAuthData.userId, req.params.slot, req.body?.label))
+);
+
+launcherAuthRouter.delete("/launcher/v1/characters/:slot", HasLauncherAuth, (req, res) =>
+    Handle(req, res, () => DeleteCharacter((req as any).LauncherAuthData.userId, req.params.slot, req.body?.confirmLabel, req.ip ?? "unknown"))
 );
 
 launcherAuthRouter.get("/launcher/v1/policy", HasLauncherAuth, (req, res) =>

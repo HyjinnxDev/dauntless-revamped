@@ -17,7 +17,7 @@ import { findTailscale } from "./main/system";
 import { describeError, log, logToFile } from "./main/log";
 import { boundedString, externalTarget, isTrustedPageUrl, relayPortOverride, settingsPatch } from "./main/ipc-validate";
 import { INVITE_SCHEME, LEGACY_INVITE_SCHEME, parseInvite } from "./shared/invite";
-import { IPC, type Language, type Snapshot, type TaskProgress } from "./shared/types";
+import { CHARACTER_LABEL_MAX, IPC, type Language, type Snapshot, type TaskProgress } from "./shared/types";
 import { systemLanguage, translate } from "./shared/i18n";
 import { APP_ID, SQUIRREL_NAME, UPDATE_FEED_URL } from "./main/constants";
 import { migrateUserData, uninstallOldLauncher } from "./main/migrate";
@@ -331,7 +331,18 @@ function registerIpc(c: Controller): void {
   handle(IPC.repair, () => c.repair());
   handle(IPC.play, () => c.play());
   handle(IPC.selectCharacter, (_e, slot) => c.selectCharacter(slot));
-  handle(IPC.createCharacter, () => c.createCharacter());
+  handle(IPC.createCharacter, (_e, label) => {
+    const s = boundedString(label, CHARACTER_LABEL_MAX);
+    return s === null ? { ok: false, error: { code: "bad_request" } } : c.createCharacter(s);
+  });
+  handle(IPC.renameCharacter, (_e, slot, label) => {
+    const s = boundedString(label, CHARACTER_LABEL_MAX);
+    return s === null || !Number.isInteger(slot) ? { ok: false, error: { code: "bad_request" } } : c.renameCharacter(slot as number, s);
+  });
+  handle(IPC.deleteCharacter, (_e, slot, confirmLabel) => {
+    const s = boundedString(confirmLabel, CHARACTER_LABEL_MAX);
+    return s === null || !Number.isInteger(slot) ? { ok: false, error: { code: "bad_request" } } : c.deleteCharacter(slot as number, s);
+  });
   handle(IPC.setSettings, (_e, patch) => {
     const p = settingsPatch(patch);
     return p === null ? c.setSettings({}) : c.setSettings(p);

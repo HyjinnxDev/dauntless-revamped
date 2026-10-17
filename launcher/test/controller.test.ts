@@ -240,12 +240,15 @@ test("a second character plays as its own game id under the same name; a third i
   await opened(h);
   await h.c.accessToken();
   for (let i = 0; i < 200 && h.last().account.characters.length === 0; i++) await new Promise((r) => setTimeout(r, 10));
-  assert.deepEqual([h.last().account.characters, h.last().account.maxCharacters, h.last().account.character], [[1], 2, 1]);
+  const slots = () => h.last().account.characters.map((c) => [c.slot, c.label, c.level]);
+  assert.deepEqual([slots(), h.last().account.maxCharacters, h.last().account.character], [[[1, "Character 1", 3]], 2, 1]);
 
-  assert.deepEqual(await h.c.createCharacter(), { ok: true });
-  assert.deepEqual([h.last().account.characters, h.last().account.character], [[1, 2], 2], "the new character is picked");
-  const refused = await h.c.createCharacter();
+  assert.deepEqual(await h.c.createCharacter("Hammer build"), { ok: true });
+  assert.deepEqual([slots(), h.last().account.character], [[[1, "Character 1", 3], [2, "Hammer build", 6]], 2], "the new character is picked");
+  const refused = await h.c.createCharacter("Third");
   assert.equal(!refused.ok && refused.error.code, "character_limit");
+  assert.deepEqual(await h.c.renameCharacter(2, "Pike main"), { ok: true });
+  assert.equal(h.last().account.characters[1].label, "Pike main");
 
   assert.deepEqual(await h.c.startInstall(), { ok: true });
   const play = async (slot: number) => {
@@ -263,6 +266,14 @@ test("a second character plays as its own game id under the same name; a third i
   assert.ok(second.includes(`-AUTH_LOGIN=${owner.slice(0, -1)}2`));
   assert.ok(second.includes("-epicusername=Slayer42"), "both characters keep the account's name");
   assert.ok((await play(1)).includes(`-AUTH_LOGIN=${owner}`));
+
+  // Delete needs the name; then character 1 is played again.
+  const wrong = await h.c.deleteCharacter(2, "Hammer build");
+  assert.equal(!wrong.ok && wrong.error.code, "bad_request");
+  assert.equal(h.last().account.characters.length, 2, "a wrong name deletes nothing");
+  h.c.selectCharacter(2);
+  assert.deepEqual(await h.c.deleteCharacter(2, "pike main"), { ok: true });
+  assert.deepEqual([slots(), h.last().account.character], [[[1, "Character 1", 3]], 1]);
 });
 
 test("signing out removes the stored sign-in; signing in by username brings it back", async () => {

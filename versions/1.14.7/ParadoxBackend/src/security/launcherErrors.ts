@@ -45,6 +45,7 @@ type CoreLauncherErrorCode =
     | "GUARD_SEQUENCE_CONFLICT"
     | "CHARACTER_LIMIT_REACHED"
     | "CHARACTER_IN_USE"
+    | "CHARACTER_GUILD_LEADER"
     | "NOT_FOUND"
     | "INTERNAL";
 
@@ -94,6 +95,7 @@ const StatusByCode: Record<CoreLauncherErrorCode, number> = {
     GUARD_SEQUENCE_CONFLICT: 409,
     CHARACTER_LIMIT_REACHED: 409,
     CHARACTER_IN_USE: 409,
+    CHARACTER_GUILD_LEADER: 409,
     NOT_FOUND: 404,
     INTERNAL: 500
 };

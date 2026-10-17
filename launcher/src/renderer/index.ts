@@ -18,7 +18,7 @@ import { checkUsername, isValidPassword } from "../shared/username";
 import { primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
 import { formatBytes, formatDate, formatRunningTime } from "../shared/format";
 import { sortInstances, type InstanceKind, type ServerStatus, type StatusInstance } from "../shared/status";
-import { GAME_LANGUAGES, LANGUAGES, type Branding, type ExternalTarget, type GameLanguage, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
+import { CHARACTER_LABEL_MAX, GAME_LANGUAGES, LANGUAGES, type Branding, type CharacterInfo, type ExternalTarget, type GameLanguage, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
 
 type View = "play" | "news" | "server" | "settings" | "credits";
 const VIEWS: readonly View[] = ["play", "news", "server", "settings", "credits"];
@@ -28,7 +28,10 @@ type Modal =
   | { kind: "cert_changed"; link: string; name: string; host: string; oldFp: string | null; newFp: string }
   | { kind: "logout" }
   | { kind: "leave" }
-  | { kind: "remove_server"; id: string; name: string };
+  | { kind: "remove_server"; id: string; name: string }
+  | { kind: "character_new"; slot: number }
+  | { kind: "character_rename"; slot: number; label: string }
+  | { kind: "character_delete"; slot: number; label: string };
 
 const api = window.launcher;
 const ART_URL = /^dr-art:\/\/bg\/[0-9a-f]{64}$/;
@@ -712,29 +715,70 @@ function playReady(snap: Snapshot): HTMLElement[] {
   return [eyebrow(snap), ...heading(user ? t("ready_title", { user }) : t("ready_title_nouser"), t("ready_text")), ...(picker ? [picker] : [])];
 }
 
-// One button per character on this server (each its own game save), and "New character" while there is room.
+// The character Play starts, when the server has more than one to choose from.
+function chosenCharacter(snap: Snapshot): CharacterInfo | null {
+  const a = snap.account;
+  if (a.maxCharacters <= 1 && a.characters.length <= 1) return null;
+  return a.characters.find((c) => c.slot === a.character) ?? null;
+}
+
+function characterSub(c: CharacterInfo): string {
+  if (c.online) return t("character_in_game");
+  return c.lastPlayedAt ? t("character_played", { date: formatDate(c.lastPlayedAt, state.lang) }) : t("character_never");
+}
+
+// One card per character on this server (each its own game save), a "New character" card while there
+// is room, and Rename / Delete for the picked one. A radio group: arrow keys move the pick.
 function characterPicker(snap: Snapshot): HTMLElement | null {
   const a = snap.account;
   if (a.maxCharacters <= 1 && a.characters.length <= 1) return null;
-  const row = h("div", { class: "lang-switch character-switch", role: "group", "aria-label": t("character_group") });
-  for (const n of a.characters) {
-    const b = h("button", { type: "button", class: "lang-btn", "aria-pressed": a.character === n ? "true" : "false", "data-fk": `character-${n}`, disabled: snap.busy }, t("character_slot", { n }));
-    b.addEventListener("click", () => void api.selectCharacter(n));
-    row.appendChild(b);
-  }
+  const locked = snap.busy || snap.game.running;
+  const cards = h("div", { class: "character-cards", role: "radiogroup", "aria-label": t("character_group") });
+  a.characters.forEach((c, i) => {
+    const picked = a.character === c.slot;
+    const card = h(
+      "button",
+      { type: "button", class: "character-card", role: "radio", "aria-checked": picked ? "true" : "false", tabindex: picked ? "0" : "-1", "data-fk": `character-${c.slot}`, disabled: locked },
+      h("span", { class: "character-label" }, c.label),
+      h("span", { class: "character-level" }, t("character_level", { n: c.level })),
+      h("span", { class: `character-sub${c.online ? " is-online" : ""}` }, characterSub(c)),
+    );
+    card.addEventListener("click", () => void api.selectCharacter(c.slot));
+    card.addEventListener("keydown", (e) => {
+      const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+      if (!step) return;
+      e.preventDefault();
+      const next = a.characters[(i + step + a.characters.length) % a.characters.length];
+      void api.selectCharacter(next.slot).then(() => document.querySelector<HTMLElement>(`[data-fk="character-${next.slot}"]`)?.focus());
+    });
+    cards.appendChild(card);
+  });
   if (a.characters.length < a.maxCharacters) {
-    const b = h("button", { type: "button", class: "lang-btn", "data-fk": "character-new", disabled: snap.busy }, t("character_new"));
-    b.addEventListener("click", () => void api.createCharacter());
-    row.appendChild(b);
+    const slot = Math.max(0, ...a.characters.map((c) => c.slot)) + 1;
+    const add = h("button", { type: "button", class: "character-card character-new", "data-fk": "character-new", disabled: locked }, h("span", { class: "character-label" }, t("character_new")), h("span", { class: "character-sub" }, t("character_new_sub")));
+    add.addEventListener("click", () => showModal({ kind: "character_new", slot }));
+    cards.appendChild(add);
+  } else {
+    cards.appendChild(h("div", { class: "character-card character-full", "aria-disabled": "true" }, h("span", { class: "character-sub" }, t("character_full", { n: a.maxCharacters }))));
   }
-  return row;
+  const chosen = a.characters.find((c) => c.slot === a.character);
+  const actions = chosen
+    ? h(
+        "div",
+        { class: "character-actions" },
+        linkButton(t("character_rename"), () => showModal({ kind: "character_rename", slot: chosen.slot, label: chosen.label }), { fk: "character-rename", disabled: locked }),
+        chosen.slot > 1 ? linkButton(t("character_delete"), () => showModal({ kind: "character_delete", slot: chosen.slot, label: chosen.label }), { icon: "warning", fk: "character-delete", disabled: locked || chosen.online }) : null,
+      )
+    : null;
+  return h("div", { class: "character-picker" }, cards, actions);
 }
 
 function playRunning(snap: Snapshot): HTMLElement[] {
   // The game always talks to the server through the launcher's relay: keep the launcher open.
+  const chosen = chosenCharacter(snap);
   return [
     eyebrow(snap),
-    ...heading(t("running_title"), t("running_text")),
+    ...heading(t("running_title"), chosen ? `${t("character_playing_as", { name: chosen.label })} ${t("running_text")}` : t("running_text")),
     card("card-accent", h("h3", { class: "card-title" }, t("running_public_title")), h("p", { class: "card-text" }, t("running_public_text"))),
   ];
 }
@@ -887,7 +931,8 @@ function renderActionBar(): void {
     return;
   }
   const b = primaryButton(snap, formState());
-  primary.textContent = t(b.labelKey);
+  const playing = b.action === "play" || snap.phase === "running" ? chosenCharacter(snap) : null;
+  primary.replaceChildren(t(b.labelKey), ...(playing ? [h("span", { class: "big-button-sub" }, playing.label)] : []));
   primary.disabled = b.disabled;
   primary.classList.toggle("is-running", b.action === "none" && snap.phase === "running");
   primary.classList.toggle("is-pause", b.action === "pause" || b.action === "resume");
@@ -1631,17 +1676,18 @@ function renderRail(): void {
   ver.title = snap ? t("about_version", { v: snap.app.version }) + rt : "";
   const chip = $("#account-chip");
   const user = snap?.account.signedIn ? snap.account.username : null;
+  const chipCharacter = snap && user ? chosenCharacter(snap)?.label ?? null : null;
   // With other servers saved, the chip is also the server switcher: a click lists them, one more click joins.
   const others = snap?.savedServers.filter((sv) => !sv.current) ?? [];
   const locked = !snap || snap.busy || snap.task !== null || snap.game.running;
-  renderRegion(chip, JSON.stringify([state.lang, user, snap?.server?.name ?? null, snap?.status?.name ?? null, others, locked, state.serverMenu]), () => {
+  renderRegion(chip, JSON.stringify([state.lang, user, chipCharacter, snap?.server?.name ?? null, snap?.status?.name ?? null, others, locked, state.serverMenu]), () => {
     const inner = [
       h("span", { class: `avatar${user ? "" : " empty"}`, "aria-hidden": "true" }, user ? Array.from(user)[0].toUpperCase() : "?"),
       h(
         "span",
         { class: "account-text" },
         h("span", { class: "account-label" }, snap?.server ? serverName() : t("rail_not_joined")),
-        h("span", { class: "account-name" }, user ?? t("rail_not_signed_in")),
+        h("span", { class: "account-name" }, user ?? t("rail_not_signed_in"), chipCharacter ? h("span", { class: "account-character" }, ` · ${chipCharacter}`) : null),
       ),
     ];
     const toggle = h("button", { type: "button", class: "account-switch", "data-fk": "server-switch", "aria-haspopup": "menu", "aria-expanded": state.serverMenu ? "true" : "false", title: t("saved_switch") }, ...inner, h("span", { class: "account-caret", "aria-hidden": "true" }));
@@ -1782,6 +1828,14 @@ function renderModal(): void {
   let confirmCls = "btn-primary";
   // Resolves to the next modal to show (a changed certificate), or null to close.
   let onConfirm: () => Promise<Modal | null> = async () => null;
+  // A text field (character name): confirm only while valid(), Enter confirms.
+  let field: HTMLInputElement | null = null;
+  let valid = (): boolean => true;
+  const nameField = (value: string, labelKey: StringKey): HTMLElement => {
+    field = h("input", { class: "input", id: "modal-field", type: "text", maxlength: CHARACTER_LABEL_MAX, spellcheck: "false", autocomplete: "off", value, "data-fk": "modal-field" }) as HTMLInputElement;
+    return h("label", { class: "field modal-field" }, h("span", { class: "field-label" }, t(labelKey)), field);
+  };
+  const cleanName = (): string => (field?.value ?? "").replace(/\s+/g, " ").trim();
   // Show an error from an action whose main-process side did not already report it.
   const report = async (r: { ok: boolean; error?: LauncherError }): Promise<void> => {
     if (r.ok || !r.error || r.error.code === "cancelled") return;
@@ -1850,6 +1904,40 @@ function renderModal(): void {
         return null;
       };
       break;
+    case "character_new":
+      title = t("character_new_title");
+      text = [h("p", { class: "modal-text" }, t("character_new_text", { user: state.snap?.account.username ?? "" })), nameField(t("character_slot", { n: m.slot }), "character_name")];
+      confirmLabel = t("character_create");
+      valid = () => cleanName().length > 0;
+      onConfirm = async () => {
+        await report(await api.createCharacter(cleanName()));
+        return null;
+      };
+      break;
+    case "character_rename":
+      title = t("character_rename_title");
+      text = [nameField(m.label, "character_name")];
+      confirmLabel = t("character_rename_confirm");
+      valid = () => cleanName().length > 0 && cleanName() !== m.label;
+      onConfirm = async () => {
+        await report(await api.renameCharacter(m.slot, cleanName()));
+        return null;
+      };
+      break;
+    case "character_delete":
+      title = t("character_delete_title", { name: m.label });
+      text = [
+        h("p", { class: "modal-text modal-warn" }, icon("warning"), h("span", {}, t("character_delete_text", { name: m.label }))),
+        nameField("", "character_delete_type"),
+      ];
+      confirmLabel = t("character_delete_confirm");
+      confirmCls = "btn-danger";
+      valid = () => cleanName().toLowerCase() === m.label.trim().toLowerCase();
+      onConfirm = async () => {
+        await report(await api.deleteCharacter(m.slot, cleanName()));
+        return null;
+      };
+      break;
     case "remove_server":
       title = t("remove_server_title", { name: m.name });
       text = [h("p", { class: "modal-text" }, t("remove_server_text", { name: m.name }))];
@@ -1871,10 +1959,17 @@ function renderModal(): void {
           renderModal();
         } else closeModal();
       });
-  }, { cls: confirmCls, fk: "modal-confirm" });
+  }, { cls: confirmCls, fk: "modal-confirm", disabled: !valid() });
+  const input = field as HTMLInputElement | null;
+  input?.addEventListener("input", () => {
+    confirm.disabled = !valid();
+  });
+  input?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !confirm.disabled) confirm.click();
+  });
   const dialog = h(
     "div",
-    { class: `modal${m.kind === "cert_changed" ? " modal-danger" : ""}`, role: m.kind === "cert_changed" ? "alertdialog" : "dialog", "aria-modal": "true", "aria-labelledby": "modal-title" },
+    { class: `modal${m.kind === "cert_changed" || m.kind === "character_delete" ? " modal-danger" : ""}`, role: m.kind === "cert_changed" || m.kind === "character_delete" ? "alertdialog" : "dialog", "aria-modal": "true", "aria-labelledby": "modal-title" },
     h("h2", { class: "modal-title", id: "modal-title" }, m.kind === "cert_changed" ? icon("shield") : null, title),
     ...text,
     h("div", { class: "modal-actions" }, cancel, confirm),
@@ -1882,7 +1977,10 @@ function renderModal(): void {
   root.replaceChildren(dialog);
   root.hidden = false;
   // Destructive or risky choices never get the default focus.
-  (m.kind === "logout" || m.kind === "cert_changed" || m.kind === "remove_server" ? cancel : confirm).focus();
+  if (input && m.kind !== "character_delete") {
+    input.focus();
+    input.select();
+  } else (m.kind === "logout" || m.kind === "cert_changed" || m.kind === "remove_server" || m.kind === "character_delete" ? cancel : confirm).focus();
 }
 
 // The server switcher closes on a click anywhere else, and on Escape.
@@ -1915,7 +2013,7 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   if (e.key === "Tab") {
-    const focusable = Array.from(document.querySelectorAll<HTMLElement>("#modal-root button:not(:disabled)"));
+    const focusable = Array.from(document.querySelectorAll<HTMLElement>("#modal-root button:not(:disabled), #modal-root input"));
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];

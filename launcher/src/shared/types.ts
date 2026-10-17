@@ -71,6 +71,7 @@ export type ErrorCode =
   | "relay_failed"
   | "character_limit" // the server allows no more characters on this account
   | "character_in_use" // another character of this account is still in game
+  | "character_guild_leader" // the character to delete leads a guild
   | "unknown";
 
 // Short messages that are not errors.
@@ -136,6 +137,18 @@ export interface Settings {
   streamerMode?: boolean; // hide addresses, fingerprints, paths and player names on screen
 }
 
+// One character on the current server: its own game save under the account (the game shows the
+// account's name for every character; the label is the launcher's only).
+export interface CharacterInfo {
+  slot: number;
+  label: string;
+  level: number;
+  lastPlayedAt: string | null;
+  online: boolean;
+}
+
+export const CHARACTER_LABEL_MAX = 24;
+
 export interface Snapshot {
   phase: Phase;
   busy: boolean;
@@ -150,9 +163,9 @@ export interface Snapshot {
   account: {
     username: string | null;
     signedIn: boolean;
-    characters: number[]; // character slots on this server (1 = the account's first); empty until loaded
+    characters: CharacterInfo[]; // on this server, slot 1 = the account's first; empty until loaded
     maxCharacters: number;
-    character: number | null; // the one Play starts
+    character: number | null; // the slot Play starts
   };
   install: {
     dir: string;
@@ -230,6 +243,8 @@ export const IPC = {
   play: "dr:play",
   selectCharacter: "dr:select-character",
   createCharacter: "dr:create-character",
+  renameCharacter: "dr:rename-character",
+  deleteCharacter: "dr:delete-character",
   setSettings: "dr:set-settings",
   setStatusPolling: "dr:set-status-polling",
   refreshStatus: "dr:refresh-status",

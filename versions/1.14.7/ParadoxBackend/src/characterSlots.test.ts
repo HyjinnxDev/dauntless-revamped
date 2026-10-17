@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CharacterAwareFriendships, NextSlot } from "./characterSlots";
+import { CharacterAwareFriendships, CleanLabel, LabelOf, NextSlot, RankForXp } from "./characterSlots";
 import type { FriendEdgeRecord, FriendshipRepository } from "./persistence/contracts/FriendshipRepository";
 
 test("NextSlot fills the lowest gap and stops at the limit", () => {
@@ -57,4 +57,23 @@ test("friendships are stored between owners and shown as each friend's last char
 
     await Friends.remove("alice-2", "bob");
     assert.equal(Inner.rows.size, 0);
+});
+
+test("labels: trimmed, 1-24 allowed characters; old rows fall back to Character N", () => {
+    assert.equal(CleanLabel("  Hammer   build "), "Hammer build");
+    assert.equal(CleanLabel("Väinö's 2nd (pike)"), "Väinö's 2nd (pike)");
+    assert.equal(CleanLabel(""), undefined);
+    assert.equal(CleanLabel("x".repeat(25)), undefined);
+    assert.equal(CleanLabel("<script>"), undefined);
+    assert.equal(CleanLabel(42), undefined);
+    assert.equal(LabelOf({ slot: 2 }), "Character 2");
+    assert.equal(LabelOf({ slot: 2, label: "Pike" }), "Pike");
+});
+
+test("RankForXp: the highest rank whose cumulative cost is covered", () => {
+    const Curve = new Map([[0, 0], [1, 0], [2, 1], [3, 3], [4, 6]]);
+    assert.equal(RankForXp(Curve, 0), 1);
+    assert.equal(RankForXp(Curve, 2), 2);
+    assert.equal(RankForXp(Curve, 3), 3);
+    assert.equal(RankForXp(Curve, 99), 4);
 });

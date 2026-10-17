@@ -240,7 +240,8 @@ export class FakeMystic {
   readonly accessTokens = new Map<string, string>(); // token -> userId
   readonly revokedFamilies = new Set<string>();
   readonly exchangeCodes: string[] = [];
-  readonly characterSlots = new Map<string, number[]>(); // userId -> slots (2 at most, like the backend default)
+  // userId -> characters (2 at most, like the backend default); slot 1 is implicit until named.
+  readonly characterSlots = new Map<string, { slot: number; label: string }[]>();
   private counter = 0;
 
   constructor(public opts: MysticOptions = {}) {}
@@ -328,16 +329,28 @@ export class FakeMystic {
       return this.json(res, 200, this.session(a, r.family));
     }
     if (p === "/launcher/v1/auth/logout" && req.method === "POST") return this.json(res, 200, {});
-    if (p === "/launcher/v1/characters") {
+    const characterPath = /^\/launcher\/v1\/characters(?:\/(\d+))?$/.exec(p);
+    if (characterPath) {
       const a = this.userFor(req.headers.authorization);
       if (!a) return this.error(res, 401, "AUTH_UNAUTHORIZED");
-      const slots = this.characterSlots.get(a.userId) ?? [1];
+      const list = this.characterSlots.get(a.userId) ?? [{ slot: 1, label: "Character 1" }];
+      this.characterSlots.set(a.userId, list);
+      const target = characterPath[1] ? list.find((c) => c.slot === Number(characterPath[1])) : undefined;
+      if (characterPath[1] && !target) return this.error(res, 404, "NOT_FOUND");
+      const label = typeof body.label === "string" ? body.label.trim() : "";
       if (req.method === "POST") {
-        if (slots.length >= 2) return this.error(res, 409, "CHARACTER_LIMIT_REACHED");
-        slots.push(slots.length + 1);
-        this.characterSlots.set(a.userId, slots);
+        if (list.length >= 2) return this.error(res, 409, "CHARACTER_LIMIT_REACHED");
+        list.push({ slot: list.length + 1, label: label || `Character ${list.length + 1}` });
+      } else if (req.method === "PATCH") {
+        if (!label) return this.error(res, 400, "AUTH_VALIDATION_FAILED", "Character names are 1-24 letters.");
+        target!.label = label;
+      } else if (req.method === "DELETE") {
+        if (target!.slot === 1 || String(body.confirmLabel ?? "").toLowerCase() !== target!.label.toLowerCase()) {
+          return this.error(res, 400, "AUTH_VALIDATION_FAILED", "Type the character's name exactly to confirm.");
+        }
+        list.splice(list.indexOf(target!), 1);
       }
-      return this.json(res, 200, { max: 2, lastSlot: 1, characters: slots.map((slot) => ({ slot, lastPlayedAt: null })) });
+      return this.json(res, 200, { max: 2, lastSlot: 1, characters: list.map((c) => ({ ...c, level: c.slot * 3, lastPlayedAt: null, online: false })) });
     }
     if (p === "/launcher/v1/game-sessions" && req.method === "POST") {
       const player = this.userFor(req.headers.authorization);
@@ -349,7 +362,7 @@ export class FakeMystic {
       const code = randomBytes(32).toString("hex");
       this.exchangeCodes.push(code);
       const slot = Number(body.characterSlot ?? 1);
-      if (!(this.characterSlots.get(player.userId) ?? [1]).includes(slot)) return this.error(res, 404, "NOT_FOUND");
+      if (!(this.characterSlots.get(player.userId) ?? [{ slot: 1 }]).some((c) => c.slot === slot)) return this.error(res, 404, "NOT_FOUND");
       // Slot 1 is the account's own id; later characters get their own.
       const gameUserId = slot === 1 ? player.userId : `${player.userId.slice(0, -1)}${slot}`;
       return this.json(res, 200, { exchangeCode: code, expiresInSeconds: 60, gameUserId });

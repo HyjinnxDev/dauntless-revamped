@@ -736,9 +736,95 @@ img {
   color: var(--dr-frost);
 }
 
-.character-switch {
-  max-width: 420px;
-  margin-top: 16px;
+/* Character cards on the Play screen: navy glass like .card, the picked one ringed in ice. */
+.character-picker {
+  margin-top: 18px;
+  display: grid;
+  gap: 8px;
+  max-width: 560px;
+}
+
+.character-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.character-card {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  color: var(--dr-frost);
+}
+
+.character-card:hover:not(:disabled) {
+  border-color: var(--edge);
+}
+
+.character-card[aria-checked="true"] {
+  border-color: var(--dr-ice);
+  box-shadow: inset 0 0 0 1px var(--dr-ice);
+}
+
+.character-new {
+  border-style: dashed;
+}
+
+.character-full {
+  align-content: center;
+  border-style: dashed;
+}
+
+.character-label {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.character-level {
+  font-size: 13px;
+}
+
+.character-sub {
+  font-size: 12px;
+  color: var(--dr-steel);
+}
+
+.character-sub.is-online {
+  color: var(--dr-glow);
+}
+
+.character-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.big-button-sub {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  max-width: 220px;
+  margin: 2px auto 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-character {
+  color: var(--dr-steel);
+  font-weight: 500;
+}
+
+.modal-field {
+  margin-top: 12px;
 }
 
 .partner-mini {

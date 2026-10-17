@@ -52,6 +52,9 @@ import {
   requestGameSession,
   listCharacters,
   createCharacter as apiCreateCharacter,
+  renameCharacter as apiRenameCharacter,
+  deleteCharacter as apiDeleteCharacter,
+  type CharactersResult,
   type ApiFailure,
   type CharacterList,
   type RuntimeRelease,
@@ -185,7 +188,11 @@ export class Controller {
       log.info(running ? "game started" : `game exited (code ${code ?? "none"})`);
       if (!running) {
         if (code !== null && code !== 0) this.lastError = { code: "launch_failed", detail: gameExitDetail(code) };
-        void this.stopRelay().then(() => this.publish());
+        void this.stopRelay().then(() => {
+          this.publish();
+          // Level and last played changed in the session.
+          if (this.account) void this.loadCharacters(this.account);
+        });
         return;
       }
       this.publish();
@@ -293,7 +300,7 @@ export class Controller {
       account: {
         username: this.account?.username ?? (sid ? this.s.usernames[sid] ?? null : null),
         signedIn: this.account !== null,
-        characters: this.account?.characters?.slots ?? [],
+        characters: this.account?.characters?.characters ?? [],
         maxCharacters: this.account?.characters?.max ?? 1,
         character: this.account ? this.chosenCharacter() : null,
       },
@@ -747,8 +754,9 @@ export class Controller {
 
   private async loadCharacters(account: Account): Promise<void> {
     const ep = this.endpoint();
-    if (!ep) return;
-    const res = await listCharacters(ep, account.accessToken);
+    const token = ep ? await this.accessToken() : null;
+    if (!ep || !token) return;
+    const res = await listCharacters(ep, token);
     // A server from before characters answers 404: it keeps the one character.
     if (res.ok && this.account === account) {
       account.characters = res.characters;
@@ -761,15 +769,17 @@ export class Controller {
     const list = this.account?.characters;
     if (!list) return 1;
     const picked = this.account?.character;
-    return picked !== null && picked !== undefined && list.slots.includes(picked) ? picked : list.lastSlot;
+    return list.characters.some((c) => c.slot === picked) ? (picked as number) : list.lastSlot;
   }
 
   selectCharacter(slot: unknown): void {
-    if (this.account?.characters?.slots.includes(slot as number)) this.account.character = slot as number;
+    if (!this.game.running && this.account?.characters?.characters.some((c) => c.slot === slot)) this.account.character = slot as number;
     this.publish();
   }
 
-  async createCharacter(): Promise<ActionResult> {
+  // Create, rename and delete all answer with the new list. Not while the game runs: the list
+  // is locked then so Play's character cannot change under it.
+  private async characterAction(what: string, call: (ep: Endpoint, token: string) => Promise<CharactersResult>, pick?: (list: CharacterList, before: CharacterList | null) => number | null): Promise<ActionResult> {
     if (this.busy || this.task || this.game.running) return err("busy");
     const ep = this.endpoint();
     if (!ep) return this.fail("server_unreachable");
@@ -777,13 +787,28 @@ export class Controller {
       const token = await this.accessToken();
       const account = this.account;
       if (!token || !account) return this.fail(this.lastError?.code ?? "session_expired");
-      const res = await apiCreateCharacter(ep, token);
+      const res = await call(ep, token);
       if (!res.ok) return this.fail(res.error, res.detail);
+      const before = account.characters;
       account.characters = res.characters;
-      account.character = Math.max(...res.characters.slots);
-      log.info(`character ${account.character} created`);
+      if (pick) account.character = pick(res.characters, before);
+      log.info(what);
       return OK;
     });
+  }
+
+  createCharacter(label: string): Promise<ActionResult> {
+    // The new one is the slot that was not there before, and it is picked.
+    return this.characterAction("character created", (ep, token) => apiCreateCharacter(ep, token, label), (list, before) =>
+      list.characters.find((c) => !before?.characters.some((o) => o.slot === c.slot))?.slot ?? null);
+  }
+
+  renameCharacter(slot: number, label: string): Promise<ActionResult> {
+    return this.characterAction(`character ${slot} renamed`, (ep, token) => apiRenameCharacter(ep, token, slot, label));
+  }
+
+  deleteCharacter(slot: number, confirmLabel: string): Promise<ActionResult> {
+    return this.characterAction(`character ${slot} deleted`, (ep, token) => apiDeleteCharacter(ep, token, slot, confirmLabel), () => null);
   }
 
   // A current access token, refreshing when needed. null = not signed in (any more).

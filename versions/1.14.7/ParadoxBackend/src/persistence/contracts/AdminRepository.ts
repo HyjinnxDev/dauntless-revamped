@@ -45,4 +45,6 @@ export interface AdminRepository {
     appendAudit(record: AdminAuditRecord, session?: ClientSession): Promise<void>;
     listAudit(targetUserId: string | undefined, skip: number, limit: number): Promise<{ records: AdminAuditRecord[]; total: number }>;
     deletePlayerData(userId: string, audit: AdminAuditRecord): Promise<PlayerDeletionResult>;
+    /** One extra character slot's game save (never slot 1); throws when the slot is not the owner's. */
+    deleteCharacterSlot(ownerUserId: string, gameUserId: string, audit: AdminAuditRecord): Promise<PlayerDeletionResult>;
 }

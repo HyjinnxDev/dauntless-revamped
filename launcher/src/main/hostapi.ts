@@ -5,7 +5,7 @@
 import net from "node:net";
 import { Endpoint, HttpError, HttpResponse, parseJsonBody, request } from "./http";
 import { cleanText } from "../shared/status";
-import type { ErrorCode, NewsItem } from "../shared/types";
+import { CHARACTER_LABEL_MAX, type CharacterInfo, type ErrorCode, type NewsItem } from "../shared/types";
 import { CONNECT_TIMEOUT_MS, TARGET_CHANGELIST } from "./constants";
 import { UNSAFE_CHARS_MULTILINE } from "../shared/text";
 
@@ -43,6 +43,7 @@ const CODE_MAP: Record<string, ErrorCode> = {
   AUTH_TESTER_REQUIRED: "runtime_rejected",
   CHARACTER_LIMIT_REACHED: "character_limit",
   CHARACTER_IN_USE: "character_in_use",
+  CHARACTER_GUILD_LEADER: "character_guild_leader",
 };
 
 export function apiFailure(res: HttpResponse): ApiFailure {
@@ -207,7 +208,7 @@ export interface RuntimeArtifact {
 export interface CharacterList {
   max: number;
   lastSlot: number; // the one played last
-  slots: number[];
+  characters: CharacterInfo[];
 }
 
 export type CharactersResult = { ok: true; characters: CharacterList } | ApiFailure;
@@ -217,25 +218,41 @@ function parseCharacters(res: HttpResponse): CharactersResult {
   const body = parseJsonBody(res);
   const slot = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 32;
   if (!isObject(body) || !slot(body.max) || !slot(body.lastSlot) || !Array.isArray(body.characters)) return { ok: false, error: "server_error" };
-  const slots = body.characters.map((c) => (isObject(c) ? c.slot : undefined)).filter(slot);
-  return { ok: true, characters: { max: body.max, lastSlot: body.lastSlot, slots } };
+  const characters: CharacterInfo[] = [];
+  for (const c of body.characters.slice(0, 32)) {
+    if (!isObject(c) || !slot(c.slot) || characters.some((o) => o.slot === c.slot)) continue;
+    const played = typeof c.lastPlayedAt === "string" && Number.isFinite(Date.parse(c.lastPlayedAt)) ? c.lastPlayedAt : null;
+    characters.push({
+      slot: c.slot,
+      label: cleanText(c.label, CHARACTER_LABEL_MAX) ?? `${c.slot}`,
+      level: Number.isInteger(c.level) && (c.level as number) >= 0 && (c.level as number) < 1000 ? (c.level as number) : 1,
+      lastPlayedAt: played,
+      online: c.online === true,
+    });
+  }
+  characters.sort((a, b) => a.slot - b.slot);
+  return { ok: true, characters: { max: body.max, lastSlot: body.lastSlot, characters } };
 }
 
-export async function listCharacters(ep: Endpoint, accessToken: string): Promise<CharactersResult> {
+async function characterCall(ep: Endpoint, accessToken: string, path: string, method: "GET" | "POST" | "PATCH" | "DELETE", body?: Record<string, unknown>): Promise<CharactersResult> {
   try {
-    return parseCharacters(await request(ep, "/launcher/v1/characters", { headers: bearer(accessToken), timeoutMs: 15000, maxBytes: 64 * 1024 }));
+    return parseCharacters(await request(ep, path, { method, headers: bearer(accessToken), ...(body ? { body: JSON.stringify(body) } : {}), timeoutMs: 15000, maxBytes: 64 * 1024 }));
   } catch (e) {
     return networkFailure(e);
   }
 }
 
-export async function createCharacter(ep: Endpoint, accessToken: string): Promise<CharactersResult> {
-  try {
-    return parseCharacters(await request(ep, "/launcher/v1/characters", { method: "POST", headers: bearer(accessToken), body: "{}", timeoutMs: 15000, maxBytes: 64 * 1024 }));
-  } catch (e) {
-    return networkFailure(e);
-  }
-}
+export const listCharacters = (ep: Endpoint, accessToken: string) => characterCall(ep, accessToken, "/launcher/v1/characters", "GET");
+
+export const createCharacter = (ep: Endpoint, accessToken: string, label: string) =>
+  characterCall(ep, accessToken, "/launcher/v1/characters", "POST", { label });
+
+export const renameCharacter = (ep: Endpoint, accessToken: string, slot: number, label: string) =>
+  characterCall(ep, accessToken, `/launcher/v1/characters/${slot}`, "PATCH", { label });
+
+// Permanent on the server: the character's whole game save. confirmLabel must repeat its label.
+export const deleteCharacter = (ep: Endpoint, accessToken: string, slot: number, confirmLabel: string) =>
+  characterCall(ep, accessToken, `/launcher/v1/characters/${slot}`, "DELETE", { confirmLabel });
 
 // voice: the party voice relay's ticket and UDP port, when the server runs one.
 // gameUserId: the id the game logs in as (the chosen character's); servers without characters leave it out.

@@ -26,6 +26,28 @@ export interface CharacterSlotRow {
     slot: number;           // 1-based
     createdAt: string;
     lastLaunchedAt?: string;
+    label?: string;         // launcher-only name; the game always shows the account name
+}
+
+export const MAX_LABEL_LENGTH = 24;
+
+/** A trimmed label, or undefined when it is empty, too long or has characters outside the allowed set. */
+export function CleanLabel(raw: unknown): string | undefined {
+    if (typeof raw !== "string") return undefined;
+    const Label = raw.normalize("NFC").replace(/\s+/g, " ").trim();
+    return Label.length >= 1 && Label.length <= MAX_LABEL_LENGTH && /^[\p{L}\p{N} '\-_.!?&()]+$/u.test(Label) ? Label : undefined;
+}
+
+/** What the launcher shows and a delete must repeat. Older rows without a label get the English default. */
+export function LabelOf(row: Pick<CharacterSlotRow, "slot" | "label">): string {
+    return row.label ?? `Character ${row.slot}`;
+}
+
+/** The level a track shows for this much XP: the highest rank whose cumulative cost is covered. */
+export function RankForXp(cumulativeXpForRank: Map<number, number>, xp: number): number {
+    let Rank = 0;
+    for (const [Id, Needed] of cumulativeXpForRank) if (xp >= Needed && Id > Rank) Rank = Id;
+    return Rank;
 }
 
 export function MaxCharacterSlots(): number {
@@ -58,11 +80,11 @@ export async function ListSlots(ownerUserId: string): Promise<CharacterSlotRow[]
 
 /** Inserts the next slot row; undefined when the account is at the limit. The unique
  *  (ownerUserId, slot) index turns a double-click race into a duplicate-key error. */
-export async function InsertNextSlot(ownerUserId: string): Promise<CharacterSlotRow | undefined> {
+export async function InsertNextSlot(ownerUserId: string, label?: string): Promise<CharacterSlotRow | undefined> {
     const Used = (await ListSlots(ownerUserId)).map((Row) => Row.slot);
     const Slot = NextSlot(Used, MaxCharacterSlots());
     if (Slot === undefined) return undefined;
-    const Row: CharacterSlotRow = { _id: crypto.randomUUID(), ownerUserId, slot: Slot, createdAt: new Date().toISOString() };
+    const Row: CharacterSlotRow = { _id: crypto.randomUUID(), ownerUserId, slot: Slot, createdAt: new Date().toISOString(), label: label ?? `Character ${Slot}` };
     await (await Slots()).insertOne(Row);
     return Row;
 }
@@ -76,6 +98,15 @@ export async function MarkLaunched(ownerUserId: string, row: CharacterSlotRow): 
         { upsert: true }
     );
     return Previous;
+}
+
+/** Slot 1 has no row until it is launched or named, hence the upsert. */
+export async function SetLabel(ownerUserId: string, row: CharacterSlotRow, label: string): Promise<void> {
+    await (await Slots()).updateOne(
+        { _id: row._id },
+        { $set: { ownerUserId, slot: row.slot, label }, $setOnInsert: { createdAt: row.createdAt || new Date().toISOString() } },
+        { upsert: true }
+    );
 }
 
 /** owner -> the character they launched last (what friends see). Owners never launched map to themselves. */
