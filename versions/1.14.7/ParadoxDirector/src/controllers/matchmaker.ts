@@ -10,13 +10,16 @@
  */
 
 import { logger } from "../logger";
-import { GetRamsgateConnectionDetails, GetTrainingDojoConnectionDetails, StartupGameserverWithArgs, StartupGameserverWithHuntIdAndPlayers, TryReuseSharedHuntServer } from "./gameservers";
+import { GetRamsgateConnectionDetails, GetTrainingDojoConnectionDetails, StartupGameserverWithArgs, StartupGameserverWithHuntIdAndPlayers, StartupHideSeekServer, TryReuseSharedHuntServer } from "./gameservers";
 
 export async function HandleMatchmakingRequest(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined){
     logger.info(`Handling matchmaking with GameMode: ${GameMode} HuntId: ${HuntId} and GameArgs: ${GameArgs}`);
 
     if(GameMode === "CITY"){
         return GetRamsgateConnectionDetails();
+    }
+    else if(GameMode === "HIDESEEK" && ExpectedPlayers != undefined && ExpectedPlayers.length > 0){
+        return await StartupHideSeekServer(ExpectedPlayers);
     }
     else if(GameMode === "SHARED"){
         if (HuntId != undefined && HuntId.trim().length > 0){

@@ -42,6 +42,7 @@ import { sanitizeUrlForLog } from "./security/logRedaction.js";
 import { RequestRateLimitOptions } from "./security/rateLimit.js";
 import { GetRequestId, RequestContextMiddleware } from "./observability/requestContext.js";
 import { launcherGuardRouter } from "./routes/launcherGuard.js";
+import { hideSeekRouter } from "./hideSeek.js";
 import { GetPersistenceLifecycle } from "./persistence";
 import { GetServiceReadiness } from "./observability/serviceReadiness";
 import { ReadMetagameServiceRole } from "./config/serviceRole";
@@ -249,6 +250,7 @@ app.use("/admin", (_req, res, next) => {
 }, express.static(path.resolve(__dirname, "..", "admin-ui")));
 Extension.http.mountRoutes(app);
 app.use("/", launcherGuardRouter);
+app.use("/", hideSeekRouter);
 
 app.use((req, res) => {
     // ponytail: capture probe for the unknown Trials run-submit contract (SubmitLeaderboardsInfo ->

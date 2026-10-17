@@ -14,6 +14,7 @@ import { GetRequestId, REQUEST_ID_HEADER } from "../observability/requestContext
 import crypto from "node:crypto";
 import { GetP2PExtension } from "../extensions/p2p";
 import { LateJoinBlockReason, LateJoinHuntState } from "../matchmakingParty";
+import { TakeHideSeek, TrackHideSeekServer } from "../hideSeek";
 
 const MATCHMAKING_MODE = process.env.MATCHMAKING_MODE;
 const DEPLOYSERVER_URL = process.env.DEPLOYSERVER_URL;
@@ -356,11 +357,13 @@ async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId:
         return true;
     }
 
-    const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, PartyMembers);
+    const HideSeek = TakeHideSeek(PartyId);
+    const GameOnDeployServer = await LaunchGameOnDeployserver(HideSeek ? "HIDESEEK" : "ISLAND", "", HuntId, PartyMembers);
 
     if(!GameOnDeployServer.succeeded){
         return false;
     }
+    if(HideSeek) TrackHideSeekServer(GameOnDeployServer.port, PartyId);
 
     const CandidateId = crypto.randomUUID();
     const SharedResult: MatchmakingResult = {

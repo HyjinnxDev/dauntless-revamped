@@ -12,6 +12,7 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <winhttp.h>   // HideSeek::Say (winhttp.lib is linked by CrashReporter.cpp)
 #include <tlhelp32.h>
 #include <string>
 #include <set>
@@ -4813,6 +4814,7 @@ static void MpNetIdContractProbe();                    // [1.14.7 genuine net-id
 static void MpCaptureGenuineNetIdType();               // [1.14.7 synthetic net-id type capture]
 static void MpVoiceProximityTick();                    // [1.14.7 hub proximity voice reports]
 static void MpHuntJoinTick();                          // [join-in-progress rescale + hunt state report]
+static void MpHideSeekTick();                          // [hide-and-seek round, HideSeek::Tick]
 static bool IsClientRolePumpPossessionStable(UObject* PC, UObject** OutPawn);
 static void TickFrankDroneClientDiag(void* Pawn, const char* Trigger);
 static std::string FrankDroneGateSummary(void* PlayerRole);
@@ -5774,6 +5776,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     MpDriveReplicationGraph(DeltaTime);
     if (Globals::AmServer) MpVoiceProximityTick();
     if (Globals::AmServer) MpHuntJoinTick();
+    if (Globals::AmServer) MpHideSeekTick();
 
     // [2026-07-20] Server-side skeletal pose/socket fix (FORCE_SERVER_MESH_POSE.flag). Server-only; the
     // helper self-throttles + no-ops unless the flag is present. See its definition above.
@@ -12492,6 +12495,254 @@ static void MpServerProjectileTickFix(UObject* Object, const std::string& Functi
     if (s_logged.fetch_add(1) < 20) MpLog("[ProjTickFix] enabled tick on " + SafeObjectNameForDiagnostic(Object));
 }
 
+// [hide-and-seek 2026-10-17] Private hide-and-seek round. Server only, on islands the Director starts with
+// MYSTICPARADOX_HIDESEEK=1 (backend hideSeek.ts arms a party with /hideseek). Once the party is in (everyone on the
+// launch roster, or 2+ players 60 s after the first), a random seeker is held in place for 60 s while the rest hide,
+// then the seekers have 10 minutes. A seeker's melee swing catches every hider within 3 m, 60 deg of facing and
+// 1.5 m of height (tuned from the 2026-10-17 probe: real swings landed at 1.4-3.0 m, 1-14 deg); the caught hider
+// becomes a seeker, and anyone joining after the start is one too. Behemoths are removed every 3 s. Nothing in game
+// marks who is caught: every event goes to the backend (POST /hideseek/v1/event), which shows it in party chat.
+namespace HideSeek {
+    enum class Phase { Waiting, Hiding, Seeking, Over };
+    constexpr ULONGLONG kHideMs = 60000, kSeekMs = 600000;
+    constexpr ULONGLONG kArrivalMs = 12000;   // ponytail: the island arrival flyover's length, measured by eye; tune here
+    constexpr float kReachCm = 300.f, kHeightCm = 150.f, kHalfAngleDeg = 60.f;
+
+    static Phase s_Phase = Phase::Waiting;
+    static ULONGLONG s_PhaseEnd = 0, s_FirstSeen = 0;
+    static std::unordered_set<void*> s_Seekers, s_Known;   // PlayerState pointers (identity only, never dereferenced)
+    static SDK::FVector s_Hold{};
+    static int s_Warned = 0;   // which "time left" lines went out this phase
+
+    static bool On() {
+        static const bool s_on = [] { std::string V; return Globals::AmServer && MpReadEnvironment("MYSTICPARADOX_HIDESEEK", V, 8) && V == "1"; }();
+        return s_on;
+    }
+
+    static std::string Name(SDK::APawn* P) {
+        std::string N = P->PlayerState->PlayerNamePrivate.ToString();
+        return N.empty() ? "A slayer" : N;
+    }
+
+    static std::vector<SDK::APawn*> Players(SDK::UObject* WorldContext) {
+        static auto* s_Found = new SDK::TArray<SDK::AActor*>();   // engine-allocated storage, never freed (exit-safe)
+        SDK::UGameplayStatics::GetAllActorsOfClass(WorldContext, SDK::AArchonCharacter::StaticClass(), s_Found);
+        std::vector<SDK::APawn*> Out;
+        for (int32_t i = 0; i < s_Found->Num(); ++i) {
+            auto* P = static_cast<SDK::APawn*>((*s_Found)[i]);
+            if (P && P->PlayerState && IsRegisteredLiveObject(P->PlayerState)) Out.push_back(P);
+        }
+        return Out;
+    }
+
+    static std::vector<std::string> s_SeekerNames, s_HiderNames;   // last snapshot, sent as the round state
+
+    static void Snapshot(const std::vector<SDK::APawn*>& Ps) {
+        s_SeekerNames.clear(); s_HiderNames.clear();
+        for (auto* P : Ps) (s_Seekers.count(P->PlayerState) ? s_SeekerNames : s_HiderNames).push_back(Name(P));
+    }
+
+    static std::string Json(const std::string& S) {
+        std::string Out = "\"";
+        for (char C : S) {
+            if (C == '"' || C == '\\') Out += '\\';
+            if (static_cast<unsigned char>(C) >= 0x20) Out += C;
+        }
+        return Out + "\"";
+    }
+
+    // Fire-and-forget POST of the round state (+ a chat/alert line) so the game thread never waits on the backend.
+    static void Post(const std::string* Text, bool End) {
+        if (Text) MpLog("[HideSeek] say: " + *Text);
+        if (!Globals::ServerAPIKey) return;
+        static const char* kPhase[] = { "waiting", "hiding", "seeking", "over" };
+        const ULONGLONG Now = GetTickCount64();
+        auto List = [&](const std::vector<std::string>& V) {
+            std::string Out = "[";
+            for (const auto& N : V) Out += (Out.size() > 1 ? "," : "") + Json(N);
+            return Out + "]";
+        };
+        std::string Body = "{\"port\":" + std::to_string(Globals::Port) + ",\"end\":" + (End ? "true" : "false")
+            + ",\"state\":{\"phase\":\"" + kPhase[static_cast<int>(s_Phase)] + "\",\"left\":"
+            + std::to_string(s_PhaseEnd > Now ? (s_PhaseEnd - Now + 999) / 1000 : 0)
+            + ",\"seekers\":" + List(s_SeekerNames) + ",\"hiders\":" + List(s_HiderNames) + "}"
+            + (Text ? ",\"text\":" + Json(*Text) : std::string()) + "}";
+        std::thread([Url = MpApiBase() + L"/hideseek/v1/event", Key = std::wstring(Globals::ServerAPIKey), Body] {
+            wchar_t Host[256]{}, Path[512]{};
+            URL_COMPONENTS Parts{ sizeof(Parts) };
+            Parts.lpszHostName = Host; Parts.dwHostNameLength = 256;
+            Parts.lpszUrlPath = Path; Parts.dwUrlPathLength = 512;
+            if (!WinHttpCrackUrl(Url.c_str(), 0, 0, &Parts)) return;
+            HINTERNET Session = WinHttpOpen(L"MysticParadoxHideSeek/1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, nullptr, nullptr, 0);
+            HINTERNET Connect = Session ? WinHttpConnect(Session, Host, Parts.nPort, 0) : nullptr;
+            HINTERNET Request = Connect ? WinHttpOpenRequest(Connect, L"POST", Path, nullptr, WINHTTP_NO_REFERER,
+                WINHTTP_DEFAULT_ACCEPT_TYPES, Parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) : nullptr;
+            DWORD Status = 0, StatusSize = sizeof(Status);
+            if (Request) {
+                WinHttpSetTimeouts(Request, 3000, 3000, 5000, 5000);
+                const std::wstring Headers = L"Content-Type: application/json\r\nx-mysticparadox-gameserver-apikey: " + Key + L"\r\n";
+                if (WinHttpSendRequest(Request, Headers.c_str(), static_cast<DWORD>(-1), const_cast<char*>(Body.data()),
+                        static_cast<DWORD>(Body.size()), static_cast<DWORD>(Body.size()), 0)
+                    && WinHttpReceiveResponse(Request, nullptr)) {
+                    WinHttpQueryHeaders(Request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                        WINHTTP_HEADER_NAME_BY_INDEX, &Status, &StatusSize, WINHTTP_NO_HEADER_INDEX);
+                }
+                WinHttpCloseHandle(Request);
+            }
+            if (Connect) WinHttpCloseHandle(Connect);
+            if (Session) WinHttpCloseHandle(Session);
+            if (Status != 204) MpLog("[HideSeek] event post failed status=" + std::to_string(Status));
+        }).detach();
+    }
+    static void Say(const std::string& Text, bool End = false) { Post(&Text, End); }
+
+    static std::string HiderNames() {
+        std::string Out;
+        for (const auto& N : s_HiderNames) Out += (Out.empty() ? "" : ", ") + N;
+        return Out;
+    }
+
+    // The clients show the result and take everyone back to Ramsgate when this 10 s timer runs out.
+    static void Finish(const std::string& Text) {
+        s_Phase = Phase::Over;
+        s_PhaseEnd = GetTickCount64() + 10000;
+        Say(Text + " Back to Ramsgate in 10 seconds.", true);
+    }
+
+    // Seeker melee swing -> catch hiders in reach. Called from ProcessEvent for player DamageComponent montages.
+    static void OnMontage(UObject* Object, const std::string& FunctionName, void* Parms) {
+        if (!On() || !Object || !Parms || FunctionName.find("Archon.DamageComponent.OnMontageStarted") == std::string::npos) return;
+        UObject* Owner = Object->Outer;
+        if (!Owner || !Owner->IsA(SDK::AArchonCharacter::StaticClass())) return;
+        auto* Me = static_cast<SDK::APawn*>(static_cast<void*>(Owner));
+        if (!Me->PlayerState || !IsReadablePointer(Parms, sizeof(Params::DamageComponent_OnMontageStarted))) return;
+        SDK::UAnimMontage* Montage = static_cast<Params::DamageComponent_OnMontageStarted*>(Parms)->Montage;
+        const std::string Anim = Montage ? Montage->GetName() : std::string("-");
+        const bool Swing = Anim.find("_melee_") != std::string::npos && Anim.find("sheathe") == std::string::npos;
+        if (s_Phase != Phase::Seeking || !s_Seekers.count(Me->PlayerState)) return;
+
+        const SDK::FVector At = Me->K2_GetActorLocation(), Fwd = Me->GetActorForwardVector();
+        const float FwdLen = sqrtf(Fwd.X * Fwd.X + Fwd.Y * Fwd.Y);
+        std::string Line = "[HideSeek] seeker " + Name(Me) + " " + Anim + (Swing ? " (swing)" : "");
+        const auto Ps = Players(Me);
+        std::vector<SDK::APawn*> Caught;
+        for (auto* P : Ps) {
+            if (s_Seekers.count(P->PlayerState)) continue;
+            const SDK::FVector T = P->K2_GetActorLocation();
+            const float Dx = T.X - At.X, Dy = T.Y - At.Y, Dz = T.Z - At.Z, Flat = sqrtf(Dx * Dx + Dy * Dy);
+            const float Cos = (Flat > 1.f && FwdLen > 0.01f) ? (Dx * Fwd.X + Dy * Fwd.Y) / (Flat * FwdLen) : 1.f;
+            const float Angle = acosf((std::clamp)(Cos, -1.f, 1.f)) * 57.2958f, Dist = sqrtf(Flat * Flat + Dz * Dz);
+            char B[160];
+            sprintf_s(B, " | %s %.1fm %.0fdeg dz=%.1fm", Name(P).c_str(), Dist / 100.f, Angle, Dz / 100.f);
+            Line += B;
+            if (Swing && Dist <= kReachCm && fabsf(Dz) <= kHeightCm && Angle <= kHalfAngleDeg) Caught.push_back(P);
+        }
+        MpLog(Line);
+        for (auto* P : Caught) {
+            s_Seekers.insert(P->PlayerState);
+            Snapshot(Ps);
+            const std::string Found = Name(Me) + " found " + Name(P) + "!";
+            if (s_HiderNames.empty()) { Finish(Found + " Everyone was found - seekers win!"); break; }
+            else Say(Found + " " + std::to_string(s_HiderNames.size()) + " still hiding.");
+        }
+    }
+
+    static void Tick() {
+        if (!On()) return;
+        static ULONGLONG s_Next = 0, s_NextPurge = 0;
+        const ULONGLONG Now = GetTickCount64();
+        if (Now < s_Next) return;
+        s_Next = Now + 100;
+        SDK::UWorld* World = SDK::UWorld::GetWorld();
+        if (!World || s_Phase == Phase::Over) return;
+
+        if (Now >= s_NextPurge) {   // the island keeps spawning wildlife behemoths; none belong in this mode
+            s_NextPurge = Now + 3000;
+            static auto* s_Beh = new SDK::TArray<SDK::AActor*>();
+            SDK::UGameplayStatics::GetAllActorsOfClass(World, SDK::AArchonBehemoth::StaticClass(), s_Beh);
+            for (int32_t i = 0; i < s_Beh->Num(); ++i) if ((*s_Beh)[i]) (*s_Beh)[i]->K2_DestroyActor();
+            if (s_Beh->Num() > 0) MpLog("[HideSeek] removed " + std::to_string(s_Beh->Num()) + " behemoth(s)");
+        }
+
+        const auto Ps = Players(World);
+        std::unordered_set<void*> Present;
+        for (auto* P : Ps) Present.insert(P->PlayerState);
+        std::erase_if(s_Seekers, [&](void* S) { return !Present.count(S); });   // left the island
+        Snapshot(Ps);
+        static ULONGLONG s_NextPush = 0;
+        if (Now >= s_NextPush) { s_NextPush = Now + 2000; Post(nullptr, false); }   // keeps the clients' timer fed
+
+        if (s_Phase == Phase::Waiting) {
+            if (Ps.empty()) return;
+            if (!s_FirstSeen) s_FirstSeen = Now;
+            static size_t s_Count = 0;
+            static ULONGLONG s_LastJoin = 0;
+            if (Ps.size() > s_Count) s_LastJoin = Now;   // a pawn appears as its arrival flyover starts
+            s_Count = Ps.size();
+            const int Expected = LaunchExpectedPlayerCount();
+            const bool AllIn = Expected >= 2 && static_cast<int>(Ps.size()) >= Expected;
+            // Start once the last arrival's flyover is over (it ate ~10 s of hiding time, 2026-10-17).
+            s_PhaseEnd = s_LastJoin + kArrivalMs;
+            if (Ps.size() < 2 || (!AllIn && Now - s_FirstSeen < 60000) || Now < s_PhaseEnd) {
+                if (Ps.size() < 2 && Now - s_FirstSeen >= 60000 && s_Warned == 0) { s_Warned = 1; Say("Hide and seek needs at least 2 players."); }
+                return;
+            }
+            SDK::APawn* Seeker = Ps[GetTickCount64() % Ps.size()];
+            s_Seekers = { Seeker->PlayerState };
+            s_Known = Present;
+            s_Hold = Seeker->K2_GetActorLocation();
+            s_Phase = Phase::Hiding;
+            s_PhaseEnd = Now + kHideMs;
+            s_Warned = 0;
+            Snapshot(Ps);
+            Say("Hide and seek! " + Name(Seeker) + " is the seeker. Everyone else has 60 seconds to hide!");
+            return;
+        }
+
+        for (auto* P : Ps) {   // joined after the start: a seeker
+            if (s_Known.insert(P->PlayerState).second) {
+                s_Seekers.insert(P->PlayerState);
+                Snapshot(Ps);
+                Say(Name(P) + " joined as a seeker.");
+            }
+        }
+        if (s_Seekers.empty()) { Finish("The seekers left. Hiders win!"); return; }
+
+        auto Movement = [](SDK::APawn* P) {
+            return P->IsA(SDK::ACharacter::StaticClass()) ? static_cast<SDK::ACharacter*>(P)->CharacterMovement : nullptr;
+        };
+        if (s_Phase == Phase::Hiding) {
+            for (auto* P : Ps) {   // hold the seeker(s) where the round started; the client freezes them too
+                if (!s_Seekers.count(P->PlayerState)) continue;
+                if (auto* M = Movement(P); M && M->MovementMode != SDK::EMovementMode::MOVE_None) M->DisableMovement();
+                const SDK::FVector L = P->K2_GetActorLocation();
+                const float Dx = L.X - s_Hold.X, Dy = L.Y - s_Hold.Y;
+                static SDK::FHitResult s_Hit;
+                if (Dx * Dx + Dy * Dy > 25.f * 25.f) P->K2_SetActorLocation(s_Hold, false, &s_Hit, true);
+            }
+            if (s_PhaseEnd - Now <= 10000 && s_Warned == 0) { s_Warned = 1; Say("10 seconds left to hide!"); }
+            if (Now < s_PhaseEnd) return;
+            for (auto* P : Ps) {
+                if (auto* M = Movement(P); M && M->MovementMode == SDK::EMovementMode::MOVE_None)
+                    M->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0);
+            }
+            s_Phase = Phase::Seeking;
+            s_PhaseEnd = Now + kSeekMs;
+            s_Warned = 0;
+            Say("Ready or not, here they come! Seekers have 10 minutes. Hit a hider with a melee attack to catch them.");
+            return;
+        }
+
+        const std::string Hiders = HiderNames();
+        if (Hiders.empty()) { Finish("Everyone was found - seekers win!"); return; }
+        if (Now >= s_PhaseEnd) { Finish("Time's up! Hiders win: " + Hiders + "."); return; }
+        const ULONGLONG Left = s_PhaseEnd - Now;
+        if (Left <= 300000 && s_Warned == 0) { s_Warned = 1; Say("5 minutes left. Still hiding: " + Hiders + "."); }
+        if (Left <= 60000 && s_Warned == 1) { s_Warned = 2; Say("1 minute left!"); }
+    }
+}
+static void MpHideSeekTick() { HideSeek::Tick(); }
+
 // [1.14.7 2026-10-17 HUNT COMBAT LOG] "Behemoth attacks don't feel right". Read-only, server only: one file per hunt
 // process (<exe dir>\HuntCombat\hunt_<start>_port<N>.log, created on the first behemoth event, so hubs write none):
 //   montage  - a behemoth DamageComponent saw a montage start (= an attack began)
@@ -13665,6 +13916,475 @@ static void Tick() {
 
 }  // namespace CineCam
 
+// [hide-and-seek 2026-10-17] Client half of the round (server half: HideSeek). On a Hunting Grounds island the client
+// asks the backend for its round by player name once a second (GET /hideseek/v1/state). While one runs: the gameplay
+// HUD and every name plate stay hidden (the Esc menu and chat still work); the game's own widgets show the round (Ui
+// below: its Gauntlet timer, area banner and HUD font); a seeker sees black and is frozen until release; seekers get the
+// game's custom-depth outline (stencil MYSTICPARADOX_HIDESEEK_STENCIL, default 1: tune it until the outline reads red);
+// and when the end timer runs out every client travels to Ramsgate, the party leader taking the party.
+namespace HideSeekClient {
+
+using BehemothHealthBar::Ref;
+
+struct Fetched {
+    bool Have = false;
+    int Phase = 0, Left = 0, Hiders = 0, Seekers = 0, AlertId = 0;
+    bool Seeker = false;
+    std::vector<std::string> SeekerNames;
+    std::string Alert;
+    ULONGLONG At = 0;   // when it arrived; Left counts from here
+};
+static std::mutex s_Lock;
+static Fetched s_F;
+static std::atomic<bool> s_Busy{ false };
+static Ref s_PC;
+static bool s_Active = false, s_InputOff = false, s_Traveled = false;
+static ULONGLONG s_NextPoll = 0, s_NextHide = 0, s_NextOutline = 0;
+static int s_LastAlert = -1;
+static std::unordered_set<SDK::UObject*> s_Outlined;
+static volatile bool s_Faulted = false;
+
+static void Fetch(std::wstring Url) {
+    std::string Body;
+    DWORD Status = 0, StatusSize = sizeof(Status);
+    wchar_t Host[256]{}, Path[1024]{};
+    URL_COMPONENTS Parts{ sizeof(Parts) };
+    Parts.lpszHostName = Host; Parts.dwHostNameLength = 256;
+    Parts.lpszUrlPath = Path; Parts.dwUrlPathLength = 1024;
+    Parts.dwExtraInfoLength = 1;   // the query stays on the path
+    if (WinHttpCrackUrl(Url.c_str(), 0, 0, &Parts)) {
+        HINTERNET Session = WinHttpOpen(L"MysticParadoxHideSeek/1", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, nullptr, nullptr, 0);
+        HINTERNET Connect = Session ? WinHttpConnect(Session, Host, Parts.nPort, 0) : nullptr;
+        const std::wstring Target = std::wstring(Path) + (Parts.lpszExtraInfo ? std::wstring(Parts.lpszExtraInfo, Parts.dwExtraInfoLength) : L"");
+        HINTERNET Request = Connect ? WinHttpOpenRequest(Connect, L"GET", Target.c_str(), nullptr, WINHTTP_NO_REFERER,
+            WINHTTP_DEFAULT_ACCEPT_TYPES, Parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0) : nullptr;
+        if (Request) {
+            WinHttpSetTimeouts(Request, 2000, 2000, 3000, 3000);
+            if (WinHttpSendRequest(Request, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0)
+                && WinHttpReceiveResponse(Request, nullptr)) {
+                WinHttpQueryHeaders(Request, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                    WINHTTP_HEADER_NAME_BY_INDEX, &Status, &StatusSize, WINHTTP_NO_HEADER_INDEX);
+                char Chunk[2048];
+                DWORD Read = 0;
+                while (Body.size() < 8192 && WinHttpReadData(Request, Chunk, sizeof(Chunk), &Read) && Read > 0) Body.append(Chunk, Read);
+            }
+            WinHttpCloseHandle(Request);
+        }
+        if (Connect) WinHttpCloseHandle(Connect);
+        if (Session) WinHttpCloseHandle(Session);
+    }
+    Fetched F;
+    F.At = GetTickCount64();
+    if (Status == 200) {
+        F.Have = true;
+        std::istringstream In(Body);
+        for (std::string Line; std::getline(In, Line);) {
+            const size_t Eq = Line.find('=');
+            if (Eq == std::string::npos) continue;
+            const std::string K = Line.substr(0, Eq), V = Line.substr(Eq + 1);
+            if (K == "phase") F.Phase = V == "hiding" ? 1 : V == "seeking" ? 2 : V == "over" ? 3 : 0;
+            else if (K == "left") F.Left = atoi(V.c_str());
+            else if (K == "role") F.Seeker = V == "seeker";
+            else if (K == "hiders") F.Hiders = atoi(V.c_str());
+            else if (K == "seekers") F.Seekers = atoi(V.c_str());
+            else if (K == "seekernames") {
+                std::istringstream Ns(V);
+                for (std::string N; std::getline(Ns, N, '\t');) if (!N.empty()) F.SeekerNames.push_back(N);
+            } else if (K == "alert") {
+                const size_t Tab = V.find('\t');
+                F.AlertId = atoi(V.c_str());
+                F.Alert = Tab == std::string::npos ? "" : V.substr(Tab + 1);
+            }
+        }
+    }
+    if (Status == 200 || Status == 404) { std::lock_guard<std::mutex> Lk(s_Lock); s_F = F; }   // anything else: keep the last answer
+    s_Busy = false;
+}
+
+static std::wstring UrlEncode(const std::string& S) {
+    std::wstring Out;
+    for (unsigned char C : S) {
+        if (isalnum(C) || C == '-' || C == '_' || C == '.') Out += static_cast<wchar_t>(C);
+        else { wchar_t B[4]; swprintf_s(B, L"%%%02X", C); Out += B; }
+    }
+    return Out;
+}
+
+static SDK::AArchonHUD* Hud(SDK::APlayerController* PC) {
+    SDK::AHUD* H = PC->MyHUD;
+    return H && H->IsA(SDK::AArchonHUD::StaticClass()) ? static_cast<SDK::AArchonHUD*>(H) : nullptr;
+}
+
+// HideGameplayHUD leaves name plates and interaction callouts up (CineCam HideExtras); chat stays, it carries the round.
+static void SetPlates(SDK::UWorld* World, float Opacity) {
+    static auto* s_Found = new SDK::TArray<SDK::UUserWidget*>();   // engine-allocated storage, never freed (exit-safe)
+    for (SDK::UClass* C : { SDK::UNamePlatesWidget::StaticClass(), SDK::UNPC_NamePlates_C::StaticClass(),
+                            SDK::UInteractionCalloutWidget::StaticClass(), SDK::Ubutton_hold_callout_bpw_C::StaticClass() }) {
+        if (!C) continue;
+        SDK::UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World, s_Found, C, false);
+        for (int32_t i = 0; i < s_Found->Num(); ++i) if (auto* W = (*s_Found)[i]; W && W->RenderOpacity != Opacity) W->SetRenderOpacity(Opacity);
+    }
+}
+
+static int Stencil() {
+    static const int s_V = [] { std::string V; return MpReadEnvironment("MYSTICPARADOX_HIDESEEK_STENCIL", V, 8) ? atoi(V.c_str()) : 1; }();
+    return s_V;
+}
+
+static void Outline(SDK::APawn* P, bool On) {
+    if (!P->IsA(SDK::ABP_PlayerCharacter_C::StaticClass())) return;
+    if (On == static_cast<bool>(s_Outlined.count(P))) return;
+    static_cast<SDK::ABP_PlayerCharacter_C*>(P)->SetCustomDepthStencil(On, On ? Stencil() : 0);
+    if (On) s_Outlined.insert(P); else s_Outlined.erase(P);
+}
+
+static SDK::UCharacterMovementComponent* Movement(SDK::APawn* P) {
+    return P && P->IsA(SDK::ACharacter::StaticClass()) ? static_cast<SDK::ACharacter*>(P)->CharacterMovement : nullptr;
+}
+
+// A waiting seeker: movement goes through the controller in this game, so pawn input alone does not stop it.
+// Ignore move input on the controller, keep the pawn's input off, and stop its movement (the server does too).
+static void Freeze(SDK::APlayerController* PC, bool On) {
+    PC->SetIgnoreMoveInput(On);   // a counter in the engine: every On is paired with an Off
+    if (On) PC->Pawn->DisableInput(PC); else PC->Pawn->EnableInput(PC);
+    if (auto* M = Movement(PC->Pawn)) { if (On) M->DisableMovement(); else M->SetMovementMode(SDK::EMovementMode::MOVE_Walking, 0); }
+    s_InputOff = On;
+}
+
+// The game puts movement back after landing, abilities and the like: stop it again while frozen.
+static void Hold(SDK::APlayerController* PC) {
+    if (auto* M = Movement(PC->Pawn); M && M->MovementMode != SDK::EMovementMode::MOVE_None) M->DisableMovement();
+}
+
+// The round on screen, built from the game's own widgets so it reads as part of the game: the Gauntlet timer (found by
+// class name: the HUD keeps it loaded; a label in the HUD font if not), the area banner for alerts, and HUD-font labels
+// for the counts, role and the big 3-2-1. A waiting seeker's black is a solid widget under the game's menus (z -100),
+// so the Esc menu still shows on top of it.
+namespace Ui {
+static Ref s_Black, s_Timer, s_Clock, s_Counts, s_Role, s_Big, s_BlackTitle, s_BlackSub, s_Banner;
+static Ref s_TimerCls, s_BannerCls, s_LabelCls, s_BarCls;
+static bool s_Built = false;
+static ULONGLONG s_BannerUntil = 0, s_SeekSince = 0;
+static int s_LastPhase = -1;
+static std::unordered_map<SDK::UObject*, std::wstring> s_Texts;   // last text per block: SetText only on change
+static const SDK::FLinearColor kWhite{ 1.f, 1.f, 1.f, 1.f }, kRed{ 0.95f, 0.16f, 0.1f, 1.f }, kBlack{ 0.f, 0.f, 0.f, 1.f };
+static const SDK::FVector2D kTop{ 0.5f, 0.f }, kMid{ 0.5f, 0.5f };
+
+static SDK::UClass* ByName(Ref& Cache, const wchar_t* Name) {
+    if (auto* C = Cache.Get<SDK::UClass>()) return C;
+    const int32_t Idx = SDK::UKismetStringLibrary::Conv_StringToName(SDK::FString(Name)).ComparisonIndex;
+    for (int32_t i = 0; i < SDK::UObject::GObjects->Num(); ++i) {
+        SDK::UObject* O = SDK::UObject::GObjects->GetByIndex(i);
+        if (O && O->Name.ComparisonIndex == Idx && O->IsA(SDK::UClass::StaticClass())) { Cache.Set(O); return static_cast<SDK::UClass*>(O); }
+    }
+    return nullptr;
+}
+
+static void Place(SDK::UUserWidget* W, float X, float Y, SDK::FVector2D Anchor, SDK::FVector2D Align, float Wd = 0.f, float Ht = 0.f) {
+    W->SetPositionInViewport(SDK::FVector2D{ X, Y }, false);
+    if (Wd > 0.f) W->SetDesiredSizeInViewport(SDK::FVector2D{ Wd, Ht });
+    W->SetAnchorsInViewport(SDK::FAnchors{ Anchor, Anchor });   // SetPositionInViewport resets them
+    W->SetAlignmentInViewport(Align);
+}
+
+static void Set(SDK::UTextBlock* Tb, const std::wstring& T) {
+    if (!Tb) return;
+    auto& Last = s_Texts[Tb];
+    if (Last == T) return;
+    Last = T;
+    Tb->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(T.c_str())));
+}
+
+static SDK::UTextBlock* TextOf(const Ref& R) {
+    auto* L = R.Get<SDK::Uw_chat_log_label_bpw_C>();
+    return L ? L->ChatLogLabelTextBlock : nullptr;
+}
+
+static void Show(const Ref& R, bool On) {
+    if (auto* W = R.Get<SDK::UUserWidget>()) {
+        const auto V = On ? SDK::ESlateVisibility::HitTestInvisible : SDK::ESlateVisibility::Collapsed;
+        if (W->Visibility != V) W->SetVisibility(V);
+    }
+}
+
+// A line of text in the HUD's own font (as BehemothHealthBar's number), outlined for any background.
+static void Label(SDK::APlayerController* PC, Ref& R, int32_t Size, const SDK::FLinearColor& Col, int32_t Z, float Y, SDK::FVector2D Anchor) {
+    SDK::UClass* Cls = BehemothHealthBar::LoadClass(s_LabelCls, L"/Game/UI/Chat/w_chat_log_label_bpw.w_chat_log_label_bpw_C");
+    auto* L = Cls ? static_cast<SDK::Uw_chat_log_label_bpw_C*>(SDK::UWidgetBlueprintLibrary::Create(PC, Cls, PC)) : nullptr;
+    if (!L || !L->ChatLogLabelTextBlock) return;
+    SDK::UTextBlock* Tb = L->ChatLogLabelTextBlock;
+    if (SDK::UTextBlock* Hud = BehemothHealthBar::FindHudHealthText()) {   // field by field: the font info holds TSharedPtrs
+        Tb->Font.FontObject = Hud->Font.FontObject;
+        Tb->Font.TypefaceFontName = Hud->Font.TypefaceFontName;
+    }
+    Tb->Font.OutlineSettings.OutlineSize = Size >= 60 ? 3 : 2;
+    Tb->Font.OutlineSettings.OutlineColor = kBlack;
+    Tb->Font.OutlineSettings.bApplyOutlineToDropShadows = true;
+    Tb->ShadowOffset = SDK::FVector2D{ 2.f, 2.f };
+    Tb->ShadowColorAndOpacity = SDK::FLinearColor{ 0.f, 0.f, 0.f, 0.8f };
+    Tb->ColorAndOpacity.SpecifiedColor = Col;
+    Tb->ColorAndOpacity.ColorUseRule = SDK::ESlateColorStylingMode::UseColor_Specified;
+    Tb->Font.Size = Size;                   // before AddToViewport: Slate reads it when built
+    L->AddToViewport(Z);
+    Tb->SetJustification(SDK::ETextJustify::Center);
+    Place(L, 0.f, Y, Anchor, SDK::FVector2D{ 0.5f, Anchor.Y }, 1800.f, Size * 1.5f);
+    R.Set(L);
+}
+
+// Solid black over the world, as BehemothHealthBar's bar is built: a progress bar whose fill and back are plain black.
+static void Black(SDK::APlayerController* PC) {
+    SDK::UClass* Cls = BehemothHealthBar::LoadClass(s_BarCls, L"/Game/UI/EndOfHunt/StackableProgressBar.StackableProgressBar_C");
+    auto* Bar = Cls ? static_cast<SDK::UStackableProgressBar_C*>(SDK::UWidgetBlueprintLibrary::Create(PC, Cls, PC)) : nullptr;
+    if (!Bar || !Bar->ProgressBarComponent) return;
+    SDK::UProgressBar* Fill = Bar->ProgressBarComponent;
+    constexpr float W = 10000.f, H = 6000.f;   // past any screen
+    if (Bar->BoostIconBarImage) Bar->BoostIconBarImage->SetVisibility(SDK::ESlateVisibility::Collapsed);
+    BehemothHealthBar::SolidBrush(Fill->WidgetStyle.FillImage, kBlack);
+    BehemothHealthBar::SolidBrush(Fill->WidgetStyle.BackgroundImage, kBlack);
+    if (SDK::UPanelSlot* FillSlot = Fill->Slot; FillSlot && FillSlot->Parent && FillSlot->Parent->IsA(SDK::USizeBox::StaticClass())) {
+        auto* Box = static_cast<SDK::USizeBox*>(FillSlot->Parent);
+        Box->SetWidthOverride(W);
+        Box->SetHeightOverride(H);
+        if (Box->Slot && Box->Slot->IsA(SDK::UCanvasPanelSlot::StaticClass())) {
+            auto* C = static_cast<SDK::UCanvasPanelSlot*>(Box->Slot);
+            C->SetAnchors(SDK::FAnchors{ SDK::FVector2D{ 0.f, 0.f }, SDK::FVector2D{ 0.f, 0.f } });
+            C->SetAlignment(SDK::FVector2D{ 0.f, 0.f });
+            C->SetAutoSize(false);
+            C->SetPosition(SDK::FVector2D{ 0.f, 0.f });
+            C->SetSize(SDK::FVector2D{ W, H });
+        }
+    }
+    Bar->ColourAndOpacity = kBlack;
+    Bar->Startpercent = 1.f;
+    Bar->FillPercent = 1.f;
+    Bar->AddToViewport(-100);
+    Bar->StopAllAnimations();
+    Fill->SetFillColorAndOpacity(kBlack);
+    Fill->SetPercent(1.f);
+    Place(Bar, 0.f, 0.f, kMid, kMid, W, H);
+    Bar->SetVisibility(SDK::ESlateVisibility::Collapsed);
+    s_Black.Set(Bar);
+}
+
+static void Build(SDK::APlayerController* PC) {
+    s_Built = true;
+    Black(PC);
+    if (SDK::UClass* Cls = ByName(s_TimerCls, L"Gauntlet_timer_bpw_C")) {
+        if (auto* T = static_cast<SDK::UGauntlet_timer_bpw_C*>(SDK::UWidgetBlueprintLibrary::Create(PC, Cls, PC))) {
+            // TimerValue too: the timer's blueprint keeps writing its gauntlet time there (flashing over ours, 2026-10-17),
+            // so the time is our own label laid on the frame (s_Clock).
+            for (SDK::UWidget* W : { static_cast<SDK::UWidget*>(T->TextBlock_CAUSE), static_cast<SDK::UWidget*>(T->TextBlock_TIMEBONUS),
+                                     static_cast<SDK::UWidget*>(T->TimeDeltaText), static_cast<SDK::UWidget*>(T->Level),
+                                     static_cast<SDK::UWidget*>(T->TimerValue) }) {
+                if (W) W->SetVisibility(SDK::ESlateVisibility::Collapsed);
+            }
+            T->AddToViewport(1000);
+            Place(T, 0.f, 0.f, kTop, kTop);   // flush with the top edge
+            s_Timer.Set(T);
+            Label(PC, s_Clock, 44, kWhite, 1001, 58.f, kTop);
+        }
+    }
+    if (!s_Timer.Get()) { MpLog("[HideSeek] Gauntlet timer class not loaded - timer in the HUD font"); Label(PC, s_Timer, 54, kWhite, 1000, 30.f, kTop); }
+    Label(PC, s_Counts, 26, kWhite, 1001, 126.f, kTop);
+    Label(PC, s_Role, 22, kWhite, 1001, 162.f, kTop);
+    Label(PC, s_Big, 150, kWhite, 1003, 0.f, kMid);
+    Label(PC, s_BlackTitle, 64, kRed, 1001, -50.f, kMid);
+    Label(PC, s_BlackSub, 30, kWhite, 1001, 40.f, kMid);
+    MpLog(std::string("[HideSeek] on-screen widgets built (timer=") + (s_Timer.Get<SDK::UGauntlet_timer_bpw_C>() ? "gauntlet" : "label") + ")");
+}
+
+static void Destroy() {
+    for (Ref* R : { &s_Black, &s_Timer, &s_Clock, &s_Counts, &s_Role, &s_Big, &s_BlackTitle, &s_BlackSub, &s_Banner }) {
+        if (auto* W = R->Get<SDK::UUserWidget>()) W->RemoveFromParent();
+        R->Set(nullptr);
+    }
+    s_Texts.clear();
+    s_Built = false;
+    s_BannerUntil = 0;
+    s_LastPhase = -1;
+}
+
+// The game's area banner ("Behemoth spotted" style) with the alert as its sub text.
+static void Banner(SDK::APlayerController* PC, const std::string& Alert, ULONGLONG Now) {
+    if (auto* Old = s_Banner.Get<SDK::UUserWidget>()) Old->RemoveFromParent();
+    s_Banner.Set(nullptr);
+    SDK::UClass* Cls = BehemothHealthBar::LoadClass(s_BannerCls, L"/Game/UI/HUD/Notifications/HUD_banner_bpw.HUD_banner_bpw_C");
+    auto* B = Cls ? static_cast<SDK::UHUD_banner_bpw_C*>(SDK::UWidgetBlueprintLibrary::Create(PC, Cls, PC)) : nullptr;
+    if (!B) return;
+    for (SDK::UWidget* W : { static_cast<SDK::UWidget*>(B->TitleIcon), static_cast<SDK::UWidget*>(B->TopIcon),
+                             B->TopIconContainer, B->TopIconSpacer, static_cast<SDK::UWidget*>(B->BehemothInfoWidget) }) {
+        if (W) W->SetVisibility(SDK::ESlateVisibility::Collapsed);
+    }
+    Set(B->Title, L"HIDE AND SEEK");
+    Set(B->SubText, std::wstring(Alert.begin(), Alert.end()));
+    B->AddToViewport(1002);
+    Place(B, 0.f, 230.f, kTop, kTop);
+    if (B->Intro) B->PlayAnimation(B->Intro, 0.f, 1, SDK::EUMGSequencePlayMode::Forward, 1.f, false);
+    s_Banner.Set(B);
+    s_BannerUntil = Now + 4500;
+}
+
+static std::wstring Clock(ULONGLONG Ms) {
+    const ULONGLONG S = (Ms + 999) / 1000;
+    wchar_t B[16];
+    swprintf_s(B, L"%llu:%02llu", S / 60, S % 60);
+    return B;
+}
+
+static void Update(SDK::APlayerController* PC, const Fetched& F, ULONGLONG LeftMs, bool IsBlack, bool NewAlert, ULONGLONG Now) {
+    if (!s_Built) Build(PC);
+    if (F.Phase != s_LastPhase) { if (F.Phase == 2) s_SeekSince = Now; s_LastPhase = F.Phase; }
+    static const wchar_t* kDesc[] = { L"GET READY", L"HIDE", L"SEEK", L"BACK TO RAMSGATE" };
+    const bool Waiting = F.Phase == 0 && LeftMs == 0;   // no start time yet: a player is still to come
+    const wchar_t* Desc = Waiting ? L"WAITING FOR PLAYERS" : kDesc[(std::clamp)(F.Phase, 0, 3)];
+    const std::wstring Time = Waiting ? std::to_wstring(F.Hiders) : Clock(LeftMs);
+    if (auto* T = s_Timer.Get<SDK::UGauntlet_timer_bpw_C>(); T && T->IsA(SDK::UGauntlet_timer_bpw_C::StaticClass())) {
+        Set(T->TimerDesc, Desc);   // every update: the timer's own blueprint may write its gauntlet values
+        s_Texts.erase(T->TimerDesc);
+        T->StopAllAnimations();    // its time-bonus / part-break flashes
+        Set(TextOf(s_Clock), Time);
+    } else {
+        Set(TextOf(s_Timer), std::wstring(Desc) + L"   " + Time);
+    }
+    Set(TextOf(s_Counts), std::to_wstring(F.Hiders) + (F.Hiders == 1 ? L" HIDER     " : L" HIDERS     ")
+        + std::to_wstring(F.Seekers) + (F.Seekers == 1 ? L" SEEKER" : L" SEEKERS"));
+    Set(TextOf(s_Role), F.Phase == 0 ? L"" : F.Seeker ? L"YOU ARE A SEEKER" : L"YOU ARE HIDING");
+    if (SDK::UTextBlock* R = TextOf(s_Role); R && R->ColorAndOpacity.SpecifiedColor.G != (F.Seeker ? kRed : kWhite).G) {
+        SDK::FSlateColor C = R->ColorAndOpacity;   // a specified colour: its linked-colour pointer is null, so the copy is plain data
+        C.SpecifiedColor = F.Seeker ? kRed : kWhite;
+        R->SetColorAndOpacity(C);
+    }
+
+    const ULONGLONG Secs = (LeftMs + 999) / 1000;
+    const bool Count = F.Phase == 1 && Secs >= 1 && Secs <= 3, Go = F.Phase == 2 && Now - s_SeekSince < 1500;
+    Show(s_Big, Count || Go);
+    Set(TextOf(s_Big), Go ? L"SEEK!" : std::to_wstring(Secs));
+
+    Show(s_Black, IsBlack); Show(s_BlackTitle, IsBlack); Show(s_BlackSub, IsBlack);
+    Set(TextOf(s_BlackTitle), L"YOU ARE THE SEEKER");
+    Set(TextOf(s_BlackSub), L"The hiders are hiding. You are released in " + Clock(LeftMs));
+
+    if (NewAlert && !F.Alert.empty()) Banner(PC, F.Alert, Now);
+    if (s_BannerUntil && Now >= s_BannerUntil) {
+        auto* B = s_Banner.Get<SDK::UHUD_banner_bpw_C>();
+        if (B && B->Outro && Now < s_BannerUntil + 700) {
+            if (!B->IsAnimationPlaying(B->Outro)) B->PlayAnimation(B->Outro, 0.f, 1, SDK::EUMGSequencePlayMode::Forward, 1.f, false);
+        } else {
+            if (B) B->RemoveFromParent();
+            s_Banner.Set(nullptr);
+            s_BannerUntil = 0;
+        }
+    }
+}
+}  // namespace Ui
+
+static void Leave(SDK::APlayerController* PC, SDK::UWorld* World) {
+    s_Active = false;
+    Ui::Destroy();
+    if (auto* H = PC ? Hud(PC) : nullptr) H->ShowGameplayHUD();
+    if (World) SetPlates(World, 1.f);
+    if (s_InputOff && PC && PC->Pawn) Freeze(PC, false);
+    s_InputOff = false;
+    if (World) {
+        static auto* s_Found = new SDK::TArray<SDK::AActor*>();
+        SDK::UGameplayStatics::GetAllActorsOfClass(World, SDK::AArchonCharacter::StaticClass(), s_Found);
+        for (int32_t i = 0; i < s_Found->Num(); ++i) if (auto* P = static_cast<SDK::APawn*>((*s_Found)[i])) Outline(P, false);
+    }
+    s_Outlined.clear();
+}
+
+// Everyone travels at once: the leader takes the party, each member also goes on their own (the leader's pull alone
+// left a member on the island, 2026-10-17). They all land in the same Ramsgate.
+static void TravelHome() {
+    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+        if (!Obj || Obj->IsDefaultObject() || !Obj->IsA(SDK::AArchonPartyClient::StaticClass())) continue;
+        auto* Party = static_cast<SDK::AArchonPartyClient*>(Obj);
+        const bool WithParty = Party->IsLocalPlayerPartyLeader() && !Party->IsSoloParty();
+        Party->StartTravelToCity(WithParty);
+        MpLog(std::string("[HideSeek] round over - travelling to Ramsgate") + (WithParty ? " with the party" : ""));
+        return;
+    }
+    MpLog("[HideSeek] round over - no party client to travel with");
+}
+
+static void Update() {
+    const ULONGLONG Now = GetTickCount64();
+    static ULONGLONG s_Next = 0;
+    if (Now < s_Next) return;
+    s_Next = Now + 50;
+    SDK::UWorld* World = SDK::UWorld::GetWorld();
+    SDK::APlayerController* PC = World ? SDK::UGameplayStatics::GetPlayerController(World, 0) : nullptr;
+    if (!PC || !PC->PlayerState) return;
+    if (PC != s_PC.Get()) {   // new world: the old one's pawns, widgets and input went with it
+        s_PC.Set(PC);
+        s_Active = s_InputOff = s_Traveled = false;
+        s_Outlined.clear();
+        Ui::Destroy();   // its widgets went with the old world; this only drops the references
+        { std::lock_guard<std::mutex> Lk(s_Lock); s_F = {}; }
+    }
+    // Hunting Grounds maps (the hide-and-seek pool) are adventure_*; nothing to ask anywhere else.
+    if (SDK::UGameplayStatics::GetCurrentLevelName(PC, true).ToString().rfind("adventure_", 0) != 0) return;
+
+    if (Now >= s_NextPoll && !s_Busy.exchange(true)) {
+        s_NextPoll = Now + 1000;
+        std::thread(Fetch, MpApiBase() + L"/hideseek/v1/state?name=" + UrlEncode(PC->PlayerState->PlayerNamePrivate.ToString())).detach();
+    }
+    Fetched F;
+    { std::lock_guard<std::mutex> Lk(s_Lock); F = s_F; }
+    if (!F.Have) { if (s_Active) Leave(PC, World); return; }
+    if (!s_Active) { s_Active = true; s_LastAlert = F.AlertId; MpLog("[HideSeek] round found - hide-and-seek view on"); }
+
+    const ULONGLONG LeftMs = F.Left * 1000ull > Now - F.At ? F.Left * 1000ull - (Now - F.At) : 0;
+
+    if (Now >= s_NextHide) {   // the game brings its HUD back after menus and cinematics, plates as players come near
+        s_NextHide = Now + 250;
+        if (auto* H = Hud(PC); H && H->IsHUDVisible()) H->HideGameplayHUD();
+        SetPlates(World, 0.f);
+    }
+
+    const bool Black = F.Seeker && F.Phase == 1;
+    if (Black != s_InputOff && PC->Pawn) {
+        Freeze(PC, Black);
+        MpLog(std::string("[HideSeek] seeker frozen ") + (Black ? "until release" : "- released"));
+    }
+    if (Black) Hold(PC);
+
+    if (Now >= s_NextOutline) {
+        s_NextOutline = Now + 500;
+        static auto* s_Found = new SDK::TArray<SDK::AActor*>();
+        SDK::UGameplayStatics::GetAllActorsOfClass(World, SDK::AArchonCharacter::StaticClass(), s_Found);
+        for (int32_t i = 0; i < s_Found->Num(); ++i) {
+            auto* P = static_cast<SDK::APawn*>((*s_Found)[i]);
+            if (!P || !P->PlayerState || !IsRegisteredLiveObject(P->PlayerState)) continue;
+            const std::string N = P->PlayerState->PlayerNamePrivate.ToString();
+            Outline(P, F.Phase != 3 && std::find(F.SeekerNames.begin(), F.SeekerNames.end(), N) != F.SeekerNames.end());
+        }
+    }
+
+    if (F.Phase == 3 && LeftMs == 0 && !s_Traveled) {
+        s_Traveled = true;
+        TravelHome();
+    }
+
+    const bool NewAlert = F.AlertId != s_LastAlert;
+    s_LastAlert = F.AlertId;
+    Ui::Update(PC, F, LeftMs, Black, NewAlert, Now);
+}
+
+static void UpdateGuarded() {
+    __try { Update(); }
+    __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
+}
+
+static void Tick() {
+    if (Globals::AmServer || s_Faulted) return;
+    UpdateGuarded();
+    if (s_Faulted) MpLog("[HideSeek] fault in client update - off for this session");
+}
+
+}  // namespace HideSeekClient
+
 // [2026-10-17 join-in-progress] Shows JoinPrompt.cpp's offer in the game's own confirm popup
 // (UArchonGlobalUI::DisplayPopup), relabels its buttons Join hunt / Stay, and returns the player's choice from the
 // popup's OnConfirmPressed / OnDismissPressed (caught in the ProcessEvent hook). The result is a native corner
@@ -14264,6 +14984,7 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
         VoiceIndicators::Tick();
         InventoryProbe::Tick();
         CineCam::Tick();
+        HideSeekClient::Tick();
         JoinPopup::TickGuarded();
     }
     if (FunctionName.find("Pressed") != std::string::npos) JoinPopup::OnEvent(Object, FunctionName);
@@ -16349,6 +17070,7 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     MpCoinTossProbe(FunctionName, Parms);
     MpServerProjectileTickFix(Object, FunctionName);
     MpHuntCombatLog(Object, FunctionName, Parms);
+    HideSeek::OnMontage(Object, FunctionName, Parms);
 
 
     // [1.14.7 HEADLESS AUDIO 2026-10-03] A dedicated hub must not play sound. Removing the Wwise

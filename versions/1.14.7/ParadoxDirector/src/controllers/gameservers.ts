@@ -418,7 +418,7 @@ async function WaitForHuntLaunchQueue(Label: string): Promise<void> {
     else if (WaitedMs >= 100) logger.info(`[HubSupervisor] ${Label} waited ${WaitedMs} ms for the hunt launch queue before cold start`);
 }
 
-async function StartServer(Map: string, Behemoth: string | undefined, MatchmakerHuntId: string | undefined, ExpectedPlayers: ExpectedPlayer[] | undefined, IsRamsgate: boolean, IsTrainingDojo: boolean){
+async function StartServer(Map: string, Behemoth: string | undefined, MatchmakerHuntId: string | undefined, ExpectedPlayers: ExpectedPlayer[] | undefined, IsRamsgate: boolean, IsTrainingDojo: boolean, ExtraEnvironment: Record<string, string> = {}){
     // The stagger queue exists to stop a BURST of hunt-server spawns (real matchmaking requests)
     // from slamming the box with several simultaneous UE4 process starts. Ramsgate and Training are
     // the two persistent hubs: exactly one of each, spawned once at boot (or restarted individually
@@ -481,7 +481,8 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     const ChildEnvironment = {
         ...process.env,
         MYSTICPARADOX_GAMESERVER_LAUNCH_ID: Id,
-        ...(ArenaWeekMatch ? { MYSTICPARADOX_TRIALS_WEEK: ArenaWeekMatch[1] } : {})
+        ...(ArenaWeekMatch ? { MYSTICPARADOX_TRIALS_WEEK: ArenaWeekMatch[1] } : {}),
+        ...ExtraEnvironment
     };
 
     let Child: ReturnType<typeof spawn>;
@@ -1078,6 +1079,21 @@ export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, Expe
         host: MY_IP,
         port: GameServerToReturn.port
     }
+}
+
+// [hide-and-seek 2026-10-17] A private hide-and-seek round (backend GameMode HIDESEEK): a random Hunting Grounds
+// island started with MYSTICPARADOX_HIDESEEK=1, which turns on the round logic in the server DLL. Players keep the
+// hunt id they picked; the client loads whatever map the server runs.
+export async function StartupHideSeekServer(ExpectedPlayers: string[]){
+    const Islands = Object.keys(PlayerHuntTable[0].Rows as any).filter((Id) => /^ShatteredIsles_Island[A-Z]$/.test(Id));
+    if(Islands.length === 0) throw new Error("no Hunting Grounds islands in player_hunts_table");
+    const HuntId = Islands[crypto.randomInt(0, Islands.length)];
+    const Manifest = ResolveHuntLaunchManifest(HuntId, ExpectedPlayers);
+    logger.info(`[HideSeek] rolled ${HuntId} -> ${Manifest.mapPath}`);
+    const GameServer = await StartServer(Manifest.mapPath, undefined, Manifest.matchmakerHuntId,
+        ExpectedPlayers.map((PlayerId) => ({ playerUid: PlayerId, playerHuntId: HuntId })), false, false,
+        { MYSTICPARADOX_HIDESEEK: "1" });
+    return { host: MY_IP, port: GameServer.port };
 }
 
 /** Resolve and freeze the exact server arguments without allocating a port or starting a process. */

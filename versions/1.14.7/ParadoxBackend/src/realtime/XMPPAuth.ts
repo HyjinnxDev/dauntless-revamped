@@ -74,6 +74,7 @@ export async function authenticateSasl(mechanism: string, saslB64: string): Prom
     try {
         const account = await GetRepositories().launcherAccounts.findByUserId(userId);
         if (account === undefined || !IsAccountEligible(account)) {
+            logger.warn(`[XMPP] auth: launcher account ${account === undefined ? "missing" : "ineligible"} for userId=${userId}`);
             return { ok: false, reason: "account not eligible" };
         }
     } catch (e) {

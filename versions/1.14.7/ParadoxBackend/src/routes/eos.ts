@@ -29,7 +29,7 @@ import {
 export const eosRouter = Router();
 
 const DEV_USER_ID = process.env.DEV_USER_ID ?? "dev-user";
-const DEV_USER_NAME = process.env.DEV_USER_NAME ?? "Dev Slayer";
+const DEV_USER_NAME = process.env.DEV_USER_NAME?.trim() || undefined;
 // OAuth client-credentials grants authenticate the game application, not a
 // player. Keep that token distinct from a real launcher account: the player's
 // identity is established only by the preceding one-time exchange code.
@@ -54,7 +54,7 @@ async function EnsureDevUser(userId: string){
     if(ExistingUser === undefined){
         await GetRepositories().accounts.create({
             userId,
-            name: DEV_USER_NAME,
+            name: DEV_USER_NAME ?? userId,   // [hide-and-seek] each test login keeps its own name
             notes: 0
         });
     }

@@ -11,6 +11,7 @@
 
 import { GetPartyForPlayer } from "../controllers/party";
 import { IsGuildMember } from "../controllers/guild";
+import { HideSeekCommand } from "../hideSeek";
 import { logger } from "../logger";
 import { RegisteredConnection } from "./SessionRegistry";
 import { escapeXml, sanitizeName } from "./xml";
@@ -39,6 +40,8 @@ const MAX_GROUPCHAT_BYTES = 4 * 1024;
 const MAX_ROOM_LOCAL_LENGTH = 256;
 const MAX_NICK_LENGTH = 256;
 const MAX_STANZA_ID_LENGTH = 128;
+// Same displayName:userId:resource shape as a player's nick.
+const SYSTEM_NICK = "Hide and Seek:hideseek:server";
 
 // DEV-ONLY, INSECURE: City (Ramsgate instance) rooms have no authoritative accountId->instance
 // mapping yet (plan §27 / reviewer task #8), so we cannot verify a user really belongs to a given
@@ -158,6 +161,11 @@ export class RoomService {
             return;
         }
         if (body.trim().length === 0 || Buffer.byteLength(body, "utf8") > MAX_GROUPCHAT_BYTES) return;
+        const commandReply = HideSeekCommand(target.roomLocal, body);
+        if (commandReply !== undefined) {
+            this.systemMessage(target.roomLocal, commandReply);
+            return;
+        }
 
         const idAttr = stanzaId.length > 0 && stanzaId.length <= MAX_STANZA_ID_LENGTH
             ? ` id="${escapeXml(stanzaId)}"`
@@ -171,6 +179,20 @@ export class RoomService {
             delivered += 1;
         }
         logger.info(`[XMPP] groupchat room=${sanitizeName(target.roomLocal)} delivered=${delivered} bytes=${Buffer.byteLength(body, "utf8")}`);
+    }
+
+    /** A server-authored line to every occupant (hide and seek), from a nick no player can hold. */
+    systemMessage(roomLocal: string, body: string): void {
+        const room = this.rooms.get(roomLocal);
+        if (!room) return;
+        const roomBare = `${roomLocal}@${MUC_DOMAIN}`;
+        for (const occ of room.values()) {
+            occ.conn.send(
+                `<message type="groupchat" from="${escapeXml(roomBare)}/${escapeXml(SYSTEM_NICK)}" ` +
+                `to="${escapeXml(fullJid(occ.accountId, occ.resource))}"><body>${escapeXml(body)}</body></message>`,
+            );
+        }
+        logger.info(`[XMPP] system message room=${sanitizeName(roomLocal)} delivered=${room.size}`);
     }
 
     /** Explicit leave (unavailable presence to a room). */
