@@ -5,9 +5,11 @@
 #     powershell -ExecutionPolicy Bypass -File "D:\Dev\dauntless-revamped\versions\1.14.7\host\server-sizing-log.ps1" -Summary
 # Output: D:\MysticParadoxData\logs\sizing.csv (one row / interval; safe to append across sessions)
 # Groups: mongo, backend (owns 443/3000), director (owns 3001), hub (UDP 8789/8790 servers), hunt (other game servers).
-# cpu_* = cores busy (1.0 = one full core). ram_* = MB working set. net = host NIC KB/s (loopback not counted).
+# cpu_* = cores busy (1.0 = one full core). ram_* = MB committed private memory (what the host must back). net = host NIC KB/s (loopback not counted).
 # players = remote clients on backend 443. Run the game CLIENT on a different PC for clean numbers: a local client's CPU/RAM is not server cost.
-param([int]$Interval = 10, [switch]$Summary, [string]$csv = 'D:\MysticParadoxData\logs\sizing.csv')
+# -Test measures the test stack (host\test-stack.ps1 ports) instead; mongod is shared with live, so its column includes live.
+param([int]$Interval = 10, [switch]$Summary, [switch]$Test, [string]$csv = 'D:\MysticParadoxData\logs\sizing.csv')
+$Ports = if ($Test) { @{ Https = 4443; Http = 3100; Director = 3101; Udp0 = 8800; Hub0 = 8809; Udp1 = 8810 } } else { @{ Https = 443; Http = 3000; Director = 3001; Udp0 = 8780; Hub0 = 8789; Udp1 = 8790 } }
 
 if ($Summary) {
   $r = Import-Csv $csv
@@ -50,29 +52,29 @@ while ($true) {
   Start-Sleep -Seconds $Interval
   $now = Get-Date; $dt = ($now - $prevT).TotalSeconds; $prevT = $now
   $own = @{}
-  foreach ($p in 443, 3000, 3001) { $own[$p] = (Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess }
+  foreach ($p in $Ports.Https, $Ports.Http, $Ports.Director) { $own[$p] = (Get-NetTCPConnection -State Listen -LocalPort $p -ErrorAction SilentlyContinue | Select-Object -First 1).OwningProcess }
   # game servers identified by the UDP game port they own (command line is unreadable across elevation)
-  $udp = @{}; Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge 8780 -and $_.LocalPort -le 8790 } | ForEach-Object { $udp[[int]$_.OwningProcess] = $_.LocalPort }
+  $udp = @{}; Get-NetUDPEndpoint -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -ge $Ports.Udp0 -and $_.LocalPort -le $Ports.Udp1 } | ForEach-Object { $udp[[int]$_.OwningProcess] = $_.LocalPort }
   $g = @{ mongo = @(0, 0); backend = @(0, 0); director = @(0, 0); hub = @(0, 0); hunt = @(0, 0) }; $hunts = 0
   # CIM, not Get-Process: TotalProcessorTime needs a process handle, which a non-elevated logger cannot open
   # on the elevated stack (it read 0 for every row); CIM's times come from the system snapshot instead.
-  foreach ($p in Get-CimInstance Win32_Process -Property ProcessId, Name, KernelModeTime, UserModeTime, WorkingSetSize -ErrorAction SilentlyContinue) {
+  foreach ($p in Get-CimInstance Win32_Process -Property ProcessId, Name, KernelModeTime, UserModeTime, PrivatePageCount -ErrorAction SilentlyContinue) {
     $id = [int]$p.ProcessId; $grp = $null
     if ($p.Name -eq 'mongod.exe') { $grp = 'mongo' }
-    elseif ($id -eq $own[443] -or $id -eq $own[3000]) { $grp = 'backend' }
-    elseif ($id -eq $own[3001]) { $grp = 'director' }
+    elseif ($id -eq $own[$Ports.Https] -or $id -eq $own[$Ports.Http]) { $grp = 'backend' }
+    elseif ($id -eq $own[$Ports.Director]) { $grp = 'director' }
     elseif ($udp.ContainsKey($id)) {
-      $grp = if ($udp[$id] -ge 8789) { 'hub' } else { 'hunt'; $hunts++ }
+      $grp = if ($udp[$id] -ge $Ports.Hub0) { 'hub' } else { 'hunt'; $hunts++ }
     }
     if (-not $grp) { continue }
     $t = ([double]$p.KernelModeTime + $p.UserModeTime) / 1e7  # 100 ns units
     if ($prev.ContainsKey($id)) { $g[$grp][0] += [math]::Max(0.0, ($t - $prev[$id]) / $dt) }
     $prev[$id] = $t
-    $g[$grp][1] += $p.WorkingSetSize / 1MB
+    $g[$grp][1] += $p.PrivatePageCount / 1MB  # committed private bytes: idle trimming shrinks the working set, not this
   }
   $n = NetNow
   $inK = ($n.i - $prevNet.i) / 1KB / $dt; $outK = ($n.o - $prevNet.o) / 1KB / $dt; $prevNet = $n
-  $players = @(Get-NetTCPConnection -State Established -LocalPort 443 -ErrorAction SilentlyContinue | Where-Object { $_.RemoteAddress -notin '127.0.0.1', '::1' }).Count
+  $players = @(Get-NetTCPConnection -State Established -LocalPort $Ports.Https -ErrorAction SilentlyContinue | Where-Object { $_.RemoteAddress -notin '127.0.0.1', '::1' }).Count
   if (-not $primed) { $primed = $true; continue }  # first pass only seeds CPU times; its row would read 0
   # invariant culture: a host locale with a decimal comma would split fields
   $inv = [cultureinfo]::InvariantCulture
