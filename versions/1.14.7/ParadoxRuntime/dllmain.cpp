@@ -244,9 +244,30 @@ bool MpReadEnvironment(const char* Name, std::string& Value, size_t Maximum) {
         Value.find('\n') == std::string::npos;
 }
 
+// [perf 2026-10-18] Server frame counter (GameEngineTickHook). IsReadablePointer remembers readable regions for
+// the current frame only, so a region freed by the engine is re-queried by the next frame at the latest.
+static std::atomic<uint64_t> g_mpFrameGen{ 0 };
+
 bool IsReadablePointer(const void* Ptr, size_t Size) {
     if (!Ptr || ((uintptr_t)Ptr & 0x7) != 0) {
         return false;
+    }
+
+    uintptr_t Start = reinterpret_cast<uintptr_t>(Ptr);
+    uintptr_t End = Start + Size;
+    if (End < Start) return false;
+
+    // [perf 2026-10-18] Profiled hubs/hunts spent ~3-8% of their CPU in VirtualQuery's system call from here.
+    // Server only (the client has no frame counter): a hit inside a region already confirmed readable this frame
+    // skips the call.
+    struct Region { uintptr_t Lo, Hi; uint64_t Gen; };
+    static thread_local Region t_ok[4] = {};
+    static thread_local unsigned t_next = 0;
+    const uint64_t Gen = g_mpFrameGen.load(std::memory_order_relaxed);
+    if (Globals::AmServer && Gen != 0) {
+        for (const Region& R : t_ok) {
+            if (R.Gen == Gen && Start >= R.Lo && End <= R.Hi) return true;
+        }
     }
 
     MEMORY_BASIC_INFORMATION Info{};
@@ -258,10 +279,12 @@ bool IsReadablePointer(const void* Ptr, size_t Size) {
         return false;
     }
 
-    uintptr_t Start = reinterpret_cast<uintptr_t>(Ptr);
-    uintptr_t End = Start + Size;
     uintptr_t RegionEnd = reinterpret_cast<uintptr_t>(Info.BaseAddress) + Info.RegionSize;
-    return End >= Start && End <= RegionEnd;
+    if (End > RegionEnd) return false;
+    if (Globals::AmServer && Gen != 0) {
+        t_ok[t_next++ & 3] = { reinterpret_cast<uintptr_t>(Info.BaseAddress), RegionEnd, Gen };
+    }
+    return true;
 }
 
 // [2026-07-24 ROOT-CAUSE FIX for the Ramsgate->Training "new player" crash] Robust UObject liveness
@@ -5672,6 +5695,17 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
         g_GameEnginePtr = GameEngine;
     }
     static uint64_t tickCounter = 0;    ++tickCounter;
+    g_mpFrameGen.fetch_add(1, std::memory_order_relaxed);
+
+    // [perf 2026-10-18] Idle hub throttle: Ramsgate/dojo with no client connection run ~5 frames/s instead of 30
+    // (an empty hub cost ~0.15 core each). The connection count is last frame's, so the first join packet waits
+    // at most one long frame and the hub is back at 30 Hz from the frame its connection exists.
+    // NO_IDLE_THROTTLE.flag next to the exe turns it off.
+    static const bool s_noIdleThrottle = MpExeRelativeFlagPresent(L"NO_IDLE_THROTTLE.flag");
+    if (Globals::AmServer && !s_noIdleThrottle && Globals::Listening
+        && g_wdIsHub.load(std::memory_order_relaxed) == 1 && g_wdConnCount.load(std::memory_order_relaxed) == 0) {
+        Sleep(170);
+    }
 
     // [perf 2026-10-18] Server frame rate, once a minute: sizing needs to know whether the engine runs above the
     // 30 Hz net rate (CPU spent on frames nobody receives). Cheap: one clock read per tick.
