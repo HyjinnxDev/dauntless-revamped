@@ -1510,6 +1510,8 @@ static DWORD WINAPI RewardCacheCaptureThread(LPVOID) {
     return 0;
 }
 
+static std::atomic<bool> s_ConsoleSetupDue{ false };
+
 void MainThread() {
     InitLog("[MainThread] Entry");
 
@@ -1613,7 +1615,17 @@ void MainThread() {
 
     Sleep(3 * 1000);
 
+    // [Revamped 2026-10-17] Console setup moved to the game thread (MpSpawnConsoleOnGameThread): doing it here
+    // raced the login screen load and crashed (AV reading UKismetStringLibrary's class, report 000000dc298624a0).
+    s_ConsoleSetupDue = true;
+}
+
+// Runs from ProcessEventClientHook (game thread) once MainThread has flagged the console setup as due.
+static void MpSpawnConsoleOnGameThread() {
+    if (!s_ConsoleSetupDue.load(std::memory_order_relaxed)) return;
     UEngine* Engine = UEngine::GetEngine();
+    if (!Engine || !Engine->GameViewport) return;   // retry on a later ProcessEvent
+    if (!s_ConsoleSetupDue.exchange(false)) return;
 
     UInputSettings::GetDefaultObj()->ConsoleKeys[0].KeyName = UKismetStringLibrary::Conv_StringToName(L"F2");
 
@@ -13658,6 +13670,8 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
         }
         return;   // absorb — do not call OrigProcessEventClient
     }
+
+    if (GetCurrentThreadId() == g_clientGameThreadId.load(std::memory_order_relaxed)) MpSpawnConsoleOnGameThread();
 
     /*
     if (GetAsyncKeyState(VK_F9)) {
