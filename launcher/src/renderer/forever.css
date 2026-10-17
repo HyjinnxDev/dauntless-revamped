@@ -283,6 +283,11 @@ body {
   background: none;
   border-top: 0;
   gap: 32px;
+  pointer-events: none; /* its padding sits over the bottom of the Play view; only its contents take clicks */
+}
+
+.actionbar > * {
+  pointer-events: auto;
 }
 
 .actionbar[hidden] {
