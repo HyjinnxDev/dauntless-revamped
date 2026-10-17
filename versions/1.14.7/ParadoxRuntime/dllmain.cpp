@@ -247,6 +247,8 @@ bool MpReadEnvironment(const char* Name, std::string& Value, size_t Maximum) {
 // [perf 2026-10-18] Server frame counter (GameEngineTickHook). IsReadablePointer remembers readable regions for
 // the current frame only, so a region freed by the engine is re-queried by the next frame at the latest.
 static std::atomic<uint64_t> g_mpFrameGen{ 0 };
+// [perf 2026-10-18] Movement RPC counters for the [TickRate] line (ProcessEventHook increments them).
+static std::atomic<uint64_t> g_mpServerMoves{ 0 }, g_mpClientAdjusts{ 0 };
 
 bool IsReadablePointer(const void* Ptr, size_t Size) {
     if (!Ptr || ((uintptr_t)Ptr & 0x7) != 0) {
@@ -5715,10 +5717,37 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
         if (s_rateStartMs == 0) s_rateStartMs = NowMs;
         ++s_rateTicks;
         if (NowMs - s_rateStartMs >= 60000) {
-            MpLog("[TickRate] engine " + std::to_string(s_rateTicks * 1000.0 / (NowMs - s_rateStartMs)) + " Hz over "
-                + std::to_string((NowMs - s_rateStartMs) / 1000) + " s, last DeltaTime=" + std::to_string(DeltaTime));
+            // Client movement RPCs received (ServerMove*) and corrections sent back (ClientAdjust*), per connected
+            // client per second: shows whether capping the clients' move send rate would cut server work.
+            const double Secs = (NowMs - s_rateStartMs) / 1000.0;
+            const int32_t Conns = g_wdConnCount.load(std::memory_order_relaxed);
+            const double PerClient = Conns > 0 ? Secs * Conns : 0.0;
+            const uint64_t Moves = g_mpServerMoves.exchange(0, std::memory_order_relaxed);
+            const uint64_t Adjusts = g_mpClientAdjusts.exchange(0, std::memory_order_relaxed);
+            MpLog("[TickRate] engine " + std::to_string(s_rateTicks / Secs) + " Hz over "
+                + std::to_string((NowMs - s_rateStartMs) / 1000) + " s, last DeltaTime=" + std::to_string(DeltaTime)
+                + " | conns=" + std::to_string(Conns)
+                + " ServerMove/s/client=" + (PerClient > 0 ? std::to_string(Moves / PerClient) : std::string("n/a"))
+                + " ClientAdjust/s/client=" + (PerClient > 0 ? std::to_string(Adjusts / PerClient) : std::string("n/a")));
             s_rateStartMs = NowMs;
             s_rateTicks = 0;
+        }
+
+        // The movement send-rate settings this build actually uses (GameNetworkManager defaults), once.
+        static bool s_gnmLogged = false;
+        if (!s_gnmLogged && Globals::Listening) {
+            s_gnmLogged = true;
+            SDK::AGameNetworkManager* G = SDK::AGameNetworkManager::GetDefaultObj();
+            if (G && IsReadablePointer(G, 0x2B0)) {
+                MpLog("[MoveRate] GameNetworkManager ClientNetSendMoveDeltaTime=" + std::to_string(G->ClientNetSendMoveDeltaTime)
+                    + " Throttled=" + std::to_string(G->ClientNetSendMoveDeltaTimeThrottled)
+                    + " Stationary=" + std::to_string(G->ClientNetSendMoveDeltaTimeStationary)
+                    + " ThrottleAtNetSpeed=" + std::to_string(G->ClientNetSendMoveThrottleAtNetSpeed)
+                    + " ThrottleOverPlayerCount=" + std::to_string(G->ClientNetSendMoveThrottleOverPlayerCount)
+                    + " ClientAuthorativePosition=" + std::to_string(G->ClientAuthorativePosition ? 1 : 0));
+            } else {
+                MpLog("[MoveRate] GameNetworkManager default object not readable");
+            }
         }
     }
 
@@ -16433,6 +16462,9 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     static UFunction* OnPostMitDealtAnyDamage = nullptr;
 
     const std::string& FunctionName = MpCachedFullName(Function);
+    if (FunctionName.find(".ServerMove") != std::string::npos) g_mpServerMoves.fetch_add(1, std::memory_order_relaxed);
+    else if (FunctionName.find(".ClientAdjust") != std::string::npos || FunctionName.find(".ClientVeryShortAdjust") != std::string::npos)
+        g_mpClientAdjusts.fetch_add(1, std::memory_order_relaxed);
     MpHuntPassProbe(Object, FunctionName);
     MpCoinTossProbe(FunctionName, Parms);
     MpServerProjectileTickFix(Object, FunctionName);
