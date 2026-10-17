@@ -1,0 +1,94 @@
+{
+    "version":  1,
+    "target":  "Archon/Binaries/Win64",
+    "files":  [
+                  {
+                      "path":  "dwmapi.dll",
+                      "sha256":  "cf440b9eb8643bb7c434acfda696aee57fd981d185dca5e57fb8dbb18f8fc1cd",
+                      "size":  279552,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/LICENSE",
+                      "sha256":  "99e1d8f8b7cb68e8b2313380ae3b0c8115e39dfbc443fcf21fd67ab74ce1d57e",
+                      "size":  1085,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/BehemothHealthBars/Scripts/main.lua",
+                      "sha256":  "20bb8d111b3c56543d4f45469e399df07f29c6b8af094cdbe33c7ef4ef6ab73c",
+                      "size":  34546,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/BehemothTracker/Scripts/main.lua",
+                      "sha256":  "cc9ff0a36c1eaa17d46b57b6fbb6e21d372037f49357fbc2dc6ae1bd5114d7c3",
+                      "size":  21765,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/CraftStar/Scripts/main.lua",
+                      "sha256":  "ec65075464d4c3ee6987dde94be452e2431e50bc0de6addf29fa626be7e591bd",
+                      "size":  8548,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/Keybinds/Scripts/main.lua",
+                      "sha256":  "297dd6f7f560e1cebc15cd4509ad481495d9179f5758a8034be4c417a369803a",
+                      "size":  4190,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/ModMenu/Scripts/main.lua",
+                      "sha256":  "3b5de41871636d4e94b32ca516904739dacbb973e049aa5d916d2718ce7a1199",
+                      "size":  27026,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/mods.txt",
+                      "sha256":  "b4204bff94ce95caef3f00cabe7be3e3fc5f382597f9878aeb8cf4d19e9604b4",
+                      "size":  121,
+                      "keep":  true
+                  },
+                  {
+                      "path":  "ue4ss/Mods/shared/FrameTick/FrameTick.lua",
+                      "sha256":  "a06109ff9f7748e30b89b06e94197468b3aff9e25cf4cf48c1c40c33d0c85c76",
+                      "size":  4359,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/shared/ModSettings/ModSettings.lua",
+                      "sha256":  "7ca975dabbcd57522367b23297785f99b249a3ae6f370217ac0580c91896cdb0",
+                      "size":  2083,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/Mods/shared/UEHelpers/UEHelpers.lua",
+                      "sha256":  "7476f02eef0c87bfeab169f2ffe2e704363faeaae4bf9f1bda574b1e34f4a0e9",
+                      "size":  10237,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/UE4SS.dll",
+                      "sha256":  "680a026890abb4d0df2211251f8defc1681a584275f1521dcc0fe30af480006f",
+                      "size":  20605440,
+                      "keep":  false
+                  },
+                  {
+                      "path":  "ue4ss/UE4SS-settings.ini",
+                      "sha256":  "a570cf325e142f5e01c99e72c4fe41dee05cb8980f230be40136e779465a381c",
+                      "size":  9420,
+                      "keep":  true
+                  }
+              ],
+    "remove":  [
+                   "ue4ss/Mods/ZFXStatus/Scripts/main.lua",
+                   "ue4ss/Mods/ZFXStatus/zfx_logo.png",
+                   "ue4ss/Mods/shared/FrameTick/hb_BehemothHealthBars.txt",
+                   "ue4ss/Mods/shared/FrameTick/hb_BehemothTracker.txt",
+                   "ue4ss/Mods/shared/FrameTick/hb_ModMenu.txt"
+               ],
+    "disable":  [
+                    "ZFXStatus"
+                ]
+}

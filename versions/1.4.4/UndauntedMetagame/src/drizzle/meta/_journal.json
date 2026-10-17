@@ -1,0 +1,216 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1782098648901,
+      "tag": "0000_natural_korg",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1782160527617,
+      "tag": "0001_slow_storm",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1782190471658,
+      "tag": "0002_gorgeous_saracen",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1782580106809,
+      "tag": "0003_slippery_blackheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1782581556194,
+      "tag": "0004_silky_lady_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1782586138792,
+      "tag": "0005_mighty_zeigeist",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1782664386398,
+      "tag": "0006_woozy_slipstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1783236454860,
+      "tag": "0007_last_maximus",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1783285636434,
+      "tag": "0008_vengeful_spirit",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1783299942758,
+      "tag": "0009_nice_dazzler",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1789991294333,
+      "tag": "0010_save_history_and_item_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1789993643640,
+      "tag": "0011_real_progression",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790005698166,
+      "tag": "0012_friends_and_blocks",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790048284578,
+      "tag": "0013_guilds",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790160221950,
+      "tag": "0014_escalation",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1790161221759,
+      "tag": "0015_store_purchases",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1790163279299,
+      "tag": "0016_slayer_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1791000000000,
+      "tag": "0017_discord_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791266400000,
+      "tag": "0018_trials_leaderboards",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1791309600000,
+      "tag": "0019_trials_profiles",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791400000000,
+      "tag": "0020_hunt_regions",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791500000000,
+      "tag": "0021_onetime_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1791600000000,
+      "tag": "0022_germany_region",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791700000000,
+      "tag": "0023_moderation",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791800000000,
+      "tag": "0024_ephemeral_addresses",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1791900000000,
+      "tag": "0025_inventory_expiry_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1792000000000,
+      "tag": "0026_account_key_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1792100000000,
+      "tag": "0027_player_key_rotation",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1792200000000,
+      "tag": "0028_us_region",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1792300000000,
+      "tag": "0029_hunt_completions",
+      "breakpoints": true
+    }
+  ]
+}
