@@ -167,10 +167,10 @@ test("the icons and in-app images are current copies of brand/", () => {
 test("the page's images are local brand files, and the logo has a translated text alternative", () => {
   const sources = [...HTML.matchAll(/\b(?:src|href|srcset)="([^"]+)"/g)].flatMap((m) => m[1].split(",").map((s) => s.trim().split(/\s+/)[0]));
   const images = sources.filter((s) => /\.(png|jpe?g|webp|svg|gif)$/i.test(s));
-  assert.ok(images.length >= 6, `only ${images.length} images found; the scan is broken`);
+  assert.ok(images.length >= 3, `only ${images.length} images found; the scan is broken`);
   for (const src of images) assert.match(src, /^\.\/src\/renderer\/brand\/[a-z0-9@-]+\.png$/, `${src} is not a local brand image`);
   assert.doesNotMatch(HTML, /(?:src|href)="(?:https?:)?\/\//i, "nothing is loaded from another host");
-  assert.match(HTML, /<img\s[^>]*class="tile-logo"[^>]*data-i18n-alt="logo_alt"/s);
+  assert.match(HTML, /<img\s[^>]*class="topbar-logo"[^>]*data-i18n-alt="logo_alt"/s);
   assert.match(HTML, /<img class="titlebar-emblem"[^>]*alt=""/, "the title bar emblem is decoration next to the title");
 });
 

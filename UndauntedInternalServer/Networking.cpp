@@ -7,6 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include "NativeDiagnostics.h"
+#include "PerfLog.h"
 #include "MinHook/MinHook.h"
 
 using namespace SDK;
@@ -20,6 +21,8 @@ extern "C" {
 
 namespace Networking {
     UNetDriver* NetDriver = nullptr;
+    int LastActorCount = 0;
+    long long LastConsiderUs = 0;
     static uintptr_t BaseAddress = 0x0;
 
     static std::vector<AActor*> BuildConsiderList(UWorld* World, UNetDriver* Driver) {
@@ -29,6 +32,8 @@ namespace Networking {
         if (PreviousWorld != World) { Cadence.Clear();PreviousWorld = World; }
         const double Now = GetTickCount64() / 1000.0;
         Cadence.Prune(Now);
+        const bool Census = PerfLog::CensusDue();
+        int Scanned = 0;
 
         for (ULevel* Level : World->Levels) {
             if (!Level) continue;
@@ -36,6 +41,7 @@ namespace Networking {
                 if (!Actor)
                     continue;
 
+                ++Scanned;
                 if (Actor->RemoteRole == ENetRole::ROLE_None)
                     continue;
 
@@ -48,8 +54,10 @@ namespace Networking {
 
                 const bool Urgent = Actor->bReplicateMovement || Actor->bTearOff || Actor->bNetTemporary ||
                     Actor->IsA(APawn::StaticClass()) || Actor->IsA(AController::StaticClass());
+                if (Census) PerfLog::Tally(Actor->Class, Urgent, Actor->NetUpdateFrequency);
                 if (!Cadence.Due(Actor, Actor->Index, Now, Actor->NetUpdateFrequency, Urgent)) {
                     ++DR_ActorUpdatesDeferred;
+                    ++PerfLog::W.Deferred;
                     continue;
                 }
 
@@ -58,6 +66,9 @@ namespace Networking {
                 Actors.push_back(Actor);
             }
         }
+        LastActorCount = Scanned;
+        PerfLog::W.Scanned += Scanned;
+        PerfLog::W.Considered += Actors.size();
 
         /*
         for (int i = 0; i < SDK::UObject::GObjects->Num(); i++)
@@ -271,13 +282,20 @@ namespace Networking {
         }
         if (!HasReadyConnection) return;
 
+        PerfLog::Lap Timer;
         std::vector<AActor*> Actors = BuildConsiderList(UWorld::GetWorld(), NetDriver);
+        LastConsiderUs = Timer.Next();
+        PerfLog::W.Consider.Add(LastConsiderUs);
 
+        int ReadyConnections = 0;
         for (UNetConnection* Connection : NetDriver->ClientConnections) {
             if (!Connection || !Connection->OwningActor || *(uint32_t*)((uintptr_t)Connection + 0x134) != 3)
                 continue;
-
+            ++ReadyConnections;
+            Timer.Next();
             auto Channels = IndexActorChannels(Connection);
+            PerfLog::W.Index.Add(Timer.Next());
+            PerfLog::W.ChannelsMax = (std::max)(PerfLog::W.ChannelsMax, static_cast<uint32_t>(Connection->OpenChannels.Num()));
             ChannelTrackingScope TrackAssignments(Connection, Channels);
             for (AActor* Actor : Actors) {
                 // The engine's normal relevancy pass is replaced by this loop. Preserve
@@ -288,6 +306,7 @@ namespace Networking {
                     !IsConnectionOwner(Actor, Connection->OwningActor,
                         static_cast<AActor*>(Pawn), [](AActor* Value) { return Value->Owner; })) {
                     ++DR_OwnerReplicationSkipped;
+                    ++PerfLog::W.OwnerSkipped;
                     continue;
                 }
                 if (Actor->Class->CastFlags & EClassCastFlags::PlayerController) {
@@ -306,11 +325,14 @@ namespace Networking {
                 UActorChannel* ActorChannel = GetActorChannelForConnectionAndActor(Connection, Actor, Channels);
 
                 if (!ActorChannel) {
+                    const auto CreateStart = PerfLog::Clock::now();
                     ActorChannel = reinterpret_cast<UActorChannel * (*)(UNetConnection*, FName*, unsigned int, int)>(BaseAddress + 0x3449E10)(Connection, &name, 1 << 1, -1);
 
                     if (ActorChannel) {
                         reinterpret_cast<void(*)(UActorChannel*, AActor*, unsigned int)>(BaseAddress + 0x3283450)(ActorChannel, Actor, 0);
                     }
+                    ++PerfLog::W.ChannelsCreated;
+                    PerfLog::W.ChannelCreate.Add(PerfLog::Us(CreateStart, PerfLog::Clock::now()));
                 }
 
                 if (ActorChannel && ActorChannel->Actor) {
@@ -318,11 +340,18 @@ namespace Networking {
                     if (!(*(int*)((uintptr_t)ActorChannel + 0x90) & 2u)) {
                         *(int*)((uintptr_t)ActorChannel + 0x90) |= 2u;
                     }
+                    ++PerfLog::W.ReplicateCalls;
+                    const bool Sample = PerfLog::SampleCall();
+                    const auto ReplicateStart = Sample ? PerfLog::Clock::now() : PerfLog::Clock::time_point{};
                     if (reinterpret_cast<bool(*)(UActorChannel*)>(BaseAddress + 0x327E860)(ActorChannel)) {
                         //std::cout << ActorChannel->Actor->GetFullName() << std::endl;
                     }
+                    if (Sample) PerfLog::RecordReplicate(Actor->Class, ReplicateStart);
                 }
             }
+            PerfLog::W.ConnLoop.Add(Timer.Next());
         }
+        PerfLog::W.ConnsSum += ReadyConnections;
+        PerfLog::W.ConnsMax = (std::max)(PerfLog::W.ConnsMax, static_cast<uint32_t>(ReadyConnections));
     }
 }

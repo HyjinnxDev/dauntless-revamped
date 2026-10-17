@@ -1,8 +1,10 @@
 #include "CityIdlePolicy.h"
+#include "RamPatPolicy.h"
 #include <filesystem>
 #include <fstream>
 #include "HuntIdlePolicy.h"
 #include "NativeDiagnostics.h"
+#include "PerfLog.h"
 #include "ConnectedPlayerSnapshot.h"
 #include "HuntCompletion.h"
 
@@ -469,6 +471,18 @@ extern "C" {
 
 void* OrigGameEngineTick = nullptr;
 
+// Ramsgate ram pat: free a player whose synced animation never ended.
+void ReleaseStuckRamPat(AActor* Pawn) {
+    auto* Component = static_cast<UPhxSyncedAnimationComponent*>(Pawn->GetComponentByClass(UPhxSyncedAnimationComponent::StaticClass()));
+    auto* Task = Component ? Component->GetActiveChildSyncedAnimationTask() : nullptr;
+    auto* Controller = Task ? Task->GetControllerTask() : nullptr;
+    if (!Controller || !RamPatStuck(Controller->Class->GetName(), Task->ElapsedTime))
+        return;
+    std::cout << "Releasing stuck ram pat: " << Controller->Class->GetName() << std::endl;
+    Controller->Server_EndTask(EPhxBaseGameplayTaskResult::Aborted);
+    Task->Server_EndTask(EPhxBaseGameplayTaskResult::Aborted);
+}
+
 void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender) {
     // Network tick settings do not cap this injected per-frame replication loop.
     // Pace the dedicated game thread using real elapsed time, without a fixed timestep.
@@ -479,9 +493,19 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     }();
     static auto PreviousTick = std::chrono::steady_clock::now();
     if (Globals::AmServer && FrameLimit > 0) {
-        std::this_thread::sleep_until(PreviousTick + std::chrono::microseconds(1000000 / FrameLimit));
+        const auto Target = PreviousTick + std::chrono::microseconds(1000000 / FrameLimit);
+        const auto SleepBegin = std::chrono::steady_clock::now();
+        if (SleepBegin >= Target) { // frame budget already spent: no sleep
+            ++PerfLog::W.BudgetMiss;
+            PerfLog::W.Late.Add(PerfLog::Us(Target, SleepBegin));
+        }
+        std::this_thread::sleep_until(Target);
         PreviousTick = std::chrono::steady_clock::now();
+        PerfLog::W.Sleep.Add(PerfLog::Us(SleepBegin, PreviousTick));
+        if (SleepBegin < Target) PerfLog::W.SleepOver.Add(PerfLog::Us(Target, PreviousTick)); // timer granularity
     }
+    PerfLog::Lap Phase;
+    const auto WorkStart = PerfLog::Clock::now();
 
     if (IsPooledCity) {
         auto* World = UWorld::GetWorld();
@@ -492,7 +516,9 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     DR_ServerTickCount = DR_ServerTickCount + 1;
     DR_ServerSimulatedSeconds = DR_ServerSimulatedSeconds + DeltaTime;
     const auto EngineStart = std::chrono::steady_clock::now();
+    const int64_t PreUs = Phase.Next();
     reinterpret_cast<void(*)(UGameEngine*, float, char)>(OrigGameEngineTick)(GameEngine, DeltaTime, CanRender);
+    const int64_t EngineUs = Phase.Next();
     DR_EngineMicros += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - EngineStart).count();
 
     TrialsSchedule::Tick();
@@ -500,6 +526,8 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
 
     // Recover on the authoritative game thread before replicating this frame.
     FallRecovery::Tick(Globals::Listening ? Networking::NetDriver : nullptr, DeltaTime);
+    const int64_t ExtrasUs = Phase.Next();
+    int64_t ReplUs = 0;
 
     if (Globals::Listening) {
         DR_TickStage = 2;
@@ -507,6 +535,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
         Networking::TickNetworking();
         DR_ReplicationMicros += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - ReplicationStart).count();
         DR_TickStage = 3;
+        ReplUs = Phase.Next();
     }
 
     if (Globals::DoListen) {
@@ -515,6 +544,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     }
 
     UpdateConnectedPlayerSnapshot();
+    const int64_t SnapUs = Phase.Next(); // includes the one-time Listen frame
 
     if (Globals::Listening && Networking::NetDriver) {
         bool HasConnection = false;
@@ -566,8 +596,22 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
             if (!Pawn->IsA(ABP_PlayerCharacter_C::StaticClass()) || Pawn->IsActorBeingDestroyed())
                 continue;
             static_cast<ABP_PlayerCharacter_C*>(Pawn)->TickStamina(ECityExecFilter::Both, ERemoteExecFilter::All);
+            ReleaseStuckRamPat(Pawn);
         }
     }
+
+    const int64_t PostUs = Phase.Next();
+    const int64_t WorkUs = PerfLog::Us(WorkStart, PerfLog::Clock::now());
+    auto& Perf = PerfLog::W;
+    Perf.Pre.Add(PreUs); Perf.Engine.Add(EngineUs); Perf.Extras.Add(ExtrasUs);
+    Perf.Repl.Add(ReplUs); Perf.Snap.Add(SnapUs); Perf.Post.Add(PostUs);
+    PerfLog::RecordFrameWork(WorkUs, DeltaTime);
+    auto* PerfDriver = Globals::Listening ? Networking::NetDriver : nullptr;
+    const int PerfConns = PerfDriver ? PerfDriver->ClientConnections.Num() : 0;
+    const int PerfActors = Networking::LastActorCount;
+    PerfLog::MaybeSlowFrame(WorkUs, PreUs, EngineUs, ExtrasUs, ReplUs, SnapUs, PostUs,
+        Networking::LastConsiderUs, PerfConns, PerfActors);
+    PerfLog::MaybeFlush([](const void* Class) { return static_cast<UClass*>(const_cast<void*>(Class))->GetName(); }, PerfActors);
 }
 
 void* OrigFixupNetworkNotify = nullptr;
@@ -1266,6 +1310,7 @@ void Init() {
         }
 
         DR_InitDiagnostics();
+        PerfLog::Init();
         InitServerHooks();
     }
     else {

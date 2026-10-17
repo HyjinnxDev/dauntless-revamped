@@ -149,6 +149,7 @@
     <ClInclude Include="NoPlatinumPrice.h" />
     <ClInclude Include="DataTables.h" />
     <ClInclude Include="FallRecoveryPolicy.h" />
+    <ClInclude Include="RamPatPolicy.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
@@ -167,6 +168,8 @@
     <ClCompile Include="SDK\CoreUObject_functions.cpp" />
     <ClCompile Include="SDK\Engine_functions.cpp" />
     <ClCompile Include="SDK\GameplayAbilities_functions.cpp" />
+    <ClCompile Include="SDK\PhoenixAnimationCore_functions.cpp" />
+    <ClCompile Include="SDK\PhoenixGameplayBase_functions.cpp" />
     <ClCompile Include="SDK\island_arrival_cinematic_trigger_bp_functions.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

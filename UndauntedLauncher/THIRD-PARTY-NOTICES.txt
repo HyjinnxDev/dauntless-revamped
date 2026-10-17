@@ -1,9 +1,10 @@
 THIRD-PARTY NOTICES
-Dauntless Revived Launcher
+Dauntless Forever Launcher
 
 The launcher is free software under the GNU AGPL-3.0 (AGPL-3.0-only): a modified version of the
-Undaunted launcher by gwog (Gregory Morford) and contributors. Its complete source code is at
-https://github.com/mixutin/dauntless-revived.
+Dauntless Revived launcher (https://github.com/mixutin/dauntless-revived), which is in turn a
+modified version of the Undaunted launcher by gwog (Gregory Morford) and contributors. Its complete
+source code is at https://github.com/HyjinnxDev/dauntless-revived.
 
 It includes the software below, under the terms that follow. The launcher's Credits page lists
 the same software.
@@ -25,7 +26,7 @@ the same software.
 https://github.com/SyST3MDeV/Undaunted
 By gwog (Gregory Morford) and contributors. License: AGPL-3.0-only, the same as the launcher;
 the full text is LICENSE.txt in the source repository above and in
-https://github.com/mixutin/dauntless-revived.
+https://github.com/mixutin/dauntless-revived and https://github.com/HyjinnxDev/dauntless-revived.
 
 The server DLL is built against an Unreal Engine SDK generated with Dumper-7
 (https://github.com/Encryqed/Dumper-7, by Encryqed and contributors; it publishes no license file).
@@ -486,23 +487,3 @@ LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE A
 IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
 WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-------------------------------------------------------------------------------
-10. Simple Icons
-------------------------------------------------------------------------------
-
-Patreon symbol: Simple Icons, CC0-1.0 (shape unmodified).
-https://github.com/simple-icons/simple-icons/blob/1089fb7d2bf0e323f834c205ab76265005a6d5e8/icons/patreon.svg
-https://creativecommons.org/publicdomain/zero/1.0/
-Brand guidelines: https://www.patreon.com/brand
-
-------------------------------------------------------------------------------
-11. Discord brand assets
-------------------------------------------------------------------------------
-
-Discord white symbol: official Discord brand assets (unmodified).
-https://discord.com/branding
-https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/66e3d7f4ef6498ac018f2c55_Symbol.svg
-
-The symbols are bundled locally and rendered as single-colour decorative masks.
-Patreon and Discord trademarks remain the property of their respective owners.

@@ -1,23 +1,27 @@
 // Invite strings. Two versions exist:
 //
 //  v=1, private mode (the host's PC, reached over Tailscale):
-//   dauntless-revived://join?v=1&host=<tailnet IPv4 or MagicDNS name>&port=61000&code=<invite code>
+//   dauntless-forever://join?v=1&host=<tailnet IPv4 or MagicDNS name>&port=61000&code=<invite code>
 //     &name=<url-encoded server name>[&share=<url-encoded Tailscale machine-share URL>]
 //   The host must be a Tailscale address (100.64.0.0/10), a *.ts.net name or loopback: v1 is plain
 //   HTTP and must never be pointed at the internet.
 //
 //  v=2, public mode (a server on a public IP, reached through its TLS gateway):
-//   dauntless-revived://join?v=2&mode=public&host=<public IPv4 or DNS name>&port=<gateway port, default 443>
+//   dauntless-forever://join?v=2&mode=public&host=<public IPv4 or DNS name>&port=<gateway port, default 443>
 //     &fp=<SHA-256 of the server's TLS certificate (DER), 64 lower-case hex>&code=<invite code>
 //     &name=<url-encoded server name>
 //
-// The same string arrives either pasted by the friend or through the dauntless-revived: protocol
+// The same string arrives either pasted by the friend or through the dauntless-forever: protocol
 // handler. It is parsed strictly: anything that is not exactly one of these shapes is rejected,
 // because the host, port and fingerprint decide where the account key is sent later.
 
 import { UNSAFE_CHAR } from "./text";
 
-export const INVITE_SCHEME = "dauntless-revived";
+// Invites made for Dauntless Forever start with dauntless-forever://. Invites made for Dauntless Revived
+// servers (dauntless-revived://, same fields) are still accepted when pasted, but this launcher registers
+// only its own scheme, so it never takes over the links of a Dauntless Revived launcher on the same PC.
+export const INVITE_SCHEME = "dauntless-forever";
+export const LEGACY_INVITE_SCHEME = "dauntless-revived";
 export const DEFAULT_PUBLIC_PORT = 443;
 
 export type ServerMode = "private" | "public";
@@ -125,7 +129,7 @@ export function parseInvite(input: unknown): InviteResult {
   if (text.length === 0) return { ok: false, error: "empty" };
   if (text.length > MAX_INVITE_LENGTH) return { ok: false, error: "too_long" };
 
-  const prefix = /^dauntless-revived:\/\/join\/?\?/i.exec(text);
+  const prefix = /^(?:dauntless-forever|dauntless-revived):\/\/join\/?\?/i.exec(text);
   if (!prefix) return { ok: false, error: "not_invite" };
   const query = text.slice(prefix[0].length);
   if (query.includes("#")) return { ok: false, error: "params" };

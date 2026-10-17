@@ -10,6 +10,8 @@ The custom replication loop preserves owner-only relevancy. Non-moving actors wi
 
 When `GAMESERVER_READY_DIR` exists, bounded address-only fault and connection-count diagnostics are written as `native-fault-<PID>.log`. They contain no command lines, keys or player identities. First-chance exceptions are diagnostic evidence, not automatically fatal crashes.
 
+With the same variable set, `perf-<PID>.log` receives aggregate optimisation telemetry every 10 s: frame-time histogram and budget misses, sleep overshoot, per-phase (engine, replication, snapshot, post) average/max, replication cost per actor class (sampled; `DR_PERF_SAMPLE`, default every 4th call), an actor census every 60 s, process/game-thread CPU and memory, and rate-limited `perf_slow_frame` lines for frames over 100 ms. It holds no player data and stops at 32 MB. `DR_PERF_LOG=0` disables it.
+
 ## Windows backups and lag
 
 Separate SQLite backup connections can restart continuously when live players save. Hourly jobs previously accumulated and competed with the game for CPU and disk access. The Windows backup script now holds an OS-released exclusive file lock. Direct/offline copies abort after repeated restarts or a 60-second deadline.

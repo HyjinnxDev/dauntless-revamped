@@ -1,18 +1,18 @@
 {
-  "name": "dauntless-revived-launcher",
-  "productName": "Dauntless Revived Launcher",
+  "name": "dauntless-forever-launcher",
+  "productName": "Dauntless Forever Launcher",
   "version": "0.1.34",
-  "description": "Cross-platform launcher for Dauntless Revived: join community servers, download and verify the pinned Dauntless 1.4.4 client, and play on Windows or Linux via Proton/Wine.",
+  "description": "Cross-platform launcher for Dauntless Forever: join community servers (also Dauntless Revived servers), download and verify the pinned Dauntless 1.4.4 client, and play on Windows or Linux via Proton/Wine.",
   "main": ".vite/build/main.js",
   "private": true,
-  "homepage": "https://github.com/mixutin/dauntless-revived",
+  "homepage": "https://github.com/HyjinnxDev/dauntless-revived",
   "repository": {
     "type": "git",
-    "url": "https://github.com/mixutin/dauntless-revived.git",
+    "url": "https://github.com/HyjinnxDev/dauntless-revived.git",
     "directory": "UndauntedLauncher"
   },
   "bugs": {
-    "url": "https://github.com/mixutin/dauntless-revived/issues"
+    "url": "https://github.com/HyjinnxDev/dauntless-revived/issues"
   },
   "scripts": {
     "start": "electron-forge start",
@@ -31,10 +31,14 @@
     "private-server"
   ],
   "author": {
-    "name": "mixutin",
-    "url": "https://github.com/mixutin"
+    "name": "Hyjinnx",
+    "url": "https://github.com/HyjinnxDev"
   },
   "contributors": [
+    {
+      "name": "mixutin and the Dauntless Revived contributors, authors of the Dauntless Revived launcher this one is based on",
+      "url": "https://github.com/mixutin/dauntless-revived"
+    },
     {
       "name": "Gregory Morford (gwog), author of the upstream Undaunted launcher",
       "email": "realsystemdev@gmail.com",

@@ -14,8 +14,8 @@ function newer(a: string, b: string): boolean {
 }
 
 export async function findLinuxUpdate(): Promise<LinuxUpdate | null> {
-  const response = await fetch("https://api.github.com/repos/mixutin/dauntless-revived/releases/latest", {
-    headers: { Accept: "application/vnd.github+json", "User-Agent": `DauntlessRevivedLauncher/${app.getVersion()}` },
+  const response = await fetch("https://api.github.com/repos/HyjinnxDev/dauntless-revived/releases/latest", {
+    headers: { Accept: "application/vnd.github+json", "User-Agent": `DauntlessForeverLauncher/${app.getVersion()}` },
   });
   if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
   const release = await response.json() as { tag_name?: string; assets?: Array<{ name?: string; browser_download_url?: string }> };
@@ -29,9 +29,9 @@ export async function findLinuxUpdate(): Promise<LinuxUpdate | null> {
 }
 
 export async function installLinuxUpdate(update: LinuxUpdate): Promise<"relaunch" | "quit"> {
-  const dir = await fs.mkdtemp(path.join(app.getPath("temp"), "dauntless-revived-update-"));
+  const dir = await fs.mkdtemp(path.join(app.getPath("temp"), "dauntless-forever-update-"));
   const ext = update.kind === "deb" ? ".deb" : update.kind === "rpm" ? ".rpm" : ".AppImage";
-  const file = path.join(dir, `DauntlessRevivedLauncher-${update.version}${ext}`);
+  const file = path.join(dir, `DauntlessForeverLauncher-${update.version}${ext}`);
   const response = await fetch(update.url, { redirect: "follow" });
   if (!response.ok) throw new Error(`update download failed (${response.status})`);
   await fs.writeFile(file, Buffer.from(await response.arrayBuffer()));

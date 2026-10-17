@@ -26,19 +26,14 @@ const EXPECTED: Record<FixedTarget, string> = {
   tailscale_download: "https://tailscale.com/download",
   vc_redist: "https://aka.ms/vs/17/release/vc_redist.x64.exe",
   directx_runtime: 'https://www.microsoft.com/en-us/download/details.aspx?id=35',
-  project_source: "https://github.com/mixutin/dauntless-revived",
-  project_license: "https://github.com/mixutin/dauntless-revived/blob/dauntless-revived/LICENSE.txt",
-  project_contributors: "https://github.com/mixutin/dauntless-revived/graphs/contributors",
+  project_source: "https://github.com/HyjinnxDev/dauntless-revived",
+  project_license: "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt",
+  project_contributors: "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors",
+  revived_source: "https://github.com/mixutin/dauntless-revived",
+  revived_contributors: "https://github.com/mixutin/dauntless-revived/graphs/contributors",
   upstream_source: "https://github.com/SyST3MDeV/Undaunted",
   upstream_contributors: "https://github.com/SyST3MDeV/Undaunted/graphs/contributors",
-  eugamehost: "https://www.eugamehost.com/",
-  eugamehost_game1: "https://www.eugamehost.com/clients/cart.php?a=add&pid=238&promocode=SIGNUP6MONTH&skipconfig=1",
-  eugamehost_game2: "https://www.eugamehost.com/clients/cart.php?a=add&pid=239&promocode=SIGNUP6MONTH&skipconfig=1",
-  eugamehost_game3: "https://www.eugamehost.com/clients/cart.php?a=add&pid=240&promocode=SIGNUP6MONTH&skipconfig=1",
-  eugamehost_game5: "https://www.eugamehost.com/clients/cart.php?a=add&pid=242&promocode=SIGNUP6MONTH&skipconfig=1",
-  eugamehost_5800x: "https://www.eugamehost.com/clients/cart.php?a=add&pid=500",
   discord: "https://discord.gg/dauntlessrevived",
-  patreon: "https://patreon.com/DauntlessRevived",
 };
 
 // A Record, so the compiler fails this file when a link name is added without a test here.
@@ -51,16 +46,11 @@ const ALL_TARGETS: Record<ExternalTarget, true> = {
   project_source: true,
   project_license: true,
   project_contributors: true,
+  revived_source: true,
+  revived_contributors: true,
   upstream_source: true,
   upstream_contributors: true,
-  eugamehost: true,
-  eugamehost_game1: true,
-  eugamehost_game2: true,
-  eugamehost_game3: true,
-  eugamehost_game5: true,
-  eugamehost_5800x: true,
   discord: true,
-  patreon: true,
 };
 
 // Raw URLs and tricks: none of these may ever be opened.

@@ -810,14 +810,6 @@ img {
   mask: var(--social-mark) center / contain no-repeat;
 }
 
-.social-icon-patreon {
-  --social-mark: url("./brand/patreon-mark.svg");
-}
-
-.social-icon-discord {
-  --social-mark: url("./brand/discord-mark.svg");
-}
-
 /* Keep every rail action reachable at the launcher's minimum window height. */
 @media (max-height: 800px) {
   .rail .tile-logo { max-width: 128px; }

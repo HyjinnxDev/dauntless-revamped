@@ -1,4 +1,4 @@
-// Dauntless Revived Launcher - Electron main process.
+// Dauntless Forever Launcher - Electron main process.
 //
 // Security model: the renderer is sandboxed, has no Node access and no network access at all
 // (every request is made here, in the main process, and only to the host from the invite). It can
@@ -23,7 +23,7 @@ import { findLinuxUpdate, installLinuxUpdate, type LinuxUpdate } from "./main/li
 import { findTailscale } from "./main/system";
 import { describeError, log, logToFile } from "./main/log";
 import { boundedString, externalTarget, isTrustedPageUrl, relayPortOverride, settingsPatch } from "./main/ipc-validate";
-import { INVITE_SCHEME, parseInvite } from "./shared/invite";
+import { INVITE_SCHEME, LEGACY_INVITE_SCHEME, parseInvite } from "./shared/invite";
 import { IPC, type Snapshot, type TaskProgress } from "./shared/types";
 import { systemLanguage, translate } from "./shared/i18n";
 import { APP_ID, SQUIRREL_NAME, UPDATE_FEED_URL } from "./main/constants";
@@ -102,7 +102,7 @@ async function ensureLinuxSecureStorageDependency(): Promise<boolean> {
 
 function inviteFromArgv(argv: string[]): string | null {
   for (const arg of argv) {
-    if (typeof arg === "string" && arg.toLowerCase().startsWith(`${INVITE_SCHEME}:`)) {
+    if (typeof arg === "string" && [INVITE_SCHEME, LEGACY_INVITE_SCHEME].some((scheme) => arg.toLowerCase().startsWith(`${scheme}:`))) {
       return parseInvite(arg).ok ? arg.trim() : null;
     }
   }
@@ -140,7 +140,7 @@ function createWindow(): void {
     show: false,
     // The page's ink (styles.css), so nothing flashes before it paints.
     backgroundColor: "#01090D",
-    title: "Dauntless Revived Launcher",
+    title: "Dauntless Forever Launcher",
     icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -170,7 +170,7 @@ function createWindow(): void {
       app.relaunch({args: [...process.argv.slice(1), "--safe-mode"]});
       app.exit(0);
     } else {
-      dialog.showErrorBox("Dauntless Revived could not open", "The launcher renderer stopped. Reinstall the latest launcher and send the launcher logs to support.");
+      dialog.showErrorBox("Dauntless Forever could not open", "The launcher renderer stopped. Reinstall the latest launcher and send the launcher logs to support.");
     }
   });
   mainWindow.on("maximize", () => mainWindow?.webContents.send(IPC.windowState, true));
@@ -204,7 +204,7 @@ function createWindow(): void {
   const loaded = DEV_SERVER_URL ? mainWindow.loadURL(DEV_SERVER_URL) : mainWindow.loadFile(RENDERER_INDEX);
   void loaded.catch((error) => {
     log.error(`launcher page failed: ${describeError(error)}`);
-    dialog.showErrorBox("Dauntless Revived could not open", "The launcher page could not load. Reinstall the latest launcher. Your account and game files are kept.");
+    dialog.showErrorBox("Dauntless Forever could not open", "The launcher page could not load. Reinstall the latest launcher. Your account and game files are kept.");
   });
 }
 
@@ -364,7 +364,7 @@ function makePlatform(): Platform {
   };
   const localAppData = process.env.LOCALAPPDATA ?? path.join(app.getPath("home"), "AppData", "Local");
   const defaultInstallDir =
-    process.platform === "linux" ? path.join(app.getPath("home"), "Games", "DauntlessRevived") : path.join(localAppData, "DauntlessRevived", "Game");
+    process.platform === "linux" ? path.join(app.getPath("home"), "Games", "DauntlessForever") : path.join(localAppData, "DauntlessForever", "Game");
   const relayPort = relayPortOverride(process.env.DAUNTLESS_REVIVED_RELAY_PORT);
   if (relayPort !== undefined) log.warn(`relay port overridden to ${relayPort}`);
   return {
@@ -466,7 +466,7 @@ if (!started) {
     app.whenReady().then(async () => {
       Menu.setApplicationMenu(null);
       logToFile(path.join(app.getPath("userData"), "logs"));
-      log.info(`Dauntless Revived Launcher ${app.getVersion()} starting`);
+      log.info(`Dauntless Forever Launcher ${app.getVersion()} starting`);
       if (process.platform === "linux") {
         log.info(
           `secure storage backend ${safeStorage.getSelectedStorageBackend()}, encryption ${safeStorage.isEncryptionAvailable() ? "available" : "unavailable"}`,
@@ -507,7 +507,7 @@ if (!started) {
       }
     }).catch((error) => {
       log.error(`launcher startup failed: ${describeError(error)}`);
-      dialog.showErrorBox("Dauntless Revived could not open", `Startup failed. Send the launcher logs to support.\n${describeError(error)}`);
+      dialog.showErrorBox("Dauntless Forever could not open", `Startup failed. Send the launcher logs to support.\n${describeError(error)}`);
       app.exit(1);
     });
 

@@ -9,8 +9,8 @@ function Earned(ProgressionId: string, Progress: number, HasPremium = false){
 }
 
 describe("progression config", () => {
-    it("has the 10 tracks the roadmap lists, requirements sorted by rank_id", () => {
-        assert.deepEqual(GetProgressionPaths().map((Path) => Path.progression_id).sort(), ["MasteryTrack_Behemoth", "MasteryTrack_PlayerLevel", ...WEAPONS, "season09b"].sort());
+    it("has the 17 tracks (the roadmap's 10 plus 7 weapon prestige tracks), requirements sorted by rank_id", () => {
+        assert.deepEqual(GetProgressionPaths().map((Path) => Path.progression_id).sort(), ["MasteryTrack_Behemoth", "MasteryTrack_PlayerLevel", ...WEAPONS, ...WEAPONS.map((Id) => Id.replace("MasteryTrack_", "PrestigeTrack_")), "season09b"].sort());
 
         for(const Path of GetProgressionPaths()){
             const Ranks = Path.requirements!.map((Requirement) => Requirement.rank_id);
@@ -25,6 +25,9 @@ describe("progression config", () => {
         assert.deepEqual(Totals("MasteryTrack_Behemoth"), [411, 50]);
         for(const Weapon of WEAPONS){
             assert.deepEqual(Totals(Weapon), [115, 20], Weapon);
+        }
+        for(const Weapon of WEAPONS){
+            assert.deepEqual(Totals(Weapon.replace("MasteryTrack_", "PrestigeTrack_")), [10, 10], Weapon);
         }
         assert.deepEqual(Totals("season09b"), [5000, 50]);
         assert.equal(GetProgressionPath("season09b")!.prestige!.xp_per_level, 100);

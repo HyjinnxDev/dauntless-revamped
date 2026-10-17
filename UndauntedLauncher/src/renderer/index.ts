@@ -3,11 +3,10 @@
 // all come through the main process.
 
 import { $, forceRender, githubMark, h, icon, renderRegion, type IconName } from "./dom";
-import partnerLogo from "./brand/eugamehost-partner.png";
 import newsBadge from "./brand/news-badge.svg";
 import { buildScene } from "./scene";
 import { isStringKey, translate, type StringKey } from "../shared/i18n";
-import { localized, PATRONS, PROJECT_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, type CreditPerson, type CreditRole } from "../shared/credits";
+import { localized, PATRONS, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, type CreditPerson, type CreditRole } from "../shared/credits";
 import { parseInvite } from "../shared/invite";
 import { checkUsername, extractAccountKey } from "../shared/username";
 import { exposureKey, graphicsKey, primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
@@ -15,8 +14,8 @@ import { formatBytes, formatDate, formatDuration, formatRunningTime } from "../s
 import { sortInstances, type InstanceKind, type ServerStatus, type StatusInstance } from "../shared/status";
 import { EXPOSURE_MODES, GAME_LANGUAGES, GRAPHICS_PRESETS, LANGUAGES, type Branding, type ExposureMode, type ExternalTarget, type GameLanguage, type GraphicsPreset, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
 
-type View = "play" | "news" | "server" | "settings" | "partners" | "mods" | "credits";
-const VIEWS: readonly View[] = ["play", "news", "server", "settings", "partners", "mods", "credits"];
+type View = "play" | "news" | "server" | "settings" | "mods" | "credits";
+const VIEWS: readonly View[] = ["play", "news", "server", "settings", "mods", "credits"];
 type Modal =
   | { kind: "invite"; link: string; name: string; host: string; mode: "public" | "private"; fp: string | null }
   // A public invite whose certificate is not the one this PC's key for that server belongs to.
@@ -43,7 +42,6 @@ const state = {
   news: [] as NewsItem[],
   newsSeen: false,
   serverMenu: false, // the rail's server switcher is open
-  settingsTab: "game" as SettingsTab, // the Settings page's open tab
   branding: { backgrounds: [], accent: null } as Branding,
   extrasFor: "",
   extrasAt: 0,
@@ -644,37 +642,30 @@ function playUpdate(snap: Snapshot): HTMLElement[] {
   return out;
 }
 
-function newsTeaser(): HTMLElement | null {
-  const item = state.news[0];
-  if (!item) return null;
-  const c = card(
-    "",
-    h(
-      "div",
-      { class: "news-teaser" },
-      item.date ? h("span", { class: "news-teaser-date" }, formatDate(item.date, state.lang)) : null,
-      h("strong", {}, item.title),
-      h("div", { class: "card-row" }, linkButton(t("news_read_more"), () => setView("news"), { fk: "news-more" })),
-    ),
+// The two latest news items as small cards; a click opens the full list.
+function newsDock(): HTMLElement | null {
+  const items = state.news.slice(0, 2);
+  if (items.length === 0) return null;
+  return h(
+    "div",
+    { class: "news-dock" },
+    ...items.map((item) => {
+      const c = h(
+        "button",
+        { type: "button", class: "news-dock-card", "data-fk": "news-more" },
+        item.date ? h("span", { class: "news-teaser-date" }, formatDate(item.date, state.lang)) : null,
+        h("strong", {}, item.title),
+        h("span", { class: "news-dock-body" }, item.body),
+      );
+      c.addEventListener("click", () => setView("news"));
+      return c;
+    }),
   );
-  return c;
 }
 
 function playReady(snap: Snapshot): HTMLElement[] {
   const user = snap.account.username;
   const out: HTMLElement[] = [eyebrow(snap), ...heading(user ? t("ready_title", { user }) : t("ready_title_nouser"), t("ready_text"))];
-  out.push(
-    card(
-      "",
-      h(
-        "div",
-        { class: "card-row" },
-        h("span", { class: "badge" }, icon("settings"), t("ready_graphics", { preset: t(graphicsKey(snap.settings.graphics)) })),
-        h("span", { class: "badge" }, t(snap.settings.windowed ? "ready_windowed" : "ready_fullscreen")),
-        linkButton(t("ready_change"), () => setView("settings"), { fk: "ready-change" }),
-      ),
-    ),
-  );
   if (snap.account.offerBackup) {
     out.push(
       card(
@@ -687,8 +678,6 @@ function playReady(snap: Snapshot): HTMLElement[] {
   }
   const vc = vcWarning(snap);
   if (vc) out.push(vc);
-  const teaser = newsTeaser();
-  if (teaser && !snap.account.offerBackup) out.push(teaser);
   return out;
 }
 
@@ -721,7 +710,7 @@ function renderPlay(): void {
     snap.lastError?.code === "key_rejected",
     state.keyFormOpen,
     state.existingFormOpen,
-    state.news[0]?.title ?? null,
+    state.news.slice(0, 2).map((n) => n.title),
     snap.phase === "installing" ? state.task?.kind ?? snap.task?.kind : null,
   ]);
   renderRegion(container, sig, () => {
@@ -755,7 +744,7 @@ function renderPlay(): void {
         parts = playRunning(snap);
         break;
     }
-    return [h("div", { class: "play-content" }, ...parts, partnerBanner())];
+    return [h("div", { class: "play-content" }, ...parts), ...(snap.phase === "ready" || snap.phase === "update" || snap.phase === "running" ? [newsDock()] : [])].filter((n): n is HTMLElement => n !== null);
   });
 }
 
@@ -865,7 +854,7 @@ function renderActionBar(): void {
     const v = taskView(task, state.lang);
     announce(v.indeterminate ? t(v.titleKey) : `${t(v.titleKey)}: ${Math.floor(v.percent / 10) * 10} %`);
   } else {
-    renderRegion(info, JSON.stringify([state.lang, snap.phase, snap.connect.checking, snap.connect.problem, snap.install.totalBytes]), () => [renderSteps(snap), h("div", { class: "action-hint" }, actionHint(snap))]);
+    renderRegion(info, JSON.stringify([state.lang, snap.phase, snap.connect.checking, snap.connect.problem, snap.install.totalBytes]), () => [snap.phase === "ready" || snap.phase === "update" || snap.phase === "running" ? null : renderSteps(snap), h("div", { class: "action-hint" }, actionHint(snap))]);
     announce(actionHint(snap));
   }
 }
@@ -1056,6 +1045,20 @@ function renderPanel(): void {
   });
 }
 
+// The old side panel, reduced to one line on the main screen: the online count, or nothing.
+function renderHeroStatus(): void {
+  const el = $("#hero-status");
+  const status = state.snap?.phase === "connect" ? null : state.snap?.status ?? null;
+  const show = !!status && status.online && !status.limited;
+  el.hidden = !show;
+  if (!show || !status) return;
+  const inWorlds = status.instances.length;
+  renderRegion(el, JSON.stringify([state.lang, status.playersOnline, inWorlds]), () => [
+    h("span", { class: "hero-status-num" }, String(status.playersOnline)),
+    h("span", { class: "hero-status-label" }, t(status.playersOnline === 1 ? "sp_players_one_label" : "sp_players_other_label")),
+  ]);
+}
+
 function panelFoot(status: ServerStatus | null): HTMLElement {
   return h(
     "div",
@@ -1101,80 +1104,8 @@ function renderNews(): void {
         );
       }
     }
-    return [h("div", { class: "page" }, h("h1", { class: "page-title", id: "news-title" }, title), ...body, partnerBanner())];
+    return [h("div", { class: "page" }, h("h1", { class: "page-title", id: "news-title" }, title), ...body)];
   });
-}
-
-// ------------------------------------------------------------------ partners page
-
-function partnerBanner(): HTMLElement {
-  const banner = h(
-    "button",
-    { type: "button", class: "partner-banner", "data-fk": "partner-banner", "aria-label": t("partner_banner_label") },
-    h("img", { src: partnerLogo, alt: "EU Gamehost", draggable: "false" }),
-    h("span", { class: "partner-banner-copy" },
-      h("span", { class: "partner-mini-label" }, t("partner_ad")),
-      h("strong", {}, t("partner_banner_title")),
-      h("span", { class: "partner-banner-cta" }, t("partner_banner_cta")),
-    ),
-  );
-  banner.addEventListener("click", () => setView("partners"));
-  return banner;
-}
-
-function partnerHostingCard(): HTMLElement {
-  const plans: readonly { name: string; price: string; spec: string; target: ExternalTarget; note: StringKey }[] = [
-    { name: "VDS GAME 1", price: "£24.99", spec: "1 vCPU · 4 GB RAM · 60 GB NVMe", target: "eugamehost_game1", note: "partner_small" },
-    { name: "VDS GAME 3", price: "£44.99", spec: "3 vCPU · 12 GB RAM · 180 GB NVMe", target: "eugamehost_game3", note: "partner_recommended" },
-    { name: "VDS GAME 5", price: "£66.99", spec: "6 vCPU · 24 GB RAM · 360 GB NVMe", target: "eugamehost_game5", note: "partner_headroom" },
-    { name: "Ryzen 7 5800X", price: "£85", spec: "8c/16t · 32 GB DDR4 · 1 TB NVMe", target: "eugamehost_5800x", note: "partner_dedicated" },
-  ];
-  const grid = h("div", { class: "partner-plans" });
-  for (const p of plans) {
-    const b = h(
-      "button",
-      { type: "button", class: `partner-plan${p.note === "partner_recommended" ? " recommended" : ""}`, "data-fk": p.target },
-      h("span", { class: "partner-plan-note" }, t(p.note)),
-      h("strong", {}, p.name),
-      h("span", { class: "partner-price" }, p.price, h("span", {}, t("partner_per_month"))),
-      h("span", { class: "partner-spec" }, p.spec),
-      h("span", { class: "partner-spec" }, t(p.target === "eugamehost_5800x" ? "partner_network_dedicated" : "partner_network_vds")),
-      h("span", { class: "partner-cta" }, t("partner_plan_cta"), icon("external")),
-    );
-    b.addEventListener("click", () => open(p.target));
-    grid.append(b);
-  }
-  return card(
-    "partner-card",
-    h("div", { class: "partner-head" },
-      h("img", { class: "partner-logo", src: partnerLogo, alt: "EU Gamehost", draggable: "false" }),
-      h("div", {},
-        h("span", { class: "badge partner-badge" }, t("partner_ad")),
-        h("h2", { class: "partner-title" }, t("partner_title")),
-      ),
-    ),
-    h("p", { class: "card-text partner-copy" }, t("partner_intro")),
-    grid,
-    h("div", { class: "card-row partner-actions" },
-      linkButton(t("partner_explore"), () => open("eugamehost"), { icon: "external", fk: "host-all" }),
-    ),
-    h("p", { class: "small-print partner-disclosure" }, t("partner_disclosure")),
-  );
-}
-
-function renderPartners(): void {
-  renderRegion($("#view-partners"), state.lang, () => [
-    h("div", { class: "page partners-page" },
-      h("h1", { class: "page-title", id: "partners-title" }, t("nav_partners")),
-      h("p", { class: "page-sub" }, t("partners_subtitle")),
-      partnerHostingCard(),
-      card("",
-        h("h2", { class: "card-title" }, icon("server"), t("partner_capacity_title")),
-        h("p", { class: "card-text" }, t("partner_capacity")),
-        h("p", { class: "small-print" }, t("partner_capacity_note")),
-      ),
-    ),
-  ]);
 }
 
 // ------------------------------------------------------------------ mods page
@@ -1229,7 +1160,7 @@ function renderServer(): void {
   const sig = JSON.stringify([state.lang, snap?.server ?? null, snap?.savedServers ?? [], snap?.status ?? null, snap?.phase, snap?.connect.problem, snap?.busy, !!snap?.task, snap?.game.running, minute]);
   renderRegion(container, sig, () => {
     if (!snap?.server) {
-      return [h("div", { class: "page" }, h("h1", { class: "page-title", id: "server-title" }, t("nav_server")), card("", h("p", { class: "card-text" }, t("sp_nojoin"))), partnerBanner())];
+      return [h("div", { class: "page" }, h("h1", { class: "page-title", id: "server-title" }, t("nav_server")), card("", h("p", { class: "card-text" }, t("sp_nojoin"))))];
     }
     const sv = snap.server;
     const status = snap.status;
@@ -1248,7 +1179,6 @@ function renderServer(): void {
     const parts: HTMLElement[] = [
       h("h1", { class: "page-title", id: "server-title" }, serverName()),
       h("p", { class: "page-sub" }, t("server_auto")),
-      partnerBanner(),
       card("", kv, h("div", { class: "card-row", style: undefined }, button(t("sp_refresh"), () => void api.refreshStatus(), { icon: "refresh", fk: "srv-refresh" }), status?.sourceUrl ? linkButton(t("sp_source"), () => open("server_source"), { icon: "external", fk: "srv-source" }) : null)),
     ];
     if (status?.limited) {
@@ -1386,9 +1316,6 @@ function onToggle(sw: HTMLElement, save: (on: boolean) => void): void {
   });
 }
 
-type SettingsTab = "game" | "graphics" | "account" | "launcher";
-const SETTINGS_TABS: SettingsTab[] = ["game", "graphics", "account", "launcher"];
-const SETTINGS_TAB_ICONS: Record<SettingsTab, IconName> = { game: "gamepad", graphics: "monitor", account: "user", launcher: "settings" };
 
 // A setting's long explanation sits behind a small info button: a tooltip on hover and on keyboard
 // focus, and the button's accessible name, so the page shows only the setting's name.
@@ -1404,7 +1331,7 @@ function renderSettings(): void {
   const container = $("#view-settings");
   const snap = state.snap;
   if (!snap) return;
-  const sig = JSON.stringify([state.lang, state.settingsTab, snap.settings, snap.install.dir, snap.account, snap.server, snap.savedServers, snap.app, snap.phase, snap.busy, !!snap.task]);
+  const sig = JSON.stringify([state.lang, snap.settings, snap.install.dir, snap.account, snap.server, snap.savedServers, snap.app, snap.phase, snap.busy, !!snap.task]);
   renderRegion(container, sig, () => {
     const busy = snap.busy || snap.task !== null || snap.game.running;
 
@@ -1547,35 +1474,8 @@ function renderSettings(): void {
       snap.app.updateReady ? h("div", { class: "card-row" }, button(t("update_restart"), () => void api.installUpdate(), { cls: "btn-primary", fk: "about-update", disabled: snap.game.running })) : null,
     );
 
-    // Tabs like the game's own settings menu: one group at a time instead of one long page.
-    const panels: Record<SettingsTab, (HTMLElement | null)[]> = {
-      game: [game],
-      graphics: [graphics],
-      account: [account, otherServers],
-      launcher: [language, troubleshooting, streaming, about],
-    };
-    const tabs = h("div", { class: "settings-tabs", role: "tablist", "aria-label": t("set_title") });
-    for (const tab of SETTINGS_TABS) {
-      const on = state.settingsTab === tab;
-      const b = h("button", { type: "button", class: "settings-tab", role: "tab", id: `set-tab-${tab}`, "aria-selected": on ? "true" : "false", "aria-controls": "settings-panel", tabindex: on ? "0" : "-1", "data-fk": `set-tab-${tab}`, title: t(`set_tab_${tab}`) }, icon(SETTINGS_TAB_ICONS[tab]), h("span", { class: "settings-tab-label" }, t(`set_tab_${tab}`)));
-      b.addEventListener("click", () => {
-        state.settingsTab = tab;
-        renderSettings();
-      });
-      b.addEventListener("keydown", (e) => {
-        const i = SETTINGS_TABS.indexOf(tab);
-        const next = e.key === "ArrowRight" ? SETTINGS_TABS[(i + 1) % SETTINGS_TABS.length] : e.key === "ArrowLeft" ? SETTINGS_TABS[(i + SETTINGS_TABS.length - 1) % SETTINGS_TABS.length] : null;
-        if (!next) return;
-        e.preventDefault();
-        state.settingsTab = next;
-        renderSettings();
-        document.getElementById(`set-tab-${next}`)?.focus();
-      });
-      tabs.appendChild(b);
-    }
-    const panel = h("div", { class: "settings-panel", id: "settings-panel", role: "tabpanel", "aria-labelledby": `set-tab-${state.settingsTab}` }, ...panels[state.settingsTab]);
-    // The tabs in a row on top, then one panel with every setting in its own row box.
-    return [h("div", { class: "page page-wide" }, h("h1", { class: "page-title", id: "settings-title" }, t("set_title")), h("div", { class: "settings-layout" }, tabs, panel))];
+    // One scrolling drawer: game, graphics, account, then the launcher's own options.
+    return [h("div", { class: "page page-wide" }, h("h1", { class: "page-title", id: "settings-title" }, t("set_title")), h("div", { class: "settings-layout" }, h("div", { class: "settings-panel", id: "settings-panel" }, game, graphics, account, otherServers, language, troubleshooting, streaming, about)))];
   });
 }
 
@@ -1669,10 +1569,22 @@ function renderCredits(): void {
       h("p", { class: "page-sub" }, t("credits_intro")),
       card(
         "settings-section",
-        h("h2", { class: "card-title" }, "Dauntless Revived"),
+        h("h2", { class: "card-title" }, "Dauntless Forever"),
         h("p", { class: "card-text" }, t("credits_project_text")),
         creditPeople(PROJECT_PEOPLE),
         h("div", { class: "card-row" }, linkButton(t("credits_all_contributors"), () => open("project_contributors"), { icon: "external", fk: "cr-contributors" })),
+      ),
+      card(
+        "settings-section",
+        h("h2", { class: "card-title" }, "Dauntless Revived"),
+        h("p", { class: "card-text" }, t("credits_revived_text")),
+        creditPeople(REVIVED_PEOPLE),
+        h(
+          "div",
+          { class: "card-row" },
+          linkButton(t("credits_revived_source"), () => open("revived_source"), { icon: "external", fk: "cr-revived" }),
+          linkButton(t("credits_all_contributors"), () => open("revived_contributors"), { icon: "external", fk: "cr-revived-contributors" }),
+        ),
       ),
       card(
         "settings-section",
@@ -1763,13 +1675,20 @@ function renderBanners(): void {
 // ------------------------------------------------------------------ rail, titlebar, views
 
 const NAV: { view: View; icon: IconName; key: StringKey }[] = [
-  { view: "play", icon: "play", key: "nav_play" },
   { view: "news", icon: "news", key: "nav_news" },
   { view: "server", icon: "server", key: "nav_server" },
-  { view: "partners", icon: "people", key: "nav_partners" },
   { view: "mods", icon: "puzzle", key: "nav_mods" },
-  { view: "settings", icon: "settings", key: "nav_settings" },
 ];
+
+function menuAction(label: string, onClick: () => void, fk: string, disabled = false): HTMLButtonElement {
+  const b = h("button", { type: "button", class: "server-menu-action", role: "menuitem", disabled, "data-fk": fk }, label);
+  b.addEventListener("click", () => {
+    state.serverMenu = false;
+    renderRail();
+    onClick();
+  });
+  return b;
+}
 
 function renderRail(): void {
   const snap = state.snap;
@@ -1793,7 +1712,6 @@ function renderRail(): void {
   // With other servers saved, the chip is also the server switcher: a click lists them, one more click joins.
   const others = snap?.savedServers.filter((sv) => !sv.current) ?? [];
   const locked = !snap || snap.busy || snap.task !== null || snap.game.running;
-  if (others.length === 0 || locked) state.serverMenu = false;
   renderRegion(chip, JSON.stringify([state.lang, user, snap?.server?.name ?? null, snap?.status?.name ?? null, others, locked, state.serverMenu]), () => {
     const inner = [
       h("span", { class: `avatar${user ? "" : " empty"}`, "aria-hidden": "true" }, user ? Array.from(user)[0].toUpperCase() : "?"),
@@ -1804,8 +1722,7 @@ function renderRail(): void {
         h("span", { class: "account-name" }, user ?? t("rail_not_signed_in")),
       ),
     ];
-    if (others.length === 0) return inner;
-    const toggle = h("button", { type: "button", class: "account-switch", "data-fk": "server-switch", "aria-haspopup": "menu", "aria-expanded": state.serverMenu ? "true" : "false", title: t("saved_switch"), disabled: locked }, ...inner);
+    const toggle = h("button", { type: "button", class: "account-switch", "data-fk": "server-switch", "aria-haspopup": "menu", "aria-expanded": state.serverMenu ? "true" : "false", title: t("saved_switch") }, ...inner, h("span", { class: "account-caret", "aria-hidden": "true" }));
     toggle.addEventListener("click", () => {
       state.serverMenu = !state.serverMenu;
       renderRail();
@@ -1815,7 +1732,7 @@ function renderRail(): void {
       { class: "server-menu", role: "menu", "aria-label": t("saved_switch"), hidden: !state.serverMenu },
       h("li", { class: "server-menu-head", role: "presentation" }, t("saved_switch")),
       ...others.map((sv) => {
-        const item = h("button", { type: "button", class: "server-menu-item", role: "menuitem", "data-fk": `switch-${sv.id}` }, h("span", { class: "server-menu-name" }, sv.name), h("span", { class: "server-menu-sub" }, savedServerSub(sv)));
+        const item = h("button", { type: "button", class: "server-menu-item", role: "menuitem", disabled: locked, "data-fk": `switch-${sv.id}` }, h("span", { class: "server-menu-name" }, sv.name), h("span", { class: "server-menu-sub" }, savedServerSub(sv)));
         item.addEventListener("click", () => {
           state.serverMenu = false;
           renderRail();
@@ -1823,6 +1740,9 @@ function renderRail(): void {
         });
         return h("li", { role: "none" }, item);
       }),
+      snap?.server
+        ? h("li", { role: "none", class: "server-menu-actions" }, menuAction(t("nav_server"), () => setView("server"), "server-details"), menuAction(t("set_add_server"), () => showModal({ kind: "leave" }), "server-add", locked))
+        : null,
     );
     return [toggle, menu];
   });
@@ -1842,11 +1762,10 @@ function setView(v: View): void {
   }
   state.view = v;
   if (v === "news") state.newsSeen = true;
-  for (const view of VIEWS) $(`#view-${view}`).hidden = view !== v;
+  // Play is the main screen and stays drawn; every other page opens as a drawer over it.
+  for (const view of VIEWS) $(`#view-${view}`).hidden = view !== "play" && view !== v;
   $("#actionbar").hidden = false;
-  // The Server page shows everything the side panel shows, in full: no need for both. The Credits
-  // Partners and Mods pages have long content and get the room too.
-  $(".world").classList.toggle("no-panel", v === "server" || v === "credits" || v === "partners" || v === "mods");
+  $(".world").classList.toggle("overlay-open", v !== "play");
   renderAll();
   if (changed && !reducedMotion.matches) {
     const selected = $(`#view-${v}`);
@@ -1901,10 +1820,10 @@ function renderAll(): void {
   if (state.view === "server") renderServer();
   if (state.view === "settings") renderSettings();
   if (state.view === "credits") renderCredits();
-  if (state.view === "partners") renderPartners();
   if (state.view === "mods") renderMods();
   renderActionBar();
   renderPanel();
+  renderHeroStatus();
 }
 
 // ------------------------------------------------------------------ modals
@@ -2057,9 +1976,10 @@ window.addEventListener("keydown", (e) => {
 
 document.addEventListener("keydown", (e) => {
   if (!state.modal) {
-    if (e.key === "Escape" && state.view === "credits" && !e.defaultPrevented) {
+    if (e.key === "Escape" && !e.defaultPrevented && state.view !== "play") {
       e.preventDefault();
-      leaveCredits();
+      if (state.view === "credits") leaveCredits();
+      else setView("play");
     }
     return;
   }
@@ -2222,9 +2142,12 @@ function initChrome(): void {
   const github = $("#github-btn");
   github.appendChild(githubMark());
   github.addEventListener("click", () => open("project_source"));
-  $("#eugamehost-btn").addEventListener("click", () => setView("partners"));
-  $("#discord-btn").addEventListener("click", () => open("discord"));
-  $("#patreon-btn").addEventListener("click", () => open("patreon"));
+  $("#gear-btn").prepend(icon("settings"));
+  $("#gear-btn").addEventListener("click", () => setView(state.view === "settings" ? "play" : "settings"));
+  $("#drawer-close").prepend(icon("close"));
+  $("#drawer-close").addEventListener("click", () => setView("play"));
+  $("#scrim").addEventListener("click", () => setView("play"));
+  $("#logo-btn").addEventListener("click", () => setView("play"));
   document.addEventListener("visibilitychange", () => void api.setStatusPolling(!document.hidden));
   window.setInterval(() => {
     renderPanel();

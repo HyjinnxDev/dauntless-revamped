@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { PATRONS, PROJECT_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, localized, type CreditPerson } from "../src/shared/credits";
+import { PATRONS, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, localized, type CreditPerson } from "../src/shared/credits";
 import { STRINGS, type StringKey } from "../src/shared/i18n";
 import { LANGUAGES, type ExternalTarget } from "../src/shared/types";
 
@@ -20,36 +20,38 @@ function person(list: readonly CreditPerson[], github: string): CreditPerson {
 }
 
 test("the credits name every contributor, in order, with their role", () => {
-  assert.equal(PROJECT_PEOPLE[0].github, "mixutin", "the maintainer comes first");
-  assert.equal(person(PROJECT_PEOPLE, "mixutin").role, "maintainer");
-  assert.equal(person(PROJECT_PEOPLE, "mixutin").name, "mixutin");
-  assert.equal(person(PROJECT_PEOPLE, "Vvoidddd").role, "contributor");
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /airship/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /console windows/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /\.gitignore/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /performance sampler/); // #6
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.fi, /suorituskykymittarin/);
+  assert.equal(PROJECT_PEOPLE[0].github, "HyjinnxDev", "Dauntless Forever's maintainer comes first");
+  assert.equal(PROJECT_PEOPLE[0].role, "maintainer");
+  assert.equal(REVIVED_PEOPLE[0].github, "mixutin", "Dauntless Revived's maintainer comes first");
+  assert.equal(person(REVIVED_PEOPLE, "mixutin").role, "maintainer");
+  assert.equal(person(REVIVED_PEOPLE, "mixutin").name, "mixutin");
+  assert.equal(person(REVIVED_PEOPLE, "Vvoidddd").role, "contributor");
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /airship/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /console windows/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /\.gitignore/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /performance sampler/); // #6
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /suorituskykymittarin/);
   // #8
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /existing Dauntless 1\.4\.4 folder by pasting its path/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.fi, /valmista Dauntless 1\.4\.4 -kansiota liittämällä sen polun/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /existing Dauntless 1\.4\.4 folder by pasting its path/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /valmista Dauntless 1\.4\.4 -kansiota liittämällä sen polun/);
   // #9
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /first in-game text chat server \(XMPP\) and tested it with a real 1\.4\.4 client/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.fi, /ensimmäisen pelinsisäisen tekstichat-palvelimen \(XMPP\) ja testasi sen oikealla 1\.4\.4-pelillä/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /first in-game text chat server \(XMPP\) and tested it with a real 1\.4\.4 client/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /ensimmäisen pelinsisäisen tekstichat-palvelimen \(XMPP\) ja testasi sen oikealla 1\.4\.4-pelillä/);
   // #7: the exposure setting is an opt-in experiment, off by default; the note must say so.
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /opt-in Basic adaptive exposure setting for the airship \(off by default\)/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.fi, /valinnaisen mukautuvan perusvalotuksen asetuksen ilmalaivaa varten \(oletuksena pois päältä\)/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /opt-in Basic adaptive exposure setting for the airship \(off by default\)/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /valinnaisen mukautuvan perusvalotuksen asetuksen ilmalaivaa varten \(oletuksena pois päältä\)/);
   // The exposure change was taken back out in 0.1.1 (it darkened Ramsgate); the note must not
   // suggest the airship is fixed.
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.en, /reverted in launcher 0\.1\.1/);
-  assert.match(person(PROJECT_PEOPLE, "Vvoidddd").note.fi, /peruttiin käynnistimen versiossa 0\.1\.1/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /reverted in launcher 0\.1\.1/);
+  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /peruttiin käynnistimen versiossa 0\.1\.1/);
 
   // Harmonic: the work ported from Harmonic's Dauntless 1.4.4 fork (Harmonicrain/Undaunted 895f7c7),
   // listed after Vvoidddd. The English note names no gender (nothing we have says which).
-  const harmonic = person(PROJECT_PEOPLE, "Harmonicrain");
+  const harmonic = person(REVIVED_PEOPLE, "Harmonicrain");
   assert.equal(harmonic.name, "Harmonic");
   assert.equal(harmonic.role, "contributor");
   assert.ok(
-    PROJECT_PEOPLE.findIndex((p) => p.github === "Harmonicrain") > PROJECT_PEOPLE.findIndex((p) => p.github === "Vvoidddd"),
+    REVIVED_PEOPLE.findIndex((p) => p.github === "Harmonicrain") > REVIVED_PEOPLE.findIndex((p) => p.github === "Vvoidddd"),
     "Harmonic comes after Vvoidddd",
   );
   assert.match(harmonic.note.en, /Dauntless 1\.4\.4 fork of Undaunted/);
@@ -69,7 +71,7 @@ test("the credits name every contributor, in order, with their role", () => {
   for (const part of ["server-mode DLL", "deploy server", "metagame", "launcher"]) assert.ok(gwog.note.en.includes(part), part);
   assert.equal(person(UPSTREAM_PEOPLE, "EisigesEis").role, "contributor");
 
-  const handles = [...PROJECT_PEOPLE, ...UPSTREAM_PEOPLE].map((p) => p.github);
+  const handles = [...PROJECT_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE].map((p) => p.github);
   assert.equal(new Set(handles).size, handles.length, "nobody is listed twice");
 });
 
@@ -84,7 +86,7 @@ test("patrons are listed separately with localized thanks", () => {
 });
 
 test("every credit has text in every language", () => {
-  for (const p of [...PROJECT_PEOPLE, ...UPSTREAM_PEOPLE]) {
+  for (const p of [...PROJECT_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE]) {
     assert.ok(p.name.trim() && p.github.trim(), JSON.stringify(p));
     assert.match(p.github, /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, `not a GitHub handle: ${p.github}`);
     for (const lang of LANGUAGES) assert.ok(p.note[lang].trim().length > 10, `${p.github} ${lang}`);
@@ -170,16 +172,11 @@ test("the page opens links by name only, and community/source controls are in th
     project_source: true,
     project_license: true,
     project_contributors: true,
+    revived_source: true,
+    revived_contributors: true,
     upstream_source: true,
     upstream_contributors: true,
-    eugamehost: true,
-    eugamehost_game1: true,
-    eugamehost_game2: true,
-    eugamehost_game3: true,
-    eugamehost_game5: true,
-    eugamehost_5800x: true,
     discord: true,
-    patreon: true,
   };
   const dir = path.join(ROOT, "src", "renderer");
   let opens = 0;
@@ -202,11 +199,10 @@ test("the page opens links by name only, and community/source controls are in th
   // Both buttons sit in the rail, outside every page, so they show on every screen (also before an
   // invite is entered), and the GitHub button has an accessible name.
   const html = readFileSync(path.join(ROOT, "index.html"), "utf8");
-  const rail = html.slice(html.indexOf('<nav class="rail"'), html.indexOf("</nav>"));
+  const rail = html.slice(html.indexOf('<nav class="footlinks"'), html.indexOf("</nav>"));
   assert.match(rail, /<button type="button" class="icon-btn" id="github-btn" data-i18n-aria="github_link"><\/button>/);
   assert.match(rail, /<button type="button" class="rail-link" id="credits-btn">/);
-  assert.match(rail, /<button type="button" class="social-button" id="discord-btn">/);
-  assert.match(rail, /<button type="button" class="social-button" id="patreon-btn">/);
+  assert.doesNotMatch(html, /id="(?:patreon|eugamehost)-btn"/, "no ads or sponsor buttons in the page");
   assert.match(html, /<section class="view" id="view-credits" aria-labelledby="credits-title" hidden><\/section>/);
 });
 
@@ -217,7 +213,7 @@ test("Escape on the Credits page goes back to the page and button it was opened 
   assert.match(setView, /if \(v === "credits" && state\.view !== "credits"\) \{[^}]*state\.creditsReturn = \{ view: state\.view, focus: /);
   // Escape with no dialog open, on the Credits page, leaves it.
   const keydown = src.slice(src.indexOf('document.addEventListener("keydown"'));
-  assert.match(keydown, /^document\.addEventListener\("keydown", \(e\) => \{\s*if \(!state\.modal\) \{\s*if \(e\.key === "Escape" && state\.view === "credits" && !e\.defaultPrevented\) \{\s*e\.preventDefault\(\);\s*leaveCredits\(\);/);
+  assert.match(keydown, /^document\.addEventListener\("keydown", \(e\) => \{\s*if \(!state\.modal\) \{\s*if \(e\.key === "Escape" && !e\.defaultPrevented && state\.view !== "play"\) \{\s*e\.preventDefault\(\);\s*if \(state\.view === "credits"\) leaveCredits\(\);/);
   // Leaving goes back to that page and puts the focus back, or on the rail's Credits button.
   const leave = src.slice(src.indexOf("function leaveCredits("), src.indexOf("function applyStaticI18n("));
   assert.match(leave, /setView\(back\.view\);/);

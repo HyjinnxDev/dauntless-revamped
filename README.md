@@ -1,5 +1,7 @@
 <p align="right"><a href="README.fi.md">🇫🇮 Suomeksi</a></p>
 
+> **Dauntless Forever** is a fork of [Dauntless Revived](https://github.com/mixutin/dauntless-revived) by mixutin and contributors, which is a fork of [Undaunted](https://github.com/SyST3MDeV/Undaunted) by gwog and contributors (all AGPL-3.0). It has a redesigned launcher and a host list; see [NOTICE.md](NOTICE.md) for what comes from where. The rest of this README is still Dauntless Revived's and is being updated. Unofficial fan project, not affiliated with Phoenix Labs or Epic Games.
+
 <p align="center">
   <img src=".github/assets/banner.png" width="100%" alt="Dauntless Revived banner. On the left, the project logo: a dragon's head above the words Dauntless Revived. On the right: Private server revival, Dauntless 1.4.4. Dauntless Revived. Play the genuine Dauntless 1.4.4 client on a server you host yourself. Fork of Undaunted by gwog and contributors, AGPL-3.0. Unofficial fan project, not affiliated with Phoenix Labs.">
 </p>

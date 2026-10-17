@@ -1,18 +1,23 @@
 // Fixed values: pinned hashes, file locations and the few public URLs the launcher may open.
 
-export const APP_ID = "io.github.mixutin.dauntlessrevived";
-export const SQUIRREL_NAME = "DauntlessRevivedLauncher";
-export const PROJECT_URL = "https://github.com/mixutin/dauntless-revived";
-export const PROJECT_LICENSE_URL = "https://github.com/mixutin/dauntless-revived/blob/dauntless-revived/LICENSE.txt";
-export const PROJECT_CONTRIBUTORS_URL = "https://github.com/mixutin/dauntless-revived/graphs/contributors";
-// Undaunted, the project this launcher and the whole fork are a modified version of.
+export const APP_ID = "io.github.hyjinnxdev.dauntlessforever";
+export const SQUIRREL_NAME = "DauntlessForeverLauncher";
+// Dauntless Forever lives in this fork. When the repository is renamed, change these four lines (GitHub
+// redirects the old name meanwhile).
+export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revived";
+export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt";
+export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors";
+// Dauntless Revived, the project Dauntless Forever is a modified version of (AGPL-3.0).
+export const REVIVED_URL = "https://github.com/mixutin/dauntless-revived";
+export const REVIVED_CONTRIBUTORS_URL = "https://github.com/mixutin/dauntless-revived/graphs/contributors";
+// Undaunted, the project Dauntless Revived is in turn a modified version of.
 export const UPSTREAM_URL = "https://github.com/SyST3MDeV/Undaunted";
 export const UPSTREAM_CONTRIBUTORS_URL = "https://github.com/SyST3MDeV/Undaunted/graphs/contributors";
 export const TAILSCALE_DOWNLOAD_URL = "https://tailscale.com/download";
 export const VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 // Self-update feed: a rolling GitHub release that the release workflow keeps current
 // (update.electronjs.org only reads plain semver tags, and launcher releases are tagged launcher-v*).
-export const UPDATE_FEED_URL = "https://github.com/mixutin/dauntless-revived/releases/download/launcher-updates";
+export const UPDATE_FEED_URL = "https://github.com/HyjinnxDev/dauntless-revived/releases/download/launcher-updates";
 
 // Game layout (paths relative to the folder that contains Archon/).
 export const WIN64_RELATIVE_DIR = "Archon/Binaries/Win64";

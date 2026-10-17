@@ -25,12 +25,12 @@ function copy(source, name) {
 rmSync(release, { recursive: true, force: true });
 mkdirSync(release, { recursive: true });
 
-copy(one(path.join(make, "AppImage", "x64"), ".AppImage"), `DauntlessRevivedLauncher-${version}-linux-x86_64.AppImage`);
-copy(one(path.join(make, "deb", "x64"), ".deb"), `DauntlessRevivedLauncher-${version}-linux-amd64.deb`);
-if (!skipRpm) copy(one(path.join(make, "rpm", "x64"), ".rpm"), `DauntlessRevivedLauncher-${version}-linux-x86_64.rpm`);
-copy(one(path.join(make, "zip", "linux", "x64"), ".zip"), `DauntlessRevivedLauncher-${version}-linux-x64.zip`);
+copy(one(path.join(make, "AppImage", "x64"), ".AppImage"), `DauntlessForeverLauncher-${version}-linux-x86_64.AppImage`);
+copy(one(path.join(make, "deb", "x64"), ".deb"), `DauntlessForeverLauncher-${version}-linux-amd64.deb`);
+if (!skipRpm) copy(one(path.join(make, "rpm", "x64"), ".rpm"), `DauntlessForeverLauncher-${version}-linux-x86_64.rpm`);
+copy(one(path.join(make, "zip", "linux", "x64"), ".zip"), `DauntlessForeverLauncher-${version}-linux-x64.zip`);
 
-const tarName = `DauntlessRevivedLauncher-${version}-linux-x64.tar.gz`;
+const tarName = `DauntlessForeverLauncher-${version}-linux-x64.tar.gz`;
 const packaged = path.join(out, "Dauntless Revived Launcher-linux-x64");
 const tar = spawnSync("tar", ["-czf", path.join(release, tarName), "-C", packaged, "."], { stdio: "inherit" });
 if (tar.status !== 0) throw new Error("tar failed");

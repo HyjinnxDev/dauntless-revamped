@@ -1,9 +1,10 @@
 // Everyone the launcher's Credits page thanks, in English, Finnish and Spanish. This is the only place the
-// list lives: adding a contributor is one line in PROJECT_PEOPLE (or UPSTREAM_PEOPLE).
+// list lives: adding a contributor is one line in PROJECT_PEOPLE, REVIVED_PEOPLE or UPSTREAM_PEOPLE.
+// Keep the Dauntless Revived and Undaunted entries: this project is a modified version of both (AGPL-3.0).
 //
 // Plain data, no links: the page opens the contributor pages by link name ("project_contributors",
-// "upstream_contributors"), and the main process maps those names to fixed URLs (src/main/links.ts).
-// The project's maintainer appears here only by the GitHub handle.
+// "revived_contributors", "upstream_contributors"), and the main process maps those names to fixed
+// URLs (src/main/links.ts). People appear here only by their GitHub handle.
 
 import type { Language } from "./types";
 
@@ -30,8 +31,13 @@ export interface CreditSoftware {
   note: Localized;
 }
 
-// Dauntless Revived (everyone: the "project_contributors" link).
+// Dauntless Forever (everyone: the "project_contributors" link).
 export const PROJECT_PEOPLE: readonly CreditPerson[] = [
+  { name: "Hyjinnx", github: "HyjinnxDev", role: "maintainer", note: { en: "Maintains Dauntless Forever: the redesigned launcher, the host list and the hosting guide.", fi: "Ylläpitää Dauntless Foreveria: uudistettu käynnistin, palvelinluettelo ja palvelimen ylläpito-ohje.", es: "Mantiene Dauntless Forever: el launcher rediseñado, la lista de servidores y la guía para alojar servidores." } },
+];
+
+// Dauntless Revived, the fork of Undaunted this project is built on (everyone: the "revived_contributors" link).
+export const REVIVED_PEOPLE: readonly CreditPerson[] = [
   { name: "mixutin", github: "mixutin", role: "maintainer", note: { en: "Maintains the project: the server kit, this launcher, backend fixes, real progression and the docs.", fi: "Ylläpitää projektia: palvelinpaketti, tämä käynnistin, taustapalvelun korjaukset, oikea eteneminen ja ohjeet.", es: "Mantiene el proyecto: el kit de servidor, este launcher, correcciones del backend, la progresión real y la documentación." } },
   { name: "anxo0", github: "anxo0", role: "contributor", note: { en: "Spanish translation, game language selection, styled settings menus, saved servers, the game log window setting, and the Dauntless-inspired launcher design.", fi: "Espanjankielinen käännös, pelin kielivalinta, asetusvalikot, tallennetut palvelimet, pelin loki-ikkunan asetus ja Dauntless-henkinen käynnistimen ulkoasu.", es: "Traducción al español, selección del idioma del juego, menús de ajustes, servidores guardados, opción de la ventana de registro y diseño del launcher inspirado en Dauntless." } },
   { name: "Vvoidddd", github: "Vvoidddd", role: "contributor", note: { en: "Found the cause of the dark pre-hunt airship (the game's automatic exposure; the change was reverted in launcher 0.1.1 because it made Ramsgate too dark), then added the launcher's opt-in Basic adaptive exposure setting for the airship (off by default), hid the console windows of temporary hunt servers, added the repository's .gitignore, wrote the first performance sampler (the base of the server's performance log), let the launcher use an existing Dauntless 1.4.4 folder by pasting its path, and wrote the first in-game text chat server (XMPP) and tested it with a real 1.4.4 client.", fi: "Löysi syyn siihen, miksi ilmalaiva on pimeä ennen metsästystä (pelin automaattinen valotus; muutos peruttiin käynnistimen versiossa 0.1.1, koska se pimensi Ramsgaten), lisäsi sitten käynnistimeen valinnaisen mukautuvan perusvalotuksen asetuksen ilmalaivaa varten (oletuksena pois päältä), piilotti tilapäisten metsästyspalvelimien konsoli-ikkunat, lisäsi projektiin .gitignore-tiedoston, kirjoitti ensimmäisen suorituskykymittarin (palvelimen suorituskykylokin pohja), teki käynnistimelle mahdolliseksi käyttää valmista Dauntless 1.4.4 -kansiota liittämällä sen polun sekä kirjoitti ensimmäisen pelinsisäisen tekstichat-palvelimen (XMPP) ja testasi sen oikealla 1.4.4-pelillä.", es: "Encontró la causa de la aeronave oscura antes de la cacería (la exposición automática del juego; el cambio se revirtió en el launcher 0.1.1 porque oscurecía demasiado Ramsgate), después añadió al launcher el ajuste opcional de exposición adaptativa básica para la aeronave (desactivado por defecto), ocultó las ventanas de consola de los servidores de cacería temporales, añadió el .gitignore del repositorio, escribió el primer medidor de rendimiento (la base del registro de rendimiento del servidor), permitió al launcher usar una carpeta de Dauntless 1.4.4 ya existente pegando su ruta, y escribió el primer servidor de chat de texto del juego (XMPP) y lo probó con un cliente 1.4.4 real." } },
@@ -52,8 +58,6 @@ export const UPSTREAM_PEOPLE: readonly CreditPerson[] = [
 // Open-source software in the launcher and in the server DLL it ships. The full license texts are in
 // THIRD-PARTY-NOTICES.txt, which ships with the launcher.
 export const SOFTWARE: readonly CreditSoftware[] = [
-  { name: "Simple Icons", author: { en: "Simple Icons contributors", fi: "Simple Iconsin tekijät", es: "Colaboradores de Simple Icons" }, license: "CC0-1.0", note: { en: "The Patreon symbol on the optional support button. Patreon retains its trademark rights.", fi: "Valinnaisen tukipainikkeen Patreon-symboli. Tavaramerkin oikeudet kuuluvat Patreonille.", es: "El símbolo de Patreon del botón de apoyo opcional. Patreon conserva sus derechos de marca." } },
-  { name: "Discord brand assets", author: "Discord Inc.", license: null, note: { en: "The official Discord symbol on the community button, used under Discord's brand guidelines.", fi: "Yhteisöpainikkeen virallinen Discord-symboli Discordin brändiohjeiden mukaisesti.", es: "El símbolo oficial de Discord del botón de la comunidad, usado según las normas de marca de Discord." } },
   { name: "MinHook", author: "Tsuda Kageyu", license: "BSD-2-Clause", note: { en: "The function-hooking library in the server DLL.", fi: "Palvelin-DLL:n funktioiden koukutuskirjasto.", es: "La biblioteca de enganche de funciones de la DLL del servidor." } },
   { name: "Hacker Disassembler Engine 64", author: "Vyacheslav Patkov", license: "BSD-2-Clause", note: { en: "Part of MinHook.", fi: "Osa MinHookia.", es: "Parte de MinHook." } },
   { name: "Dumper-7", author: { en: "Encryqed and contributors", fi: "Encryqed ja muut tekijät", es: "Encryqed y colaboradores" }, license: null, note: { en: "The Unreal Engine SDK generator the server DLL is built against.", fi: "Unreal Engine -SDK:n generaattori. Palvelin-DLL on käännetty sen tuottamaa SDK:ta vasten.", es: "El generador del SDK de Unreal Engine con el que se compila la DLL del servidor." } },

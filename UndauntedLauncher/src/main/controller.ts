@@ -166,7 +166,7 @@ export class Controller {
 
   constructor(private readonly p: Platform) {
     this.settings = new SettingsStore(p.userDataDir, p.defaultLanguage, p.hostPlatform ?? process.platform);
-    this.keys = new KeyStore(path.join(p.userDataDir, "keys"), p.encryptor, p.documentsDir ? path.join(p.documentsDir, "Dauntless Revived", "Account Keys") : undefined);
+    this.keys = new KeyStore(path.join(p.userDataDir, "keys"), p.encryptor, p.documentsDir ? path.join(p.documentsDir, "Dauntless Forever", "Account Keys") : undefined);
     this.game = new GameProcess(p.spawn);
     this.verified = new VerifiedCache(path.join(p.userDataDir, "verified-files.json"));
     this.game.onChange((running, code) => {
@@ -771,7 +771,7 @@ export class Controller {
     const key = await this.keys.load(slot).catch(() => null);
     if (!key) return this.fail("key_invalid");
     const username = this.s.usernames[sid] ?? null;
-    const file = await this.p.chooseSaveFile(`Dauntless Revived key${username ? ` - ${username}` : ""}.txt`);
+    const file = await this.p.chooseSaveFile(`Dauntless Forever key${username ? ` - ${username}` : ""}.txt`);
     if (!file) return err("cancelled");
     try {
       await fsp.writeFile(
@@ -876,7 +876,7 @@ export class Controller {
       } catch {
         entries = [];
       }
-      if (entries.length > 0 && !entries.some((e) => e.toLowerCase() === "archon")) dir = pathApi.join(dir, "DauntlessRevived");
+      if (entries.length > 0 && !entries.some((e) => e.toLowerCase() === "archon")) dir = pathApi.join(dir, "DauntlessForever");
     }
     await this.settings.update((s) => {
       s.installDir = dir === this.p.defaultInstallDir ? null : dir;

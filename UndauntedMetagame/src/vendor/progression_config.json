@@ -730,7 +730,9 @@
           },
           {
             "entitlements": [],
-            "instanced_items": ["LT_HP09B_COMMANDO_00"],
+            "instanced_items": [
+              "LT_HP09B_COMMANDO_00"
+            ],
             "ordered_instanced_items": [],
             "rank_id": 10,
             "stacked_items": []
@@ -763,7 +765,9 @@
           },
           {
             "entitlements": [],
-            "instanced_items": ["BNC_FABRIC_EVENT_HP09B_COMMANDO_00"],
+            "instanced_items": [
+              "BNC_FABRIC_EVENT_HP09B_COMMANDO_00"
+            ],
             "ordered_instanced_items": [],
             "rank_id": 13,
             "stacked_items": []
@@ -1054,7 +1058,9 @@
           },
           {
             "entitlements": [],
-            "instanced_items": ["BNC_STANDARD_HP09B_COMMANDO_00"],
+            "instanced_items": [
+              "BNC_STANDARD_HP09B_COMMANDO_00"
+            ],
             "ordered_instanced_items": [],
             "rank_id": 36,
             "stacked_items": []
@@ -3814,7 +3820,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_GA_PASSIVE_CHARGE_AOE"],
+            "instanced_items": [
+              "PART_GA_PASSIVE_CHARGE_AOE"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -3843,7 +3851,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_GA_SPECIAL_SKILLSHOT"],
+            "instanced_items": [
+              "PART_GA_SPECIAL_SKILLSHOT"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -3872,7 +3882,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_GA_PASSIVE_CHARGING_MOVESPEED"],
+            "instanced_items": [
+              "PART_GA_PASSIVE_CHARGING_MOVESPEED"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -3961,7 +3973,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_GA_PASSIVE_METER"],
+            "instanced_items": [
+              "PART_GA_PASSIVE_METER"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4222,7 +4236,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_CB_PASSIVE_DASH_AGGRESSION"],
+            "instanced_items": [
+              "PART_CB_PASSIVE_DASH_AGGRESSION"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4251,7 +4267,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_CB_SPECIAL_RIFTSTRIKE"],
+            "instanced_items": [
+              "PART_CB_SPECIAL_RIFTSTRIKE"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4280,7 +4298,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_CB_PASSIVE_BLENDER"],
+            "instanced_items": [
+              "PART_CB_PASSIVE_BLENDER"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4369,7 +4389,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_CB_PASSIVE_SWINGING_CRIT"],
+            "instanced_items": [
+              "PART_CB_PASSIVE_SWINGING_CRIT"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4630,7 +4652,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_IH_PASSIVE_STAGGER_PASSTHROUGH"],
+            "instanced_items": [
+              "PART_IH_PASSIVE_STAGGER_PASSTHROUGH"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4659,7 +4683,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_IH_SPECIAL_ISLANDCRACKER"],
+            "instanced_items": [
+              "PART_IH_SPECIAL_ISLANDCRACKER"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4688,7 +4714,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_IH_PASSIVE_JUMP_ATTACK_BUFF"],
+            "instanced_items": [
+              "PART_IH_PASSIVE_JUMP_ATTACK_BUFF"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -4777,7 +4805,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_IH_PASSIVE_METER"],
+            "instanced_items": [
+              "PART_IH_PASSIVE_METER"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5038,7 +5068,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_DP_PASSIVE_DOUBLE_SHOT_DAMAGE"],
+            "instanced_items": [
+              "PART_DP_PASSIVE_DOUBLE_SHOT_DAMAGE"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5067,7 +5099,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_DP_RECEIVER_PIERCING"],
+            "instanced_items": [
+              "PART_DP_RECEIVER_PIERCING"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5096,7 +5130,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_DP_PASSIVE_LONG_RANGE"],
+            "instanced_items": [
+              "PART_DP_PASSIVE_LONG_RANGE"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5185,7 +5221,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_DP_PASSIVE_LOW_AMMO_CRIT"],
+            "instanced_items": [
+              "PART_DP_PASSIVE_LOW_AMMO_CRIT"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5446,7 +5484,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_MS_PASSIVE_AMMO_GROWTH"],
+            "instanced_items": [
+              "PART_MS_PASSIVE_AMMO_GROWTH"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5475,7 +5515,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_MS_SPECIAL_ATTACK_SPEED_DAMAGE_BUFF"],
+            "instanced_items": [
+              "PART_MS_SPECIAL_ATTACK_SPEED_DAMAGE_BUFF"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5504,7 +5546,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_MS_PASSIVE_CHARGE_SPEED"],
+            "instanced_items": [
+              "PART_MS_PASSIVE_CHARGE_SPEED"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5593,7 +5637,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_MS_PASSIVE_WEAVING"],
+            "instanced_items": [
+              "PART_MS_PASSIVE_WEAVING"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5854,7 +5900,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_EB_PASSIVE_STAGGERPROOF"],
+            "instanced_items": [
+              "PART_EB_PASSIVE_STAGGERPROOF"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5883,7 +5931,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_EB_SPECIAL_SPIN"],
+            "instanced_items": [
+              "PART_EB_SPECIAL_SPIN"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -5912,7 +5962,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_EB_PASSIVE_DODGE_ATTACK"],
+            "instanced_items": [
+              "PART_EB_PASSIVE_DODGE_ATTACK"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -6001,7 +6053,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_EB_PASSIVE_METER"],
+            "instanced_items": [
+              "PART_EB_PASSIVE_METER"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -6262,7 +6316,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_AC_PASSIVE_MASTERY_01"],
+            "instanced_items": [
+              "PART_AC_PASSIVE_MASTERY_01"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -6291,7 +6347,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_AC_SPECIAL_MASTERY"],
+            "instanced_items": [
+              "PART_AC_SPECIAL_MASTERY"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -6320,7 +6378,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_AC_PASSIVE_MASTERY_02"],
+            "instanced_items": [
+              "PART_AC_PASSIVE_MASTERY_02"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -6409,7 +6469,9 @@
               "culture_invariant_string": null
             },
             "stacked_items": [],
-            "instanced_items": ["PART_AC_PASSIVE_MASTERY_03"],
+            "instanced_items": [
+              "PART_AC_PASSIVE_MASTERY_03"
+            ],
             "ordered_instanced_items": [],
             "entitlements": [],
             "buffs": []
@@ -6468,6 +6530,1658 @@
             "stacked_items": [
               {
                 "catalog_id": "TITLE_MASTERY_AC_02",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_Axe",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_ChainBlades",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_Hammer",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_Repeaters",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_Spear",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_Sword",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          }
+        ],
+        "premium_rewards": [],
+        "start_date": "2019-01-01T14:00:00+00:00",
+        "end_date": "2099-01-01T14:00:00+00:00"
+      },
+      {
+        "progression_id": "PrestigeTrack_Weapon_Strikers",
+        "premium_gating_entitlement": "",
+        "progression_multiplier": 1,
+        "requirements": [
+          {
+            "rank_id": 0,
+            "xp_required": 0
+          },
+          {
+            "rank_id": 1,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 2,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 3,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 4,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 5,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 6,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 7,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 8,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 9,
+            "xp_required": 1
+          },
+          {
+            "rank_id": 10,
+            "xp_required": 1
+          }
+        ],
+        "free_rewards": [
+          {
+            "rank_id": 1,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 2,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 3,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 4,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 5,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 6,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 7,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 8,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 9,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
+                "hidden": false,
+                "priority": 0,
+                "quantity": 1
+              }
+            ],
+            "instanced_items": [],
+            "ordered_instanced_items": [],
+            "entitlements": [],
+            "buffs": []
+          },
+          {
+            "rank_id": 10,
+            "custom_reward_string": {
+              "culture_invariant_string": null
+            },
+            "stacked_items": [
+              {
+                "catalog_id": "CURRENCY_PJM_PRESTIGE_FILLED",
                 "hidden": false,
                 "priority": 0,
                 "quantity": 1

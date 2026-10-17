@@ -380,7 +380,7 @@ test("an existing BaseGame144 folder, pasted, is checked in place and launched f
   await hx.c.shutdown();
 });
 
-test("Change folder... on an existing game uses that game instead of a DauntlessRevived subfolder", async () => {
+test("Change folder... on an existing game uses that game instead of a DauntlessForever subfolder", async () => {
   const { base, game } = existingGame();
   const hx = harness(RELAY_PORT, undefined, async () => path.join(game, "Archon", "Binaries", "Win64"));
   await hx.c.init();
@@ -388,7 +388,7 @@ test("Change folder... on an existing game uses that game instead of a Dauntless
   assert.deepEqual(await hx.c.register("PickedSlayer"), { ok: true, username: "PickedSlayer" });
   assert.deepEqual(await hx.c.chooseInstallDir(), { ok: true });
   assert.equal(hx.last().install.dir, game, "Win64 inside the game resolves to the game root");
-  assert.ok(!existsSync(path.join(base, "DauntlessRevived")) && !existsSync(path.join(game, "DauntlessRevived")));
+  assert.ok(!existsSync(path.join(base, "DauntlessForever")) && !existsSync(path.join(game, "DauntlessForever")));
   await hx.c.shutdown();
 
   // A folder with other things in it still gets a subfolder, as before.
@@ -397,7 +397,7 @@ test("Change folder... on an existing game uses that game instead of a Dauntless
   const hy = harness(RELAY_PORT, undefined, async () => other);
   await hy.c.init();
   assert.deepEqual(await hy.c.chooseInstallDir(), { ok: true });
-  assert.equal(hy.last().install.dir, path.join(other, "DauntlessRevived"));
+  assert.equal(hy.last().install.dir, path.join(other, "DauntlessForever"));
   await hy.c.shutdown();
 
   // A BaseGame144 short enough to pick, whose game root is too long: refused, no second copy beside it.
@@ -413,7 +413,7 @@ test("Change folder... on an existing game uses that game instead of a Dauntless
   const dirBefore = hz.last().install.dir;
   assert.deepEqual(await hz.c.chooseInstallDir(), { ok: false, error: { code: "folder_invalid" } });
   assert.equal(hz.last().install.dir, dirBefore);
-  assert.ok(!existsSync(path.join(longBase, "DauntlessRevived")));
+  assert.ok(!existsSync(path.join(longBase, "DauntlessForever")));
   await hz.c.shutdown();
 });
 

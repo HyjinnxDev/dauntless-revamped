@@ -154,7 +154,7 @@ export function backupFileText(opts: {
   date: Date;
 }): string {
   return [
-    "Dauntless Revived account key",
+    "Dauntless Forever account key",
     "",
     `Server: ${opts.serverName} (${opts.host}:${opts.port})`,
     ...(opts.fingerprint ? [`Certificate: ${opts.fingerprint}`] : []),
@@ -163,7 +163,7 @@ export function backupFileText(opts: {
     `Key: ${opts.key}`,
     "",
     "Keep this file private: anyone who has this key can play as you on this server.",
-    "To use it on another PC: Dauntless Revived Launcher > Join > Use an existing key > Load a backup file.",
+    "To use it on another PC: Dauntless Forever Launcher > Join > Use an existing key > Load a backup file.",
     "",
   ].join("\r\n");
 }

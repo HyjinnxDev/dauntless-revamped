@@ -1,19 +1,41 @@
 # NOTICE
 
-Dauntless Revived is a modified version of Undaunted. The whole repository is licensed under the GNU
-Affero General Public License, version 3 only (`AGPL-3.0-only`); see [LICENSE.txt](LICENSE.txt). This
-file records where the parts of the repository come from. Suomeksi: [below](#suomeksi).
+Dauntless Forever is a modified version of Dauntless Revived, which is itself a modified version of
+Undaunted. The whole repository is licensed under the GNU Affero General Public License, version 3
+only (`AGPL-3.0-only`); see [LICENSE.txt](LICENSE.txt). This file records where the parts of the
+repository come from. Suomeksi: [below](#suomeksi).
 
-## Modification notice
+## Modification notice (Dauntless Forever)
 
-This repository, [github.com/mixutin/dauntless-revived](https://github.com/mixutin/dauntless-revived)
-(branch `dauntless-revived`), modifies Undaunted from upstream commit `7f692aa`, to run a private
+Dauntless Forever modifies Dauntless Revived
+([github.com/mixutin/dauntless-revived](https://github.com/mixutin/dauntless-revived), branch
+`dauntless-revived`) from the commit that this fork's history starts from. The changes begin with the
+redesigned launcher, the new name and logo, the removal of Dauntless Revived's sponsor and partner
+promotions from the launcher, support for Dauntless Forever invites (`dauntless-forever://`) next to
+Dauntless Revived's, and a host list. They started on 13 October 2026, and every change is in the
+commit history. This is not an official release of Dauntless Revived, Undaunted or any other project
+named below, and none of their maintainers has endorsed it. The attribution that follows is kept
+unchanged.
+
+## Modification notice (Dauntless Revived)
+
+Dauntless Revived ([github.com/mixutin/dauntless-revived](https://github.com/mixutin/dauntless-revived),
+branch `dauntless-revived`) modifies Undaunted from upstream commit `7f692aa`, to run a private
 server for the Dauntless 1.4.4 client (`1.4.4_shipping`, changelist 239827). Modifications began on
 21 September 2026. Every change is recorded in the commit history, and the planned work is in
 [ROADMAP.md](ROADMAP.md). This is not an official release of Undaunted, nor of any other project
 named below.
 
 ## Where the parts come from
+
+### Dauntless Revived
+
+- By mixutin and [its contributors](https://github.com/mixutin/dauntless-revived/graphs/contributors),
+  including anxo0, Vvoidddd, ZFXSTATIC (the client mods) and Harmonic (see below). Upstream:
+  [github.com/mixutin/dauntless-revived](https://github.com/mixutin/dauntless-revived), AGPL-3.0-only.
+- The server kit, the launcher, the real progression, the parties and friends, the chat, the docs and
+  the other changes made on top of Undaunted are Dauntless Revived's work. Dauntless Forever is built
+  on them. The Dauntless Revived name, logo and community links belong to that project.
 
 ### Undaunted
 
@@ -78,7 +100,7 @@ implies no endorsement or affiliation.
   `UndauntedLauncher/THIRD-PARTY-NOTICES.txt`.
 
 No game files are distributed in this repository. "Dauntless" is a trademark of its owners;
-Dauntless Revived is not affiliated with or endorsed by Phoenix Labs or Epic Games. The full credits
+Dauntless Forever is not affiliated with or endorsed by Phoenix Labs or Epic Games. The full credits
 are on [Credits and license](https://mixutin.github.io/dauntless-revived/legal.html).
 
 ## Suomeksi
