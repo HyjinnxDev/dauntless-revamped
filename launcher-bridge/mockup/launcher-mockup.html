@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Launcher mockup</title>
+<style>
+:root{
+  --ink:#04090d; --navy:#071a29; --deep:#0b3150; --azure:#0d669c; --ice:#18a7e0; --glow:#78ecf9;
+  --gold:#f2b84b; --gold-d:#b9791d; --frost:#f3f4f5; --steel:#8b939b; --line:rgba(120,236,249,.16);
+  --ui:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --display:"Bahnschrift","Segoe UI Variable Display","Segoe UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:#000;color:var(--frost);font-family:var(--ui)}
+.win{position:relative;width:min(1280px,100vw);height:min(760px,100vh);margin:auto;overflow:hidden;background:var(--ink);display:flex;flex-direction:column}
+/* title bar */
+.title{height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 12px;font-size:12px;color:var(--steel);background:#02070a;border-bottom:1px solid var(--line);z-index:5}
+.title b{font-weight:500;letter-spacing:.04em}
+.title span:last-child{letter-spacing:.5em}
+/* hero */
+.stage{position:relative;flex:1;overflow:hidden}
+.hero{position:absolute;inset:0}
+.hero svg{width:100%;height:100%;display:block}
+.slides{position:absolute;inset:0}
+.slides i{position:absolute;inset:0;background-size:cover;background-position:center;opacity:0;transition:opacity 1.6s ease;transform:scale(1.04)}
+.slides i.on{opacity:1;animation:kb 14s linear forwards}
+@keyframes kb{to{transform:scale(1.12)}}
+.shade{position:absolute;inset:0;z-index:1;background:
+  linear-gradient(180deg,rgba(4,9,13,.7) 0,rgba(4,9,13,0) 20%,rgba(4,9,13,.05) 45%,rgba(4,9,13,.88) 82%,rgba(4,9,13,.96) 100%),
+  radial-gradient(ellipse at 50% 55%,rgba(4,9,13,0) 30%,rgba(4,9,13,.6) 100%)}
+/* top bar */
+.top{position:absolute;top:0;left:0;right:0;display:flex;align-items:center;gap:16px;padding:18px 28px;z-index:4}
+.brand{display:flex;align-items:center;gap:12px}
+.brand img{height:92px;margin:-4px 0 -20px;filter:drop-shadow(0 4px 18px rgba(0,0,0,.7)) drop-shadow(0 0 16px rgba(24,167,224,.35))}
+.grow{flex:1}
+.pill{display:flex;align-items:center;gap:10px;padding:9px 14px 9px 12px;background:rgba(7,26,41,.72);backdrop-filter:blur(8px);border:1px solid var(--line);clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);cursor:pointer;font-size:14px;color:var(--frost)}
+.pill:hover{border-color:var(--ice)}
+.dot{width:9px;height:9px;border-radius:50%;background:#3ddc84;box-shadow:0 0 10px #3ddc84}
+.dot.off{background:#e0503a;box-shadow:0 0 10px #e0503a}
+.pill small{color:var(--steel);font-size:12px}
+.icon{width:40px;height:40px;display:grid;place-items:center;background:rgba(7,26,41,.72);border:1px solid var(--line);cursor:pointer;color:var(--frost);font-size:18px;clip-path:polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px)}
+.icon:hover{border-color:var(--ice);color:var(--glow)}
+/* centre */
+.center{position:absolute;left:28px;bottom:150px;text-align:left;z-index:3}
+.center h1{font-size:46px}
+.eyebrow{font-size:12px;letter-spacing:.32em;color:var(--glow);text-transform:uppercase}
+h1{font-family:var(--display);font-weight:700;font-size:54px;letter-spacing:.02em;margin:8px 0 4px;text-shadow:0 4px 30px rgba(0,0,0,.7)}
+.sub{color:#b9c4cc;font-size:15px}
+/* bottom dock */
+.dock{position:absolute;left:28px;right:28px;bottom:24px;display:flex;align-items:flex-end;gap:20px;z-index:4}
+.news{flex:1;display:flex;gap:12px}
+.card{flex:1;max-width:330px;padding:12px 14px;background:rgba(7,26,41,.7);backdrop-filter:blur(8px);border:1px solid var(--line);border-left:2px solid var(--ice);font-size:13px;cursor:pointer}
+.card:hover{background:rgba(11,49,80,.8)}
+.card em{font-style:normal;font-size:11px;color:var(--glow);letter-spacing:.14em}
+.card strong{display:block;margin:3px 0 2px;font-weight:600}
+.card p{color:#a9b6bf;font-size:12px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.play-wrap{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:300px}
+.play{width:290px;height:66px;border:0;cursor:pointer;font-family:var(--display);font-weight:700;font-size:26px;letter-spacing:.3em;color:#2a1700;
+  background:linear-gradient(180deg,#ffd77a,var(--gold) 55%,var(--gold-d));
+  clip-path:polygon(18px 0,calc(100% - 18px) 0,100% 50%,calc(100% - 18px) 100%,18px 100%,0 50%);
+  box-shadow:0 0 40px rgba(242,184,75,.35);transition:filter .15s}
+.play:hover{filter:brightness(1.12)}
+.meta{display:flex;gap:14px;font-size:12px;color:var(--steel);align-items:center}
+.meta b{color:var(--frost);font-weight:500}
+.sel{cursor:pointer;border-bottom:1px dotted var(--steel)}
+.status{min-width:210px;text-align:right;font-size:13px;color:#b9c4cc}
+.status big{display:block;font-family:var(--display);font-size:34px;color:var(--frost);line-height:1}
+/* server menu */
+.menu{position:absolute;top:76px;right:90px;width:340px;background:rgba(5,16,26,.97);border:1px solid var(--line);z-index:9;display:none;box-shadow:0 20px 60px rgba(0,0,0,.7)}
+.menu.open{display:block}
+.menu h4{font-size:11px;letter-spacing:.2em;color:var(--steel);padding:12px 16px 6px;font-weight:600}
+.srv{display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;font-size:14px}
+.srv:hover{background:rgba(24,167,224,.1)}
+.srv.cur{background:rgba(24,167,224,.14);box-shadow:inset 2px 0 var(--ice)}
+.srv small{display:block;color:var(--steel);font-size:12px}
+.srv .x{margin-left:auto;color:var(--steel);opacity:0}
+.srv:hover .x{opacity:1}
+.add{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}
+.add input{flex:1;background:#02070a;border:1px solid var(--line);color:var(--frost);padding:9px 10px;font:13px var(--ui)}
+.btn{padding:9px 14px;background:var(--azure);border:0;color:#fff;font:600 13px var(--ui);cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--frost)}
+.det{padding:10px 16px 14px;font-size:12px;color:var(--steel);border-top:1px solid var(--line);line-height:1.7}
+.det code{color:var(--glow);font-family:Consolas,monospace}
+/* settings drawer */
+.drawer{position:absolute;top:0;right:0;bottom:0;width:420px;background:rgba(4,12,19,.97);border-left:1px solid var(--line);z-index:10;transform:translateX(100%);transition:transform .25s;overflow:auto}
+.drawer.open{transform:none}
+.drawer header{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(4,12,19,.98)}
+.drawer h2{font-family:var(--display);font-size:22px}
+.sec{padding:18px 24px 6px}
+.sec h3{font-size:11px;letter-spacing:.22em;color:var(--glow);margin-bottom:6px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid rgba(120,236,249,.07);font-size:14px}
+.row small{display:block;color:var(--steel);font-size:12px;margin-top:2px;max-width:230px}
+select{background:#02070a;color:var(--frost);border:1px solid var(--line);padding:8px 10px;font:13px var(--ui)}
+.tog{width:40px;height:22px;background:#13222d;border-radius:11px;position:relative;cursor:pointer;flex:none}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--steel);transition:.15s}
+.tog.on{background:var(--azure)}.tog.on::after{left:21px;background:#fff}
+.foot{display:flex;gap:18px;justify-content:center;padding:16px;font-size:12px;color:var(--steel)}
+.foot a{color:var(--steel);cursor:pointer}.foot a:hover{color:var(--glow)}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:9;display:none}.scrim.open{display:block}
+.note{position:fixed;left:8px;bottom:6px;font:11px var(--ui);color:#556;z-index:99}
+</style>
+</head>
+<body>
+<div class="win" id="win">
+  <div class="title"><b>Dauntless Forever</b><span>— ▢ ✕</span></div>
+  <div class="stage">
+    <div class="hero">
+      <svg viewBox="0 0 1280 726" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#02060a"/><stop offset=".55" stop-color="#06233a"/><stop offset="1" stop-color="#0a4b6e"/></linearGradient>
+          <linearGradient id="au" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#78ecf9" stop-opacity="0"/><stop offset=".6" stop-color="#18a7e0" stop-opacity=".45"/><stop offset="1" stop-color="#78ecf9" stop-opacity="0"/></linearGradient>
+          <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d3552"/><stop offset="1" stop-color="#061a2a"/></linearGradient>
+          <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#082436"/><stop offset="1" stop-color="#03101a"/></linearGradient>
+          <radialGradient id="moon"><stop offset="0" stop-color="#bff6ff" stop-opacity=".9"/><stop offset=".25" stop-color="#78ecf9" stop-opacity=".25"/><stop offset="1" stop-color="#78ecf9" stop-opacity="0"/></radialGradient>
+          <radialGradient id="ember"><stop offset="0" stop-color="#ffd77a" stop-opacity=".55"/><stop offset="1" stop-color="#f2b84b" stop-opacity="0"/></radialGradient>
+          <filter id="bl"><feGaussianBlur stdDeviation="16"/></filter>
+        </defs>
+        <rect width="1280" height="726" fill="url(#sky)"/>
+        <g fill="#fff" opacity=".7"><circle cx="90" cy="70" r="1.2"/><circle cx="240" cy="40" r="1"/><circle cx="420" cy="95" r="1.4"/><circle cx="610" cy="50" r="1"/><circle cx="870" cy="80" r="1.3"/><circle cx="1010" cy="38" r="1"/><circle cx="1180" cy="100" r="1.2"/><circle cx="330" cy="150" r=".9"/><circle cx="760" cy="140" r=".9"/></g>
+        <g filter="url(#bl)"><path d="M-40 230 C 200 120 380 260 600 170 S 1000 90 1320 200 L1320 330 C 1000 250 800 330 560 270 S 160 330 -40 300Z" fill="url(#au)"/></g>
+        <circle cx="880" cy="190" r="130" fill="url(#moon)"/>
+        <!-- behemoth silhouette -->
+        <g fill="#04121c" opacity=".92" transform="translate(760 150)">
+          <path d="M0 150 C40 90 80 70 130 80 L170 40 L186 78 C230 70 270 90 300 130 L360 120 L330 160 L380 190 L310 190 C290 240 250 260 210 260 L120 260 C60 255 20 220 0 150Z"/>
+          <path d="M120 80 L110 20 L140 60 L160 10 L172 62Z"/>
+          <circle cx="205" cy="102" r="3.4" fill="#78ecf9"/>
+        </g>
+        <path d="M-20 520 L120 380 L210 450 L340 300 L470 440 L560 380 L700 500 L820 360 L960 470 L1100 340 L1300 480 L1300 726 L-20 726Z" fill="url(#m1)"/>
+        <path d="M-20 590 L90 500 L200 560 L330 470 L470 575 L610 505 L760 590 L900 495 L1050 590 L1180 520 L1300 580 L1300 726 L-20 726Z" fill="url(#m2)"/>
+        <g fill="#020a10"><path d="M0 660 L40 600 L58 640 L90 585 L120 645 L160 610 L190 660 L240 595 L270 650 L320 605 L350 665 L1280 665 L1280 726 L0 726Z"/></g>
+        <circle cx="640" cy="620" r="180" fill="url(#ember)"/>
+      </svg>
+      <div class="slides" id="slides"></div>
+      <div class="shade"></div>
+    </div>
+
+    <div class="top">
+      <div class="brand"><img src="logo-forever.png" alt=""></div>
+      <div class="grow"></div>
+      <div class="pill" id="srvBtn"><span class="dot"></span><span>Dauntless Forever <small>· 227 online</small></span><span>▾</span></div>
+      <div class="icon" id="gearBtn" title="Settings">⚙</div>
+    </div>
+
+    <div class="center">
+      <div class="eyebrow">Game 1.4.4 · Public server · encrypted</div>
+      <h1>Ready to hunt</h1>
+      <div class="sub">Signed in as <b style="color:#fff">Hyjinnx</b> · all files verified</div>
+    </div>
+
+    <div class="dock">
+      <div class="news">
+        <div class="card"><em>9 OCT</em><strong>Launcher 0.1.27 and hunt cleanup</strong><p>Faster cleanup for empty hunts and tutorials, party grace period during loading.</p></div>
+        <div class="card"><em>8 OCT</em><strong>Downloads moved to Cloudflare</strong><p>Game files now download from Cloudflare R2 and still verify every file.</p></div>
+      </div>
+      <div class="play-wrap">
+        <button class="play">PLAY</button>
+        <div class="meta"><span>Region <b class="sel">Australia (OCE) ▾</b></span><span>·</span><span><b>227</b> online</span></div>
+      </div>
+      <div class="status"><big>227</big>hunters online<br><small style="color:var(--steel)">12 in hunts · 6 in Ramsgate</small></div>
+    </div>
+
+    <div class="menu" id="menu">
+      <h4>SERVERS</h4>
+      <div class="srv cur"><span class="dot"></span><div>Dauntless Forever<small>Public · 227 online · 41 ms</small></div></div>
+      <div class="srv"><span class="dot"></span><div>Friends VPS<small>Private · 3 online · 12 ms</small></div><span class="x">✕</span></div>
+      <div class="srv"><span class="dot off"></span><div>Home PC<small>Offline</small></div><span class="x">✕</span></div>
+      <div class="add"><input placeholder="Paste invite link or address"><button class="btn">Add</button></div>
+      <div class="det">Address <code>82.153.118.176:443</code><br>Version <code>0.0.5</code> · up 1 d 19 h · Invite only<br>Certificate <code>9d25 e5cf c346 2af0…</code> <a style="color:var(--ice);cursor:pointer">Copy</a></div>
+    </div>
+
+    <div class="scrim" id="scrim"></div>
+    <aside class="drawer" id="drawer">
+      <header><h2>Settings</h2><div class="icon" id="closeBtn">✕</div></header>
+      <div class="sec"><h3>GAME</h3>
+        <div class="row"><div>World region<small>Closest region gives the best ping</small></div><select><option>Australia (OCE)</option><option>Europe</option><option>North America</option></select></div>
+        <div class="row"><div>Install folder<small>D:\DauntlessRevived\DauntlessRevived</small></div><button class="btn ghost">Change</button></div>
+        <div class="row"><div>Repair game files<small>Checks every file, fetches only what's broken</small></div><button class="btn ghost">Repair</button></div>
+        <div class="row"><div>Game language</div><select><option>Automatic</option></select></div></div>
+      <div class="sec"><h3>GRAPHICS</h3>
+        <div class="row"><div>Quality</div><select><option>High</option><option>Cinematic</option></select></div>
+        <div class="row"><div>Auto exposure</div><select><option>Game default</option></select></div>
+        <div class="row"><div>Safe window (1280×720)</div><div class="tog"></div></div></div>
+      <div class="sec"><h3>ACCOUNT</h3>
+        <div class="row"><div>Hyjinnx<small>Key stored encrypted on this PC</small></div><button class="btn ghost">Back up key</button></div>
+        <div class="row"><div>Sign out</div><button class="btn ghost">Log out</button></div></div>
+      <div class="sec"><h3>ADVANCED</h3>
+        <div class="row"><div>Launcher language</div><select><option>English</option><option>Suomi</option><option>Español</option></select></div>
+        <div class="row"><div>Streamer mode<small>Hides addresses, keys and names</small></div><div class="tog"></div></div>
+        <div class="row"><div>Show log window</div><div class="tog"></div></div></div>
+      <div class="foot"><a>News</a><a>Mods</a><a>Discord</a><a>Credits</a><a>v0.1.34</a></div>
+    </aside>
+  </div>
+</div>
+<div class="note">Mockup only · click the server pill, the gear, the toggles</div>
+<script>
+const $=id=>document.getElementById(id);
+$('srvBtn').onclick=e=>{e.stopPropagation();$('menu').classList.toggle('open')};
+document.addEventListener('click',e=>{if(!$('menu').contains(e.target))$('menu').classList.remove('open')});
+function drawer(o){$('drawer').classList.toggle('open',o);$('scrim').classList.toggle('open',o)}
+$('gearBtn').onclick=()=>drawer(true);$('closeBtn').onclick=$('scrim').onclick=()=>drawer(false);
+document.querySelectorAll('.tog').forEach(t=>t.onclick=()=>t.classList.toggle('on'));
+const sl=$('slides');const n=6;for(let i=1;i<=n;i++){const d=document.createElement('i');d.style.backgroundImage=`url(art/shot${i}.jpg)`;sl.appendChild(d)}
+let k=0;const L=sl.children;L[0].classList.add('on');setInterval(()=>{L[k].classList.remove('on');k=(k+1)%n;L[k].classList.add('on')},8000);
+if(location.hash==='#menu')$('menu').classList.add('open');
+if(location.hash==='#settings')drawer(true);
+</script>
+</body>
+</html>
