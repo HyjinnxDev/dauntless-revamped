@@ -3,14 +3,15 @@
 #   powershell -ExecutionPolicy Bypass -File "D:\Dev\dauntless-revamped\versions\1.14.7\host\restart-server.ps1"
 # Logs: D:\MysticParadoxData\logs\backend.log and director.log
 # -DirectorOnly: restart just the Director and its game servers (staff dashboard "Restart Director").
-param([switch]$DirectorOnly)
+# -Stop: stop the backend, Director and game servers, start nothing (mongod is left running).
+param([switch]$DirectorOnly, [switch]$Stop)
 
 $ErrorActionPreference = 'Stop'
 # Admin: a Director started from an elevated window (and its game servers) can only be stopped, or
 # even seen, from an elevated one. Asks once through UAC.
 $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $admin) {
-  Start-Process powershell.exe -Verb RunAs -ArgumentList (@('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + @(if ($DirectorOnly) { '-DirectorOnly' }))
+  Start-Process powershell.exe -Verb RunAs -ArgumentList (@('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + @(if ($DirectorOnly) { '-DirectorOnly' }) + @(if ($Stop) { '-Stop' }))
   return
 }
 $repo = Split-Path $PSScriptRoot   # versions\1.14.7
@@ -33,6 +34,7 @@ $ids = $ids | Sort-Object -Unique | Where-Object {
 foreach ($id in $ids) { Write-Host "stopping node $id"; Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
 foreach ($s in $servers) { Write-Host "stopping game server $($s.ProcessId)"; Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 3
+if ($Stop) { Write-Host 'stopped'; return }
 
 if (-not $DirectorOnly) {
 # 2. MongoDB for the backend (hand-started mongod on 27018, not the MongoDB service on 27017).

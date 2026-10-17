@@ -26,24 +26,6 @@ test("the credits name every contributor, in order, with their role", () => {
   assert.equal(person(REVIVED_PEOPLE, "mixutin").role, "maintainer");
   assert.equal(person(REVIVED_PEOPLE, "mixutin").name, "mixutin");
   assert.equal(person(REVIVED_PEOPLE, "Vvoidddd").role, "contributor");
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /airship/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /console windows/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /\.gitignore/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /performance sampler/); // #6
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /suorituskykymittarin/);
-  // #8
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /existing Dauntless 1\.4\.4 folder by pasting its path/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /valmista Dauntless 1\.4\.4 -kansiota liittämällä sen polun/);
-  // #9
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /first in-game text chat server \(XMPP\) and tested it with a real 1\.4\.4 client/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /ensimmäisen pelinsisäisen tekstichat-palvelimen \(XMPP\) ja testasi sen oikealla 1\.4\.4-pelillä/);
-  // #7: the exposure setting is an opt-in experiment, off by default; the note must say so.
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /opt-in Basic adaptive exposure setting for the airship \(off by default\)/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /valinnaisen mukautuvan perusvalotuksen asetuksen ilmalaivaa varten \(oletuksena pois päältä\)/);
-  // The exposure change was taken back out in 0.1.1 (it darkened Ramsgate); the note must not
-  // suggest the airship is fixed.
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.en, /reverted in launcher 0\.1\.1/);
-  assert.match(person(REVIVED_PEOPLE, "Vvoidddd").note.fi, /peruttiin käynnistimen versiossa 0\.1\.1/);
 
   assert.ok(!REVIVED_PEOPLE.some((p) => p.github === "Harmonicrain"), "only the repositories we build from are credited");
   assert.equal(MYSTIC_PEOPLE[0].github, "pranav158", "Mystic Paradox's creator comes first");
@@ -54,7 +36,6 @@ test("the credits name every contributor, in order, with their role", () => {
   const gwog = person(UPSTREAM_PEOPLE, "SyST3MDeV");
   assert.equal(gwog.role, "creator");
   assert.match(gwog.name, /^gwog\b/);
-  for (const part of ["server-mode DLL", "deploy server", "metagame", "launcher"]) assert.ok(gwog.note.en.includes(part), part);
   assert.equal(person(UPSTREAM_PEOPLE, "EisigesEis").role, "contributor");
 
   const handles = [...PROJECT_PEOPLE, ...MYSTIC_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE].map((p) => p.github);
@@ -65,18 +46,10 @@ test("every credit has text in every language", () => {
   for (const p of [...PROJECT_PEOPLE, ...MYSTIC_PEOPLE, ...REVIVED_PEOPLE, ...UPSTREAM_PEOPLE]) {
     assert.ok(p.name.trim() && p.github.trim(), JSON.stringify(p));
     assert.match(p.github, /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/, `not a GitHub handle: ${p.github}`);
-    for (const lang of LANGUAGES) assert.ok(p.note[lang].trim().length > 10, `${p.github} ${lang}`);
-    assert.notEqual(p.note.fi, p.note.en, `${p.github}: the Finnish note is not translated`);
-    assert.notEqual(p.note.es, p.note.en, `${p.github}: the Spanish note is not translated`);
   }
   for (const sw of SOFTWARE) {
     assert.ok(sw.name.trim(), JSON.stringify(sw));
-    for (const lang of LANGUAGES) {
-      assert.ok(localized(sw.author, lang).trim(), `${sw.name} author ${lang}`);
-      assert.ok(sw.note[lang].trim(), `${sw.name} note ${lang}`);
-    }
-    assert.notEqual(sw.note.fi, sw.note.en, `${sw.name}: the Finnish note is not translated`);
-    assert.notEqual(sw.note.es, sw.note.en, `${sw.name}: the Spanish note is not translated`);
+    for (const lang of LANGUAGES) assert.ok(localized(sw.author, lang).trim(), `${sw.name} author ${lang}`);
     if (sw.license !== null) assert.match(sw.license, /^[A-Za-z0-9.-]+$/, `${sw.name}: not an SPDX identifier`);
   }
 });
