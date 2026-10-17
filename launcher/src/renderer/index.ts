@@ -688,27 +688,6 @@ function playUpdate(snap: Snapshot): HTMLElement[] {
   return out;
 }
 
-// The two latest news items as small cards; a click opens the full list.
-function newsDock(): HTMLElement | null {
-  const items = state.news.slice(0, 2);
-  if (items.length === 0) return null;
-  return h(
-    "div",
-    { class: "news-dock" },
-    ...items.map((item) => {
-      const c = h(
-        "button",
-        { type: "button", class: "news-dock-card", "data-fk": "news-more" },
-        item.date ? h("span", { class: "news-teaser-date" }, formatDate(item.date, state.lang)) : null,
-        h("strong", {}, item.title),
-        h("span", { class: "news-dock-body" }, item.body),
-      );
-      c.addEventListener("click", () => setView("news"));
-      return c;
-    }),
-  );
-}
-
 function playReady(snap: Snapshot): HTMLElement[] {
   const user = snap.account.username;
   const picker = characterPicker(snap);
@@ -804,7 +783,6 @@ function renderPlay(): void {
     snap.lastError?.code === "session_expired" || snap.lastError?.code === "approval_pending" ? snap.lastError.code : null,
     state.signIn,
     state.existingFormOpen,
-    state.news.slice(0, 2).map((n) => n.title),
     snap.phase === "installing" ? state.task?.kind ?? snap.task?.kind : null,
   ]);
   renderRegion(container, sig, () => {
@@ -838,7 +816,7 @@ function renderPlay(): void {
         parts = playRunning(snap);
         break;
     }
-    return [h("div", { class: "play-content" }, ...parts), ...(snap.phase === "ready" || snap.phase === "update" || snap.phase === "running" ? [newsDock()] : [])].filter((n): n is HTMLElement => n !== null);
+    return [h("div", { class: "play-content" }, ...parts)];
   });
 }
 

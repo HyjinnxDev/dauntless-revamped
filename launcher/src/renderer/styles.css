@@ -811,11 +811,17 @@ img {
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: none;
+  line-height: 1.2;
+  text-indent: 0;
   max-width: 220px;
-  margin: 2px auto 0;
+  margin: 0 auto;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.big-button:has(.big-button-sub) {
+  line-height: 1;
 }
 
 .account-character {
@@ -1955,14 +1961,6 @@ img {
 .news-teaser {
   display: grid;
   gap: 4px;
-}
-
-.news-teaser-date {
-  font-size: 11.5px;
-  color: var(--dr-ice);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 /* ------------------------------------------------------------------ banners */
