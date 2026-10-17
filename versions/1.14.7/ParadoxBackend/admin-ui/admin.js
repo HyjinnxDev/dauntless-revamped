@@ -635,7 +635,7 @@ function renderLauncherCard(root) {
     const logo = h("img", { alt: "", style: "width:96px;height:96px;object-fit:contain;border-radius:12px;background:var(--bg);border:1px solid var(--line)" });
     const noLogo = h("span", { class: "faint" }, "No logo yet: the launcher shows the first letter of the name.");
     const file = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", class: "hidden" });
-    const host = h("input", { value: location.hostname, placeholder: "100.108.36.34 or play.example.com" });
+    const host = h("input", { value: location.hostname, placeholder: "203.0.113.7 or play.example.com" });
     const port = h("input", { value: location.port || "443", style: "width:80px", inputmode: "numeric" });
     const link = h("input", { readonly: true, style: "width:100%", placeholder: "Make a link to see it here" });
     let limits = { title: 48, motd: 300 };

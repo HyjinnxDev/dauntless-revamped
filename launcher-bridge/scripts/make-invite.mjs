@@ -1,5 +1,5 @@
 // Prints an invite link for the launcher (format: src/shared/invite.ts).
-//   node scripts/make-invite.mjs --host 100.108.36.34 --cert D:\MysticParadoxData\certs\fullchain.pem --code ABCD-1234 --name "Friday Hunts" [--port 443]
+//   node scripts/make-invite.mjs --host 203.0.113.7 --cert D:\MysticParadoxData\certs\fullchain.pem --code ABCD-1234 --name "Friday Hunts" [--port 443]
 // The fingerprint is the SHA-256 of the backend's own certificate (the first one in the PEM file).
 // The code must be one of the backend's LAUNCHER_INVITE_CODES.
 import { X509Certificate } from "node:crypto";

@@ -174,7 +174,7 @@ launcherCardRouter.get("/admin/v1/launcher-card/invite", ...Owner, (req: Request
     const Host = String(req.query.host ?? "").trim().toLowerCase();
     const Port = Number(req.query.port ?? 443);
     if (!/^[a-z0-9.-]{1,253}$/.test(Host) || !Number.isInteger(Port) || Port < 1 || Port > 65535) {
-        res.status(400).json({ error: { code: "CARD_HOST", message: "Enter the address players use, e.g. 100.108.36.34 or play.example.com." } });
+        res.status(400).json({ error: { code: "CARD_HOST", message: "Enter the address players use, e.g. 203.0.113.7 or play.example.com." } });
         return;
     }
     const Code = (process.env.LAUNCHER_INVITE_CODES ?? "").split(",").map((c) => c.trim()).find((c) => /^[A-Za-z0-9-]{4,64}$/.test(c));
