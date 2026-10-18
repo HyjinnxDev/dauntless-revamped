@@ -13296,17 +13296,30 @@ static void ApplyLight(SDK::UWorld* World, Settings S) {
 }
 
 // [2026-10-18] Ramsgate streams sublevels (top island, plazas) in and out around the character; a hidden
-// sublevel takes its rams and fences with it. While the camera is on, every sublevel the game has shown stays
-// shown with distance streaming off; turning the camera off hands them back. Only levels the game itself made
-// visible are held, so seasonal variants never overlap.
+// sublevel takes its rams and fences with it. While the camera is on, every Ramsgate area sublevel is loaded and
+// shown, and any other sublevel the game has shown stays shown, all with distance streaming off. Seasonal sets
+// are not ramsgate_01_* and are never forced. Turning the camera off puts each level back as it was.
+// ponytail: area sublevels matched by name; other hubs only get "stay shown" until they need their own list.
+static bool IsRamsgateArea(SDK::ULevelStreaming* L) {
+    const std::string N = L->GetWorldAssetPackageFName().ToString();
+    return N.find("ramsgate_01_") != std::string::npos && N.find("_persistent") == std::string::npos && N.find("_temp") == std::string::npos;
+}
+
 static void HoldLevels(SDK::UWorld* World, bool On) {
+    struct Was { bool NoDistance, Loaded, Visible; };
     static void* s_World = nullptr;
-    static std::unordered_map<SDK::ULevelStreaming*, bool> s_Held;   // level -> its own bDisableDistanceStreaming
-    if (World != s_World) { s_World = World; s_Held.clear(); }
+    static std::unordered_map<SDK::ULevelStreaming*, Was> s_Held;
+    static std::unordered_map<SDK::ULevelStreaming*, bool> s_Area;
+    if (World != s_World) { s_World = World; s_Held.clear(); s_Area.clear(); }
     if (!On) {
         if (s_Held.empty()) return;
-        for (SDK::ULevelStreaming* L : World->StreamingLevels)
-            if (L && s_Held.count(L)) L->bDisableDistanceStreaming = s_Held[L];
+        for (SDK::ULevelStreaming* L : World->StreamingLevels) {
+            auto It = L ? s_Held.find(L) : s_Held.end();
+            if (It == s_Held.end()) continue;
+            L->bDisableDistanceStreaming = It->second.NoDistance;
+            if (!It->second.Visible) L->SetShouldBeVisible(false);
+            if (!It->second.Loaded) L->SetShouldBeLoaded(false);
+        }
         Log("let go of " + std::to_string(s_Held.size()) + " streaming levels");
         s_Held.clear();
         return;
@@ -13315,8 +13328,10 @@ static void HoldLevels(SDK::UWorld* World, bool On) {
     for (SDK::ULevelStreaming* L : World->StreamingLevels) {
         if (!L) continue;
         if (!s_Held.count(L)) {
-            if (!L->IsLevelVisible()) continue;
-            s_Held[L] = L->bDisableDistanceStreaming;
+            auto A = s_Area.find(L);
+            if (A == s_Area.end()) A = s_Area.emplace(L, IsRamsgateArea(L)).first;
+            if (!A->second && !L->IsLevelVisible()) continue;
+            s_Held[L] = Was{ L->bDisableDistanceStreaming != 0, L->bShouldBeLoaded != 0, L->bShouldBeVisible != 0 };
         }
         L->bDisableDistanceStreaming = 1;
         if (!L->bShouldBeLoaded) L->SetShouldBeLoaded(true);
