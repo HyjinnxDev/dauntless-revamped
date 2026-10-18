@@ -14052,7 +14052,7 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
                 const bool Own = TriggerOwner && TriggerOwner == LocalPawn;
                 if (IsArrivalStop) {
                     reinterpret_cast<void(*)(UObject*, UFunction*, void*)>(OrigProcessEventClient)(Object, Function, Parms);
-                    if (Own) { s_LocalArrivalDone = true; MpLog("[PartyDropIn] local arrival ended"); }
+                    if (Own && !s_LocalArrivalDone) { s_LocalArrivalDone = true; MpLog("[PartyDropIn] local arrival ended"); }
                     return;
                 }
                 if (Own || !s_LocalArrivalDone) {
@@ -14062,11 +14062,18 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
                     std::string Ready = "own";
                     if (!Own) {
                         Ready = "no-component";
-                        FProperty* CompProp = FindPropertyByNameInChain(Object->Class, "dynamic_cinematic_component_bp");
-                        UObject* Comp = CompProp ? *reinterpret_cast<UObject**>(reinterpret_cast<uint8_t*>(Object) + CompProp->Offset) : nullptr;
-                        FProperty* ReadyProp = Comp && IsReadablePointer(Comp, sizeof(UObject))
-                            ? FindPropertyByNameInChain(Comp->Class, "ClientReady") : nullptr;
-                        if (ReadyProp) { *(reinterpret_cast<uint8_t*>(Comp) + ReadyProp->Offset) = 1; Ready = "set"; }
+                        // [2026-10-18] The member-name lookup never matched (logged no-component every hunt), so
+                        // the remote cine waited forever and party members never visibly landed. Find the
+                        // component by class among the trigger's subobjects instead (one GObjects walk).
+                        for (int32_t i = 0; i < SDK::UObject::GObjects->Num(); ++i) {
+                            SDK::UObject* O = SDK::UObject::GObjects->GetByIndex(i);
+                            if (!O || O->Outer != Object
+                                || !O->IsA(SDK::Udynamic_cinematic_component_bp_C::StaticClass())) continue;
+                            auto* Comp = static_cast<SDK::Udynamic_cinematic_component_bp_C*>(O);
+                            Comp->ClientReady = true;
+                            Ready = std::string("set wait=") + (Comp->WaitForClientReady ? "1" : "0");
+                            break;
+                        }
                     }
                     MpLog("[PartyDropIn] keeping arrival trigger " + MpPtr(Object) + " owner=" + MpPtr(TriggerOwner)
                         + " localPawn=" + MpPtr(LocalPawn) + " clientReady=" + Ready);
