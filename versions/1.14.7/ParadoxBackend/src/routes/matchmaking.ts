@@ -13,7 +13,7 @@ import { Router } from "express";
 import crypto from "node:crypto";
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
 import { logger } from "../logger";
-import { CheckAndUpdateQueueStatus, FetchLiveHubStatus, GetCandidateStatusPeriodMillis, HandlePlayerMatchmaking } from "../controllers/matchmaking";
+import { CancelPlayerMatchmaking, CheckAndUpdateQueueStatus, FetchLiveHubStatus, GetCandidateStatusPeriodMillis, HandlePlayerMatchmaking, WasCancelledSince } from "../controllers/matchmaking";
 import { GetPartyForPlayer } from "../controllers/party";
 import { sessionRegistry } from "../realtime/SessionRegistry";
 import { ResolveMatchmakingParty } from "../matchmakingParty";
@@ -351,6 +351,7 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
         );
     }
 
+    const JoinStartedAt = Date.now();
     const MatchmakingResult = await HandlePlayerMatchmaking(
         GameMode,
         GameArgs,
@@ -367,6 +368,14 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
         return;
     }
 
+    if(WasCancelledSince(UserId, JoinStartedAt)){
+        logger.info(`UserId ${UserId} cancelled while their join was launching; dropping the result`);
+        CancelPlayerMatchmaking(UserId, Party.partyId);
+        res.status(400);
+        res.send();
+        return;
+    }
+
     const MatchmakingEntry = await CheckAndUpdateQueueStatus(UserId);
 
     res.status(200);
@@ -377,6 +386,21 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
         status: "MATCHING",
         statusReason: null
     });
+});
+
+// The client's matchmaking cancel. Unlike 1.4.4 (which sent it after every join), 1.14.7 sends it only when the
+// player cancels: 1 DELETE in 16 joins in the 2026-10-18 log, and that one was a real cancel. Any JSON object works.
+matchmakingRouter.delete("/candidate", HasParadoxBackendAuth, async (req: any, res) => {
+    const UserId = req.AuthData.userId;
+    const Party = await GetPartyForPlayer(UserId);
+    const Cancelled = CancelPlayerMatchmaking(UserId, Party?.partyId);
+
+    logger.info(Cancelled != undefined
+        ? `userId ${UserId} cancelled matchmaking for ${Cancelled.HuntId}${Cancelled.Ready ? " (a server was already assigned)" : ""}`
+        : `userId ${UserId} cancelled matchmaking but had no candidate`);
+
+    res.status(200);
+    res.json({});
 });
 
 matchmakingRouter.get("/QoS", (req, res) => {

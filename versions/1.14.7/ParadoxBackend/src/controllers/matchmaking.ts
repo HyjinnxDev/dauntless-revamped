@@ -455,6 +455,34 @@ export function GrantLateJoin(PlayerId: string, PartyId: string, Offer: LateJoin
         + `hp=${Offer.State?.hpPct} players=${Offer.State?.players} release in ${Result.ReadyAt - Date.now()}ms`);
 }
 
+// [Revamped 2026-10-18] The client's cancel (DELETE /candidate) 404'd, so a cancelled hunt stayed "Ready" here:
+// a party member who joined afterwards was late-joined into that empty hunt, and the party instance it wrote
+// pulled the canceller back in. Forget the caller's candidate; a party leader's cancel also calls off the shared
+// instance for members who have not been released to travel yet. Returns the cancelled candidate, if any.
+const CancelledAtMap: Map<string, number> = new Map<string, number>(); // Key is PlayerID
+export function CancelPlayerMatchmaking(PlayerId: string, PartyId?: string): MatchmakingResult | undefined {
+    CancelledAtMap.set(PlayerId, Date.now());
+    const Own = MatchmakingResultMap.get(PlayerId);
+    MatchmakingResultMap.delete(PlayerId);
+    for (const Queue of MatchmakingQueueMap.values()) Queue.Players = Queue.Players.filter((Id) => Id !== PlayerId);
+    if (Own == undefined || IsHubDestination("", Own.HuntId)) return Own;
+
+    const Instance = PartyId != undefined ? PartyInstanceMap.get(PartyId) : undefined;
+    if (Instance != undefined && Instance.GameSessionId === Own.GameSessionId) {
+        PartyInstanceMap.delete(PartyId!);
+        PartyInstanceCreatedAtMap.delete(PartyId!);
+        for (const [MemberId, Result] of MatchmakingResultMap) {
+            if (Result.GameSessionId === Own.GameSessionId && !IsClientReady(Result)) MatchmakingResultMap.delete(MemberId);
+        }
+    }
+    return Own;
+}
+
+// A cancel that lands while /candidate/join is still launching the server must win over the result it then writes.
+export function WasCancelledSince(PlayerId: string, SinceMs: number): boolean {
+    return (CancelledAtMap.get(PlayerId) ?? 0) >= SinceMs;
+}
+
 export async function GetPlayerCandidate(PlayerId: string): Promise<MatchmakingResult | undefined> {
     const Result = MatchmakingResultMap.get(PlayerId);
     if (Result != undefined) return ClientVisibleResult(Result);
