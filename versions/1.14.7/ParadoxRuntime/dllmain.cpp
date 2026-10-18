@@ -244,9 +244,32 @@ bool MpReadEnvironment(const char* Name, std::string& Value, size_t Maximum) {
         Value.find('\n') == std::string::npos;
 }
 
+// [perf 2026-10-18] Server frame counter (GameEngineTickHook). IsReadablePointer remembers readable regions for
+// the current frame only, so a region freed by the engine is re-queried by the next frame at the latest.
+static std::atomic<uint64_t> g_mpFrameGen{ 0 };
+// [perf 2026-10-18] Movement RPC counters for the [TickRate] line (ProcessEventHook increments them).
+static std::atomic<uint64_t> g_mpServerMoves{ 0 }, g_mpClientAdjusts{ 0 };
+
 bool IsReadablePointer(const void* Ptr, size_t Size) {
     if (!Ptr || ((uintptr_t)Ptr & 0x7) != 0) {
         return false;
+    }
+
+    uintptr_t Start = reinterpret_cast<uintptr_t>(Ptr);
+    uintptr_t End = Start + Size;
+    if (End < Start) return false;
+
+    // [perf 2026-10-18] Profiled hubs/hunts spent ~3-8% of their CPU in VirtualQuery's system call from here.
+    // Server only (the client has no frame counter): a hit inside a region already confirmed readable this frame
+    // skips the call.
+    // Direct-mapped on the 64 KB allocation granule: objects are spread over many regions, so a handful of
+    // most-recent entries missed most of the time.
+    struct Region { uintptr_t Lo, Hi; uint64_t Gen; };
+    static thread_local Region t_ok[256] = {};
+    Region& Slot = t_ok[(Start >> 16) & 255];
+    const uint64_t Gen = g_mpFrameGen.load(std::memory_order_relaxed);
+    if (Globals::AmServer && Gen != 0 && Slot.Gen == Gen && Start >= Slot.Lo && End <= Slot.Hi) {
+        return true;
     }
 
     MEMORY_BASIC_INFORMATION Info{};
@@ -258,10 +281,12 @@ bool IsReadablePointer(const void* Ptr, size_t Size) {
         return false;
     }
 
-    uintptr_t Start = reinterpret_cast<uintptr_t>(Ptr);
-    uintptr_t End = Start + Size;
     uintptr_t RegionEnd = reinterpret_cast<uintptr_t>(Info.BaseAddress) + Info.RegionSize;
-    return End >= Start && End <= RegionEnd;
+    if (End > RegionEnd) return false;
+    if (Globals::AmServer && Gen != 0) {
+        Slot = { reinterpret_cast<uintptr_t>(Info.BaseAddress), RegionEnd, Gen };
+    }
+    return true;
 }
 
 // [2026-07-24 ROOT-CAUSE FIX for the Ramsgate->Training "new player" crash] Robust UObject liveness
@@ -5672,6 +5697,59 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
         g_GameEnginePtr = GameEngine;
     }
     static uint64_t tickCounter = 0;    ++tickCounter;
+    g_mpFrameGen.fetch_add(1, std::memory_order_relaxed);
+
+    // [perf 2026-10-18] Idle hub throttle: Ramsgate/dojo with no client connection run ~5 frames/s instead of 30
+    // (an empty hub cost ~0.15 core each). The connection count is last frame's, so the first join packet waits
+    // at most one long frame and the hub is back at 30 Hz from the frame its connection exists.
+    // NO_IDLE_THROTTLE.flag next to the exe turns it off.
+    static const bool s_noIdleThrottle = MpExeRelativeFlagPresent(L"NO_IDLE_THROTTLE.flag");
+    if (Globals::AmServer && !s_noIdleThrottle && Globals::Listening
+        && g_wdIsHub.load(std::memory_order_relaxed) == 1 && g_wdConnCount.load(std::memory_order_relaxed) == 0) {
+        Sleep(170);
+    }
+
+    // [perf 2026-10-18] Server frame rate, once a minute: sizing needs to know whether the engine runs above the
+    // 30 Hz net rate (CPU spent on frames nobody receives). Cheap: one clock read per tick.
+    if (Globals::AmServer) {
+        static uint64_t s_rateStartMs = 0, s_rateTicks = 0;
+        const uint64_t NowMs = GetTickCount64();
+        if (s_rateStartMs == 0) s_rateStartMs = NowMs;
+        ++s_rateTicks;
+        if (NowMs - s_rateStartMs >= 60000) {
+            // Client movement RPCs received (ServerMove*) and corrections sent back (ClientAdjust*), per connected
+            // client per second: shows whether capping the clients' move send rate would cut server work.
+            const double Secs = (NowMs - s_rateStartMs) / 1000.0;
+            const int32_t Conns = g_wdConnCount.load(std::memory_order_relaxed);
+            const double PerClient = Conns > 0 ? Secs * Conns : 0.0;
+            const uint64_t Moves = g_mpServerMoves.exchange(0, std::memory_order_relaxed);
+            const uint64_t Adjusts = g_mpClientAdjusts.exchange(0, std::memory_order_relaxed);
+            MpLog("[TickRate] engine " + std::to_string(s_rateTicks / Secs) + " Hz over "
+                + std::to_string((NowMs - s_rateStartMs) / 1000) + " s, last DeltaTime=" + std::to_string(DeltaTime)
+                + " | conns=" + std::to_string(Conns)
+                + " ServerMove/s/client=" + (PerClient > 0 ? std::to_string(Moves / PerClient) : std::string("n/a"))
+                + " ClientAdjust/s/client=" + (PerClient > 0 ? std::to_string(Adjusts / PerClient) : std::string("n/a")));
+            s_rateStartMs = NowMs;
+            s_rateTicks = 0;
+        }
+
+        // The movement send-rate settings this build actually uses (GameNetworkManager defaults), once.
+        static bool s_gnmLogged = false;
+        if (!s_gnmLogged && Globals::Listening) {
+            s_gnmLogged = true;
+            SDK::AGameNetworkManager* G = SDK::AGameNetworkManager::GetDefaultObj();
+            if (G && IsReadablePointer(G, 0x2B0)) {
+                MpLog("[MoveRate] GameNetworkManager ClientNetSendMoveDeltaTime=" + std::to_string(G->ClientNetSendMoveDeltaTime)
+                    + " Throttled=" + std::to_string(G->ClientNetSendMoveDeltaTimeThrottled)
+                    + " Stationary=" + std::to_string(G->ClientNetSendMoveDeltaTimeStationary)
+                    + " ThrottleAtNetSpeed=" + std::to_string(G->ClientNetSendMoveThrottleAtNetSpeed)
+                    + " ThrottleOverPlayerCount=" + std::to_string(G->ClientNetSendMoveThrottleOverPlayerCount)
+                    + " ClientAuthorativePosition=" + std::to_string(G->ClientAuthorativePosition ? 1 : 0));
+            } else {
+                MpLog("[MoveRate] GameNetworkManager default object not readable");
+            }
+        }
+    }
 
     // [DIAG 2026-07-09] Record the game-tick thread once so the exit-path hooks can
     // report whether TerminateProcess/ExitProcess is being called from the tick thread
@@ -5700,7 +5778,12 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     // player-data timeout: a ~60 s longer loading screen, then a client crash (null read +0x248 in a
     // ReceiveGameplayStart chain) on 13 Oct. With the config cached before anyone joins, ReadFromBackend
     // takes its loaded branch, as it does on the hub.
-    if (Globals::Listening && MpExeRelativeFlagPresent(L"CALL_HUNTPASS_QUERY.flag")) {
+    // [perf 2026-10-18] Flags below are read once: each MpExeRelativeFlagPresent is two system calls, and these
+    // ran every frame.
+    static const bool s_callHuntPassQuery = MpExeRelativeFlagPresent(L"CALL_HUNTPASS_QUERY.flag");
+    static const bool s_hubRepDiagnostics = MpExeRelativeFlagPresent(L"ENABLE_HUB_REP_DIAGNOSTICS.flag");
+    static const bool s_baseActorBootstrap = MpExeRelativeFlagPresent(L"ENABLE_BASE_ACTOR_BOOTSTRAP.flag");
+    if (Globals::Listening && s_callHuntPassQuery) {
         static bool s_bootQueryDone = false;
         if (!s_bootQueryDone) {
             UWorld* World = UWorld::GetWorld();
@@ -5727,12 +5810,10 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     // GObjects) and it carries the only fix lever this session produced, so it may run for either flag.
     // The membership report is the heavy one (a full GObjects walk plus an IsA pass per object, several
     // times a minute) and only ever runs for the diagnostics flag.
-    if (Globals::AmServer
-        && (MpExeRelativeFlagPresent(L"ENABLE_HUB_REP_DIAGNOSTICS.flag")
-            || MpExeRelativeFlagPresent(L"ENABLE_BASE_ACTOR_BOOTSTRAP.flag"))) {
+    if (Globals::AmServer && (s_hubRepDiagnostics || s_baseActorBootstrap)) {
         MpRouteBaseActorsToConnections();
     }
-    if (Globals::AmServer && MpExeRelativeFlagPresent(L"ENABLE_HUB_REP_DIAGNOSTICS.flag")) {
+    if (Globals::AmServer && s_hubRepDiagnostics) {
         MpReportReplicationMembership();
     }
 
@@ -5904,11 +5985,27 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
             static bool s_loggedGameMode  = false;
             static bool s_loggedGameState = false;
 
-            const int Count = SDK::UObject::GObjects->Num();
-            for (int i = 0; i < Count; i++) {
-                SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
-                if (!Obj) continue;
-                if (Obj->IsDefaultObject()) continue;
+            // [perf 2026-10-18] This walked all of GObjects (two IsA per object) EVERY frame: the profile of an
+            // idle hub put GameEngineTickHook + IsA + GetByIndex at ~35% of its CPU. The fields are still pinned
+            // every frame, on the instances found by a walk that now runs once a second (every frame only
+            // while none is found yet), so a new world's GameMode/GameState is picked up within a second.
+            static std::vector<SDK::UObject*> s_rosterObjects;
+            static uint64_t s_lastRosterScanMs = 0;
+            const uint64_t RosterNowMs = GetTickCount64();
+            if (s_rosterObjects.empty() || RosterNowMs - s_lastRosterScanMs >= 1000) {
+                s_lastRosterScanMs = RosterNowMs;
+                s_rosterObjects.clear();
+                const int Count = SDK::UObject::GObjects->Num();
+                for (int i = 0; i < Count; i++) {
+                    SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                    if (!Obj || Obj->IsDefaultObject()) continue;
+                    if (Obj->IsA(SDK::AArchonGameMode::StaticClass()) || Obj->IsA(SDK::AArchonGameState::StaticClass()))
+                        s_rosterObjects.push_back(Obj);
+                }
+            }
+
+            for (SDK::UObject* Obj : s_rosterObjects) {
+                if (!IsRegisteredLiveObject(Obj)) continue;
 
                 if (Obj->IsA(SDK::AArchonGameMode::StaticClass())) {
                     int32_t* Field = reinterpret_cast<int32_t*>(
@@ -16302,6 +16399,26 @@ static void TraceTempestDamageExit(UObject* Object, void* Parms, const TempestDa
         + " return=" + TempestDamageDataSummary(P->ReturnValue));
 }
 
+// [perf 2026-10-18] ProcessEventHook runs for every reflected call (thousands a frame) and rebuilt the function's full
+// path with GetFullName each time: the profile of a hunt server put that string work at ~5% of its CPU. A function's
+// full name does not change, so it is built once per function. The entry is keyed on the pointer and re-checked
+// against the object's own FName and Outer, so an address reused after a map change gets its new name.
+static const std::string& MpCachedFullName(UFunction* Function) {
+    static const std::string Null = "null";
+    if (!Function) return Null;
+    struct Entry { uint64_t Name = 0; const void* Outer = nullptr; std::string Full; };
+    static thread_local std::unordered_map<const void*, Entry> s_names;
+    uint64_t NameBits = 0;
+    std::memcpy(&NameBits, &Function->Name, sizeof(NameBits));
+    Entry& E = s_names[Function];
+    if (E.Full.empty() || E.Name != NameBits || E.Outer != Function->Outer) {
+        E.Name = NameBits;
+        E.Outer = Function->Outer;
+        E.Full = Function->GetFullName();
+    }
+    return E.Full;
+}
+
 void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     // [1.12.0 REENTRANCY GUARD 2026-07-10] Safety-net against runaway ProcessEvent
     // recursion. Root cause of the FTUE crash was
@@ -16344,7 +16461,10 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     static UFunction* OnAirshipUpdated = nullptr;
     static UFunction* OnPostMitDealtAnyDamage = nullptr;
 
-    std::string FunctionName = Function ? Function->GetFullName() : "null";
+    const std::string& FunctionName = MpCachedFullName(Function);
+    if (FunctionName.find(".ServerMove") != std::string::npos) g_mpServerMoves.fetch_add(1, std::memory_order_relaxed);
+    else if (FunctionName.find(".ClientAdjust") != std::string::npos || FunctionName.find(".ClientVeryShortAdjust") != std::string::npos)
+        g_mpClientAdjusts.fetch_add(1, std::memory_order_relaxed);
     MpHuntPassProbe(Object, FunctionName);
     MpCoinTossProbe(FunctionName, Parms);
     MpServerProjectileTickFix(Object, FunctionName);
