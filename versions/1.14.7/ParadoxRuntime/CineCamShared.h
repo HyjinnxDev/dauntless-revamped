@@ -100,6 +100,7 @@ enum class CmdType {
     Photo,                                      // I = resolution multiplier
     PickFocus,                                  // I = screen x, F = screen y
     Dolly,                                      // dolly zoom on / off
+    Replay,                                     // probe: I = 0 record, 1 stop, 2 play the last recording
 };
 struct Cmd { CmdType T; int I = 0; float F = 0.f; };
 
@@ -119,6 +120,7 @@ struct State {
     std::vector<std::string> Party;             // other players' names, for Settings::Target
     std::string TargetName;                     // what the camera is aiming at right now
     bool Dolly = false;                         // dolly zoom holding the target's size
+    std::string Replay;                         // replay probe status ("recording cine_...", "playing", ...)
     std::vector<Point> PathPts, KeyPts;         // screen space, for the path overlay
     // menu state
     std::atomic<bool> MenuOpen{ false };

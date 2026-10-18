@@ -292,6 +292,14 @@ static void CameraSection(Settings& S) {
     if (Choice("Resolution", &Sc, Scales, 4, "Photo size as a multiple of your screen. 4x of 1440p is a 10K still; big ones take a moment.")) S.PhotoScale = Sc + 1;
     if (ImGui::Button("Take photo", ImVec2(-FLT_MIN, 0.f))) Push(CmdType::Photo, S.PhotoScale);
     Tip("High-resolution screenshot without HUD or this menu. Saved to Archon\\Saved\\Screenshots.");
+    Section("REPLAY (TEST)");
+    if (ImGui::Button("Record")) Push(CmdType::Replay, 0);
+    ImGui::SameLine();
+    if (ImGui::Button("Stop")) Push(CmdType::Replay, 1);
+    ImGui::SameLine();
+    if (ImGui::Button("Play last")) Push(CmdType::Replay, 2);
+    Tip("Probe for the engine's replay recorder. Files go to Archon\\Saved\\Demos; results are in the log as [Replay].");
+    ImGui::TextDisabled("%s", G.Replay.empty() ? "no demo driver" : G.Replay.c_str());
 }
 
 static void RigSection(Settings& S) {

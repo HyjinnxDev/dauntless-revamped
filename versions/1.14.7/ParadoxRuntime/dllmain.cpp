@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <ctime>
 #include <cstdlib>   // atof — used by BleedoutDurationFallback()
 #include <deque>
 #include <unordered_map>
@@ -3292,6 +3293,47 @@ static int LaunchExpectedPlayerCount() {
     return std::clamp(Count, 0, HubMaxPlayers());
 }
 
+// [2026-10-18 replay probe] Fixed per process: GetGameDefaultMap runs on every map-name query.
+static bool g_ServerDemoRec = false;
+static const std::wstring& ServerDemoName() {
+    static const std::wstring s_Name = [] {
+        wchar_t Buf[64];
+        const std::time_t Tt = std::time(nullptr);
+        std::tm Tm{};
+        localtime_s(&Tm, &Tt);
+        swprintf_s(Buf, L"hunt_%04d%02d%02d_%02d%02d%02d_port%d", Tm.tm_year + 1900, Tm.tm_mon + 1, Tm.tm_mday,
+            Tm.tm_hour, Tm.tm_min, Tm.tm_sec, Globals::Port);
+        MpLog("[Replay] server recording as " + std::string(Buf, Buf + wcslen(Buf)));
+        return std::wstring(Buf);
+    }();
+    return s_Name;
+}
+
+// Logs whether a demo driver exists; ?DemoRec has had 10 s of world time to start one, else try demorec once.
+static void TickServerDemoRec() {
+    if (!g_ServerDemoRec) return;
+    static ULONGLONG s_Next = 0, s_WorldAt = 0;
+    static void* s_World = nullptr;
+    static SDK::UDemoNetDriver* s_Demo = reinterpret_cast<SDK::UDemoNetDriver*>(1);
+    static bool s_Tried = false;
+    const ULONGLONG Now = GetTickCount64();
+    if (Now < s_Next) return;
+    s_Next = Now + 1000;
+    SDK::UWorld* World = SDK::UWorld::GetWorld();
+    if (!World) return;
+    if (World != s_World) { s_World = World; s_WorldAt = Now; }
+    if (World->DemoNetDriver != s_Demo) {
+        s_Demo = World->DemoNetDriver;
+        MpLog(std::string("[Replay] server demo driver ") + (s_Demo ? "UP " + s_Demo->GetName() : "none"));
+    }
+    if (!s_Demo && !s_Tried && Now - s_WorldAt > 10000) {
+        s_Tried = true;
+        const std::wstring Line = L"demorec " + ServerDemoName();
+        SDK::UKismetSystemLibrary::ExecuteConsoleCommand(World, SDK::FString(Line.c_str()), nullptr);
+        MpLog("[Replay] server ?DemoRec started nothing - exec demorec");
+    }
+}
+
 FString* GetGameDefaultMap(FString* a1) {
     // [2026-07-19] Per-call entry/return traces are VERBOSE_DIAG-only; this hook fires constantly.
     if (VerboseDiag()) MpLog("[GetGameDefaultMap] entry out=" + MpPtr(a1));
@@ -3337,6 +3379,12 @@ FString* GetGameDefaultMap(FString* a1) {
     if (MpExeRelativeFlagPresent(L"MAP_URL_LISTEN.flag")) {
         FinalURL += std::wstring(L"?listen");
     }
+
+    // [2026-10-18 replay probe] SERVER_DEMOREC.flag: hunts (not hubs) record an engine replay from map load,
+    // via the engine's own ?DemoRec= URL option (client-side demorec never starts a demo driver on 1.14.7).
+    // The name is fixed per process: this hook runs on every map-name query.
+    g_ServerDemoRec = Globals::AmServer && !MatchmakerHuntId.contains(L"NO_MM_HUNTID") && MpExeRelativeFlagPresent(L"SERVER_DEMOREC.flag");   // 1.14.7 hunts carry no behemoth arg
+    if (g_ServerDemoRec) FinalURL += L"?DemoRec=" + ServerDemoName();
 
     // [1.12.0] Write the URL into the engine-OWNED FString buffer instead of aliasing FinalURL's
     // std::wstring storage (see EngineRealloc note above). Ret->Data was MOVED out of the engine's
@@ -5692,6 +5740,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
             + " Listening=" + std::to_string(Globals::Listening ? 1 : 0)
             + " tid=" + std::to_string(CurTid));
     }
+    TickServerDemoRec();
 
     // [1.14.7 hunt join stall 2026-10-13] Issue the progression configuration query as soon as the server
     // listens. The readiness hook issues it on its second check, which on a hub happens at boot (the hub's
@@ -12951,6 +13000,7 @@ static int64_t s_LastFrame = -1;
 static ULONGLONG s_NextSave = 0, s_NextCursor = 0;
 static Ref s_PC, s_Actor, s_OldView;
 static Settings s_Saved;                   // what CINECAM.ini holds
+static std::string s_ReplayName;           // replay probe: the last demorec name this session
 static volatile bool s_Faulted = false;
 
 static void Log(const std::string& Msg) {
@@ -13428,6 +13478,28 @@ static void Run(SDK::APlayerController* PC, const Cmd& C, Settings& S, const std
         Log("photo x" + std::to_string(C.I));
         break;
     }
+    case CmdType::Replay: {                             // probe: the engine's own demo recorder (Saved\Demos)
+        if (C.I == 0) {
+            char Name[40];
+            const std::time_t Tt = std::time(nullptr);
+            std::tm Tm{};
+            localtime_s(&Tm, &Tt);
+            std::strftime(Name, sizeof(Name), "cine_%Y%m%d_%H%M%S", &Tm);
+            s_ReplayName = Name;
+            if (auto* E = SDK::UEngine::GetEngine()) {          // demorec needs a DemoNetDriver definition
+                std::string Defs;
+                for (const auto& D : E->NetDriverDefinitions) Defs += " " + D.DefName.ToString() + "=" + D.DriverClassName.ToString();
+                MpLog("[Replay] net drivers:" + Defs);
+            }
+        }
+        if (C.I == 2 && s_ReplayName.empty()) { MpLog("[Replay] nothing recorded this session"); break; }
+        static const wchar_t* Verbs[] = { L"demorec ", L"demostop", L"demoplay " };
+        std::wstring Line = Verbs[(std::clamp)(C.I, 0, 2)];
+        if (C.I != 1) Line += std::wstring(s_ReplayName.begin(), s_ReplayName.end());
+        SDK::UKismetSystemLibrary::ExecuteConsoleCommand(PC, SDK::FString(Line.c_str()), PC);
+        MpLog("[Replay] exec " + std::string(Line.begin(), Line.end()));
+        break;
+    }
     case CmdType::PickFocus: {                          // trace from the camera through the clicked pixel
         SDK::FVector At{}, Dir{};
         if (!PC->DeprojectScreenPositionToWorld(static_cast<float>(C.I), C.F, &At, &Dir)) break;
@@ -13489,12 +13561,16 @@ static void UpdateCursor(SDK::APlayerController* PC, ULONGLONG Now) {
 
 static bool OwnerOnly(SDK::APlayerController* PC, ULONGLONG Now) {
     static ULONGLONG s_Next = 0;
-    static bool s_Owner = false;
+    static bool s_Owner = false, s_WasOwner = false;
     static int s_Logged = -1;
     if (Now >= s_Next) {
         s_Next = Now + 1000;
         SDK::APlayerState* Ps = PC->PlayerState;
         s_Owner = Ps && Ps->PlayerNamePrivate.ToString().rfind("[Owner] ", 0) == 0;
+        // replay playback: the spectator has no tagged name; an owner earlier this session keeps the camera
+        SDK::UWorld* World = SDK::UWorld::GetWorld();
+        s_WasOwner = s_WasOwner || s_Owner;
+        if (!s_Owner && s_WasOwner && World && World->DemoNetDriver) s_Owner = true;
         if (s_Logged != static_cast<int>(s_Owner) && (s_Owner || Ps)) {
             s_Logged = static_cast<int>(s_Owner);
             Log(s_Owner ? "owner account - camera unlocked" : "not an owner account - camera locked");
@@ -13542,6 +13618,16 @@ static void Update() {
         G.MenuOpen = false;
         if (First) { MenuStart(); Log("ready (F8 camera, F9 HUD, F10 menu)"); }
         else Log("new world " + Map + " - camera off");
+    }
+    {                                                   // replay probe: did demorec / demoplay start a demo driver?
+        static SDK::UDemoNetDriver* s_Demo = nullptr;
+        if (World->DemoNetDriver != s_Demo) {
+            s_Demo = World->DemoNetDriver;
+            const std::string Status = !s_Demo ? "no demo driver" : "demo driver up on " + G.Map;
+            MpLog("[Replay] " + Status + (s_Demo ? " " + s_Demo->GetName() : ""));
+            std::lock_guard<std::mutex> Lk(G.Lock);
+            G.Replay = Status;
+        }
     }
     DWORD Pid = 0;
     GetWindowThreadProcessId(GetForegroundWindow(), &Pid);
