@@ -96,6 +96,7 @@ static bool SaveShot(const std::string& Name) {
     FILE* Fp = _wfopen((ShotDir() + Widen(Name) + L".txt").c_str(), L"w");
     if (!Fp) return false;
     fprintf(Fp, "map %s\n", G.Map.empty() ? "unknown" : G.Map.c_str());
+    fprintf(Fp, "space %d\n", G.KeySpace);
     for (const Key& K : G.Keys) {
         fprintf(Fp, "key %.4f", K.Time);
         for (int I = 0; I < PN; ++I) fprintf(Fp, " %.4f", K.P[I]);
@@ -109,14 +110,18 @@ static bool LoadShot(const std::string& Name) {
     FILE* Fp = _wfopen((ShotDir() + Widen(Name) + L".txt").c_str(), L"r");
     if (!Fp) return false;
     std::vector<Key> Keys;
+    int Space = 0;                                      // shots from before key spaces are world space
     char Line[512];
     while (fgets(Line, sizeof(Line), Fp)) {
         Key K;
         if (ParseKey(Line, K, G.S.Focus)) Keys.push_back(K);
+        else sscanf_s(Line, "space %d", &Space);
     }
     fclose(Fp);
     if (Keys.empty()) return false;
     G.Keys = Keys;
+    G.KeySpace = (std::clamp)(Space, 0, 2);
+    G.S.KeysOnTarget = G.KeySpace > 0;                  // plays the way it was made
     return true;
 }
 
@@ -383,7 +388,29 @@ static void LensSection(Settings& S) {
     ImGui::EndDisabled();
 }
 
+static void LightSection(Settings& S) {
+    Section("WORLD LIGHT  (ONLY YOU SEE IT)");
+    Toggle("Change world light", &S.Light, "Scales the map's own sun, sky and fog on your screen. Off puts the map back.");
+    ImGui::BeginDisabled(!S.Light);
+    Slider("Sun brightness", &S.SunMul, kDef.SunMul, 0.f, 4.f, "%.2fx", nullptr);
+    float Sun[3] = { S.SunR, S.SunG, S.SunB };
+    Label("Sun colour");
+    if (ImGui::ColorEdit3("##suncol", Sun, ImGuiColorEditFlags_NoInputs)) { S.SunR = Sun[0]; S.SunG = Sun[1]; S.SunB = Sun[2]; }
+    Tip("Multiplies the map's sun colour. White = unchanged. Warm orange for golden hour, blue for night.");
+    Slider("Sun turn", &S.SunYaw, kDef.SunYaw, -180.f, 180.f, "%+.0f\xC2\xB0", "Swings the sun around the sky: moves shadows. Can double up baked shadows.");
+    Slider("Sun height", &S.SunPitch, kDef.SunPitch, -60.f, 60.f, "%+.0f\xC2\xB0", "Lower = long dramatic shadows. Can double up baked shadows.");
+    Slider("Sky brightness", &S.SkyMul, kDef.SkyMul, 0.f, 4.f, "%.2fx", "Fill light from the sky: lower = deeper shadows.");
+    Slider("Fog density", &S.FogMul, kDef.FogMul, 0.f, 8.f, "%.2fx", "Atmosphere and depth. 0 = clear air.");
+    float Fog[3] = { S.FogR, S.FogG, S.FogB };
+    Label("Fog colour");
+    if (ImGui::ColorEdit3("##fogcol", Fog, ImGuiColorEditFlags_NoInputs)) { S.FogR = Fog[0]; S.FogG = Fog[1]; S.FogB = Fog[2]; }
+    Tip("Multiplies the map's fog colour.");
+    ImGui::EndDisabled();
+}
+
 static void LookSection(Settings& S) {
+    LightSection(S);
+    Section("COLOUR GRADING");
     Toggle("Colour grading", &S.Grade, "Off = the game's own colours.");
     const char* Names[kCustom + 1];
     for (int I = 0; I < kCustom; ++I) Names[I] = kLooks[I].Name;
@@ -453,6 +480,12 @@ static void PathSection(Settings& S) {
 
     const float Len = PathLength(G.Keys);
     ImGui::TextDisabled("Scrub, drag and retime keys in the timeline at the bottom.");
+
+    Section("ANCHOR");
+    Toggle("Keys ride with target", &S.KeysOnTarget,
+        "On: the path moves with the target (Rig > Target), so a fly-around still frames a behemoth that walked off. "
+        "With Rig > Turn with target it also turns with it. Off: keys stay where you put them in the world.");
+    if (S.KeysOnTarget) ImGui::TextDisabled("Anchored to: %s", G.TargetName.empty() ? "-" : G.TargetName.c_str());
 
     Section("TIMING");
     Toggle("Ease in and out", &S.Ease, "Starts and stops gently instead of at full speed.");

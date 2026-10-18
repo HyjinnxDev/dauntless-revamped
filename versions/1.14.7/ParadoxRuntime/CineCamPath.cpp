@@ -95,4 +95,26 @@ Pose ShakeAt(float T, int Preset, float Amt, float Freq) {
 float FovToMm(float Fov) { return 18.f / tanf(Fov * 0.5f * kRad); }
 float MmToFov(float Mm) { return 2.f * atanf(18.f / Mm) / kRad; }
 
+// Space 1 moves the position by the target; space 2 also turns position and yaw with the target's yaw.
+Pose ToSpace(const Pose& W, int Space, float Tx, float Ty, float Tz, float TYaw) {
+    Pose R = W;
+    if (Space <= 0) return R;
+    const float Dx = W[PX] - Tx, Dy = W[PY] - Ty, A = Space == 2 ? -TYaw * kRad : 0.f;
+    R[PX] = Dx * cosf(A) - Dy * sinf(A);
+    R[PY] = Dx * sinf(A) + Dy * cosf(A);
+    R[PZ] = W[PZ] - Tz;
+    if (Space == 2) R[PYaw] = W[PYaw] - TYaw;
+    return R;
+}
+Pose FromSpace(const Pose& L, int Space, float Tx, float Ty, float Tz, float TYaw) {
+    Pose R = L;
+    if (Space <= 0) return R;
+    const float A = Space == 2 ? TYaw * kRad : 0.f;
+    R[PX] = Tx + L[PX] * cosf(A) - L[PY] * sinf(A);
+    R[PY] = Ty + L[PX] * sinf(A) + L[PY] * cosf(A);
+    R[PZ] = Tz + L[PZ];
+    if (Space == 2) R[PYaw] = L[PYaw] + TYaw;
+    return R;
+}
+
 }  // namespace Cine

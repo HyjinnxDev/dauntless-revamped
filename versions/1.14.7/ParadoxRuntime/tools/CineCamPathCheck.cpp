@@ -33,6 +33,15 @@ int main() {
     const Rect All = FitRect(800.f, 600.f, 0.f);
     assert(Near(All.W, 800.f) && Near(All.H, 600.f));
     assert(Near(FovToMm(MmToFov(50.f)), 50.f) && fabsf(FovToMm(90.f) - 18.f) < 1e-3f);
+    Pose W; W[PX] = 300.f; W[PY] = -50.f; W[PZ] = 20.f; W[PYaw] = 45.f; W[PFov] = 60.f;
+    for (int Sp = 0; Sp <= 2; ++Sp) {                                           // key spaces round-trip
+        const Pose B = FromSpace(ToSpace(W, Sp, 100.f, 200.f, 5.f, 30.f), Sp, 100.f, 200.f, 5.f, 30.f);
+        for (int I = 0; I < PN; ++I) assert(Near(B[I], W[I]));
+    }
+    const Pose L = ToSpace(W, 2, 0.f, 0.f, 0.f, 90.f);                          // target turned 90: offset +x becomes -y
+    assert(Near(L[PX], -50.f) && Near(L[PY], -300.f) && Near(L[PYaw], -45.f) && Near(L[PFov], 60.f));
+    const Pose Moved = FromSpace(ToSpace(W, 1, 0.f, 0.f, 0.f, 0.f), 1, 1000.f, 0.f, 0.f, 77.f);   // space 1 ignores yaw
+    assert(Near(Moved[PX], 1300.f) && Near(Moved[PYaw], 45.f));
     for (float T = 0.f; T < 20.f; T += 0.37f) {                                 // shake: bounded, repeatable, off = 0
         const Pose A = ShakeAt(T, 5, 2.f, 1.5f), B = ShakeAt(T, 5, 2.f, 1.5f);
         assert(Near(A[PYaw], B[PYaw]) && fabsf(A[PYaw]) <= kShakes[5].Rot * 2.f + 1e-4f && fabsf(A[PZ]) <= kShakes[5].Pos * 2.f + 1e-4f);
