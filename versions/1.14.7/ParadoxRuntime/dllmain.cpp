@@ -13295,6 +13295,54 @@ static void ApplyLight(SDK::UWorld* World, Settings S) {
     if (!S.Light) s_LitOn = false;
 }
 
+// [2026-10-18 probe] Ramsgate rams and fences vanish when the camera flies far from the character. Is it a
+// streaming level unloading on this client, or networked actors the server stops sending (its cull is measured
+// from the character)? While the camera is on, logs streaming levels that change state and networked actor
+// classes whose count changes, with the camera's distance from the character. Log tag [VanishProbe].
+static void ProbeVanish(SDK::APlayerController* PC, SDK::UWorld* World, ULONGLONG Now) {
+    static ULONGLONG s_Next = 0;
+    static void* s_World = nullptr;
+    static std::unordered_map<std::string, int> s_Levels;   // 0 unloaded, 1 loaded but hidden, 2 visible
+    static std::unordered_map<std::string, int> s_Net;      // replicated actor class -> count
+    static auto* s_Found = new SDK::TArray<SDK::AActor*>();
+    if (Now < s_Next) return;
+    s_Next = Now + 1000;
+    const bool First = World != s_World;
+    if (First) { s_World = World; s_Levels.clear(); s_Net.clear(); }
+    float Dist = -1.f;
+    if (SDK::APawn* Me = PC->Pawn) {
+        const SDK::FVector P = Me->K2_GetActorLocation();
+        Dist = sqrtf((s_Cam[PX] - P.X) * (s_Cam[PX] - P.X) + (s_Cam[PY] - P.Y) * (s_Cam[PY] - P.Y) + (s_Cam[PZ] - P.Z) * (s_Cam[PZ] - P.Z)) / 100.f;
+    }
+    const std::string Where = " (camera " + std::to_string(static_cast<int>(Dist)) + " m from me)";
+    static const char* States[] = { "unloaded", "hidden", "visible" };
+    int Visible = 0;
+    for (SDK::ULevelStreaming* L : World->StreamingLevels) {
+        if (!L) continue;
+        const std::string Name = L->GetWorldAssetPackageFName().ToString();
+        const int St = L->IsLevelVisible() ? 2 : L->IsLevelLoaded() ? 1 : 0;
+        Visible += St == 2;
+        auto It = s_Levels.find(Name);
+        if (!First && It != s_Levels.end() && It->second != St)
+            MpLog("[VanishProbe] level " + Name + " " + States[It->second] + " -> " + States[St] + Where);
+        s_Levels[Name] = St;
+    }
+    std::unordered_map<std::string, int> Net;
+    SDK::UGameplayStatics::GetAllActorsOfClass(PC, SDK::AActor::StaticClass(), s_Found);
+    for (int32_t I = 0; I < s_Found->Num(); ++I) {
+        SDK::AActor* A = (*s_Found)[I];
+        if (A && A->bReplicates && A->Class) ++Net[A->Class->GetName()];
+    }
+    if (First) {
+        MpLog("[VanishProbe] " + std::to_string(s_Levels.size()) + " streaming levels (" + std::to_string(Visible) + " visible), "
+            + std::to_string(Net.size()) + " networked actor classes" + Where);
+    } else {
+        for (const auto& [Cls, N] : Net) { const int Old = s_Net.count(Cls) ? s_Net[Cls] : 0; if (Old != N) MpLog("[VanishProbe] net " + Cls + " " + std::to_string(Old) + " -> " + std::to_string(N) + Where); }
+        for (const auto& [Cls, N] : s_Net) if (!Net.count(Cls)) MpLog("[VanishProbe] net " + Cls + " " + std::to_string(N) + " -> 0" + Where);
+    }
+    s_Net.swap(Net);
+}
+
 struct Aim { SDK::FVector P{}; float Yaw = 0.f; bool Ok = false; std::string Name; };
 
 // Keys follow the target (State::KeySpace): stored relative to it, placed where it is this frame.
@@ -13797,6 +13845,7 @@ static void Update() {
     }
     for (const Cmd& C : Cmds) Run(PC, C, S, Keys, T);
     ApplyLight(World, S);
+    if (s_Mode != Mode::Off) ProbeVanish(PC, World, Now);
     KeepHudHidden(PC, Now);
     UpdateCursor(PC, Now);
     if (s_Mode != Mode::Off) Drive(PC, Dt, S, Keys, T);
