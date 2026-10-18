@@ -13295,52 +13295,34 @@ static void ApplyLight(SDK::UWorld* World, Settings S) {
     if (!S.Light) s_LitOn = false;
 }
 
-// [2026-10-18 probe] Ramsgate rams and fences vanish when the camera flies far from the character. Is it a
-// streaming level unloading on this client, or networked actors the server stops sending (its cull is measured
-// from the character)? While the camera is on, logs streaming levels that change state and networked actor
-// classes whose count changes, with the camera's distance from the character. Log tag [VanishProbe].
-static void ProbeVanish(SDK::APlayerController* PC, SDK::UWorld* World, ULONGLONG Now) {
-    static ULONGLONG s_Next = 0;
+// [2026-10-18] Ramsgate streams sublevels (top island, plazas) in and out around the character; a hidden
+// sublevel takes its rams and fences with it. While the camera is on, every sublevel the game has shown stays
+// shown with distance streaming off; turning the camera off hands them back. Only levels the game itself made
+// visible are held, so seasonal variants never overlap.
+static void HoldLevels(SDK::UWorld* World, bool On) {
     static void* s_World = nullptr;
-    static std::unordered_map<std::string, int> s_Levels;   // 0 unloaded, 1 loaded but hidden, 2 visible
-    static std::unordered_map<std::string, int> s_Net;      // replicated actor class -> count
-    static auto* s_Found = new SDK::TArray<SDK::AActor*>();
-    if (Now < s_Next) return;
-    s_Next = Now + 1000;
-    const bool First = World != s_World;
-    if (First) { s_World = World; s_Levels.clear(); s_Net.clear(); }
-    float Dist = -1.f;
-    if (SDK::APawn* Me = PC->Pawn) {
-        const SDK::FVector P = Me->K2_GetActorLocation();
-        Dist = sqrtf((s_Cam[PX] - P.X) * (s_Cam[PX] - P.X) + (s_Cam[PY] - P.Y) * (s_Cam[PY] - P.Y) + (s_Cam[PZ] - P.Z) * (s_Cam[PZ] - P.Z)) / 100.f;
+    static std::unordered_map<SDK::ULevelStreaming*, bool> s_Held;   // level -> its own bDisableDistanceStreaming
+    if (World != s_World) { s_World = World; s_Held.clear(); }
+    if (!On) {
+        if (s_Held.empty()) return;
+        for (SDK::ULevelStreaming* L : World->StreamingLevels)
+            if (L && s_Held.count(L)) L->bDisableDistanceStreaming = s_Held[L];
+        Log("let go of " + std::to_string(s_Held.size()) + " streaming levels");
+        s_Held.clear();
+        return;
     }
-    const std::string Where = " (camera " + std::to_string(static_cast<int>(Dist)) + " m from me)";
-    static const char* States[] = { "unloaded", "hidden", "visible" };
-    int Visible = 0;
+    const size_t Before = s_Held.size();
     for (SDK::ULevelStreaming* L : World->StreamingLevels) {
         if (!L) continue;
-        const std::string Name = L->GetWorldAssetPackageFName().ToString();
-        const int St = L->IsLevelVisible() ? 2 : L->IsLevelLoaded() ? 1 : 0;
-        Visible += St == 2;
-        auto It = s_Levels.find(Name);
-        if (!First && It != s_Levels.end() && It->second != St)
-            MpLog("[VanishProbe] level " + Name + " " + States[It->second] + " -> " + States[St] + Where);
-        s_Levels[Name] = St;
+        if (!s_Held.count(L)) {
+            if (!L->IsLevelVisible()) continue;
+            s_Held[L] = L->bDisableDistanceStreaming;
+        }
+        L->bDisableDistanceStreaming = 1;
+        if (!L->bShouldBeLoaded) L->SetShouldBeLoaded(true);
+        if (!L->bShouldBeVisible) L->SetShouldBeVisible(true);
     }
-    std::unordered_map<std::string, int> Net;
-    SDK::UGameplayStatics::GetAllActorsOfClass(PC, SDK::AActor::StaticClass(), s_Found);
-    for (int32_t I = 0; I < s_Found->Num(); ++I) {
-        SDK::AActor* A = (*s_Found)[I];
-        if (A && A->bReplicates && A->Class) ++Net[A->Class->GetName()];
-    }
-    if (First) {
-        MpLog("[VanishProbe] " + std::to_string(s_Levels.size()) + " streaming levels (" + std::to_string(Visible) + " visible), "
-            + std::to_string(Net.size()) + " networked actor classes" + Where);
-    } else {
-        for (const auto& [Cls, N] : Net) { const int Old = s_Net.count(Cls) ? s_Net[Cls] : 0; if (Old != N) MpLog("[VanishProbe] net " + Cls + " " + std::to_string(Old) + " -> " + std::to_string(N) + Where); }
-        for (const auto& [Cls, N] : s_Net) if (!Net.count(Cls)) MpLog("[VanishProbe] net " + Cls + " " + std::to_string(N) + " -> 0" + Where);
-    }
-    s_Net.swap(Net);
+    if (s_Held.size() != Before) Log("holding " + std::to_string(s_Held.size()) + " streaming levels");
 }
 
 struct Aim { SDK::FVector P{}; float Yaw = 0.f; bool Ok = false; std::string Name; };
@@ -13845,7 +13827,7 @@ static void Update() {
     }
     for (const Cmd& C : Cmds) Run(PC, C, S, Keys, T);
     ApplyLight(World, S);
-    if (s_Mode != Mode::Off) ProbeVanish(PC, World, Now);
+    HoldLevels(World, s_Mode != Mode::Off);
     KeepHudHidden(PC, Now);
     UpdateCursor(PC, Now);
     if (s_Mode != Mode::Off) Drive(PC, Dt, S, Keys, T);
