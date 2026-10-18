@@ -100,7 +100,7 @@ static bool SaveShot(const std::string& Name) {
     for (const Key& K : G.Keys) {
         fprintf(Fp, "key %.4f", K.Time);
         for (int I = 0; I < PN; ++I) fprintf(Fp, " %.4f", K.P[I]);
-        fprintf(Fp, " %d\n", K.Interp);
+        fprintf(Fp, " %d %.3f %d\n", K.Interp, K.Tension, K.Aim);
     }
     fclose(Fp);
     return true;
@@ -614,6 +614,48 @@ static void ShortcutsSection() {
 
 static int s_Sel = -1;                              // selected keyframe
 
+// Second timeline row for the selected key: curve shape, where the camera looks, exact angles and position. Any
+// edit puts the camera on the key so you see it; the path overlay redraws as you drag.
+static void KeyInspector(int Index, bool CamOn) {
+    Key& K = G.Keys[Index];
+    bool Changed = false;
+    auto Field = [&](const char* Id, float* V, float Speed, float Lo, float Hi, const char* Fmt, float W, const char* Help) {
+        ImGui::SameLine(0.f, 6.f);
+        ImGui::SetNextItemWidth(W);
+        Changed |= ImGui::DragFloat(Id, V, Speed, Lo, Hi, Fmt);
+        if (Help) Tip(Help);
+    };
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("Curve");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(K.Interp != 0);
+    ImGui::SetNextItemWidth(110);
+    Changed |= ImGui::SliderFloat("##tension", &K.Tension, -1.f, 1.f, K.Tension < -0.05f ? "%.2f wide" : K.Tension > 0.05f ? "%.2f tight" : "natural");
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { K.Tension = 0.f; Changed = true; }
+    Tip("How the path bends through this key (Smooth only). Wide = big sweeping arc, tight = sharp turn. Right-click = natural.");
+    ImGui::EndDisabled();
+    ImGui::SameLine(0.f, 14.f);
+    ImGui::TextDisabled("Look");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(110);
+    Changed |= ImGui::Combo("##aim", &K.Aim, kAims, static_cast<int>(std::size(kAims)));
+    Tip("From this key to the next. Key angles: turns from this key's view to the next one's. Along path: faces where it is flying, like a drone.\nRig > Aim at target overrides both.");
+    ImGui::SameLine(0.f, 14.f);
+    ImGui::TextDisabled("Angle");
+    ImGui::BeginDisabled(K.Aim == 1);
+    Field("##yaw", &K.P[PYaw], 0.25f, -720.f, 720.f, "yaw %.1f\xC2\xB0", 92.f, "Turn left / right. Drag, or Ctrl+click to type.");
+    Field("##pitch", &K.P[PPitch], 0.25f, -89.f, 89.f, "pitch %.1f\xC2\xB0", 92.f, "Tilt up / down.");
+    ImGui::EndDisabled();
+    Field("##roll", &K.P[PRoll], 0.25f, -90.f, 90.f, "roll %.1f\xC2\xB0", 84.f, "Dutch angle.");
+    Field("##fov", &K.P[PFov], 0.2f, 5.f, 120.f, "fov %.0f\xC2\xB0", 74.f, "Zoom at this key.");
+    ImGui::SameLine(0.f, 14.f);
+    ImGui::TextDisabled(G.KeySpace ? "Offset" : "Pos");
+    Field("##x", &K.P[PX], 2.f, -1e6f, 1e6f, "x %.0f", 84.f, "Position in cm (from the target when keys ride with it). Drag for small moves.");
+    Field("##y", &K.P[PY], 2.f, -1e6f, 1e6f, "y %.0f", 84.f, nullptr);
+    Field("##z", &K.P[PZ], 2.f, -1e6f, 1e6f, "z %.0f", 84.f, "Height.");
+    if (Changed && CamOn) Push(CmdType::GoToKey, Index);
+}
+
 static void Timeline(Settings& S) {
     const ImVec2 Size = ImGui::GetIO().DisplaySize;
     const float W = (std::min)(Size.x - 64.f, 1500.f);
@@ -675,6 +717,7 @@ static void Timeline(Settings& S) {
         ImGui::EndDisabled();
         ImGui::SameLine(0.f, 3.f);
         if (ImGui::Button("Delete")) { Keys.erase(Keys.begin() + s_Sel); s_Sel = -1; ImGui::End(); return; }
+        KeyInspector(s_Sel, CamOn);
     }
 
     // track

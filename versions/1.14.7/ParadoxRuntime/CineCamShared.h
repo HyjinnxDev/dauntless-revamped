@@ -21,8 +21,11 @@ struct Key {
     Pose P;
     float Time = 0.f;                           // seconds from the start of the path
     int Interp = 0;                             // kInterps: how the camera gets from this key to the next
+    float Tension = 0.f;                        // smooth curve through this key: -1 wide and loose, 0 natural, 1 tight corner
+    int Aim = 0;                                // kAims: where the camera looks from this key to the next
 };
 inline constexpr const char* kInterps[] = { "Smooth", "Linear", "Hold" };
+inline constexpr const char* kAims[] = { "Key angles", "Along path" };
 
 enum class Mode { Off, Free, Tripod, Path, Follow };
 
@@ -146,8 +149,8 @@ void EvenSpeed(std::vector<Key>& Keys);         // spread key times by distance,
 // Key spaces (State::KeySpace): 0 world, 1 offset from the target, 2 offset that also turns with the target's yaw.
 Pose ToSpace(const Pose& World, int Space, float Tx, float Ty, float Tz, float TYaw);
 Pose FromSpace(const Pose& Local, int Space, float Tx, float Ty, float Tz, float TYaw);
-// Saved shot line "key t x y z yaw pitch roll fov focus interp"; also reads the older 8-number lines (no focus /
-// interp: DefFocus, Smooth).
+// Saved shot line "key t x y z yaw pitch roll fov focus interp tension aim"; also reads the older lines without
+// tension / aim (0) and without focus / interp (DefFocus, Smooth).
 bool ParseKey(const char* Line, Key& K, float DefFocus);
 
 // CineCamMenu.cpp

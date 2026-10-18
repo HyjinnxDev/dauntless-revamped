@@ -60,6 +60,24 @@ int main() {
     assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 1", P, 7.f) && Near(P.P[PFocus], 12.5f) && P.Interp == 1);
     assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 9", P, 7.f) && P.Interp == 2); // bad interp clamps
     assert(!ParseKey("map Ramsgate", P, 7.f) && !ParseKey("key 1 2 3", P, 7.f));
+    assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 0 0.5 1", P, 7.f) && Near(P.Tension, 0.5f) && P.Aim == 1);
+    assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 0", P, 7.f) && P.Tension == 0.f && P.Aim == 0);   // older line
+
+    std::vector<Key> Bend = { K(0.f, 0.f), K(1.f, 100.f), K(2.f, 100.f), K(3.f, 0.f) };   // tension shapes the curve
+    Bend[1].P[PY] = 100.f; Bend[2].P[PY] = 200.f;
+    const float Loose = PathAt(Bend, 1.5f, false, false)[PX];
+    Bend[1].Tension = Bend[2].Tension = 1.f;                                    // tight: straight line between the two
+    assert(Near(PathAt(Bend, 1.5f, false, false)[PX], 100.f) && Loose > 100.f);
+    for (const Key& Q : Bend) assert(Near(PathAt(Bend, Q.Time, false, false)[PX], Q.P[PX]));   // still passes every key
+
+    std::vector<Key> Fly = { K(0.f, 0.f, 90.f), K(1.f, 0.f, 90.f) };             // along path: faces the travel direction
+    Fly[1].P[PY] = 100.f; Fly[1].P[PZ] = 100.f;
+    Fly[0].Aim = 1;
+    const Pose Mid = PathAt(Fly, 0.5f, false, false);
+    assert(fabsf(Mid[PYaw] - 90.f) < 1e-2f && Mid[PPitch] > 10.f && Mid[PPitch] < 80.f);
+    Fly[1].P[PX] = -100.f; Fly[1].P[PY] = 0.f; Fly[1].P[PZ] = 0.f;
+    assert(fabsf(fabsf(PathAt(Fly, 0.5f, false, false)[PYaw]) - 180.f) < 1e-2f);   // flying -x
+    assert(Near(PathAt(Fly, 1.f, false, false)[PYaw], 90.f));                    // the last key keeps its own angle
     puts("cinecam path ok");
     return 0;
 }
