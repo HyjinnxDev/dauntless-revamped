@@ -20,6 +20,7 @@
 #include <d3d11.h>
 #include <algorithm>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
 #include "MinHook/MinHook.h"
 #include "imgui/imgui.h"
@@ -126,14 +127,18 @@ static bool LoadShot(const std::string& Name) {
 }
 
 // ---------------------------------------------------------------- widgets
-// Inspector rows: label on the left, control filling the rest. Right-click a slider to reset it.
+// Inspector rows: label on the left, control on the right. Pages are foldable groups, advanced ones closed, and
+// settings that do nothing right now (grading off, no shake...) are hidden rather than greyed, so a page only
+// shows what matters. Right-click a slider to reset it.
 
-static ImFont* s_FontHead = nullptr;               // small semibold, section titles
+static ImFont* s_FontHead = nullptr;               // small semibold, group titles
 static ImFont* s_FontBig = nullptr;                // countdown digits
 static const Settings kDef{};                       // defaults for right-click reset
-constexpr float kLabelW = 132.f;
+constexpr float kLabelW = 128.f;
 static const ImVec4 kAccent(0.96f, 0.64f, 0.24f, 1.f);
+static const ImVec4 kAccentDim(0.80f, 0.50f, 0.17f, 1.f);
 static const ImVec4 kGood(0.45f, 0.85f, 0.55f, 1.f);
+static const ImVec4 kWarn(1.f, 0.62f, 0.32f, 1.f);
 
 static void Tip(const char* Text) {
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("%s", Text);
@@ -141,16 +146,26 @@ static void Tip(const char* Text) {
 
 static void Push(CmdType T, int I = 0, float F = 0.f) { G.Cmds.push_back(Cmd{ T, I, F }); }
 
-static void Label(const char* L) {
+static void Hint(const char* Fmt, ...) {
+    va_list A;
+    va_start(A, Fmt);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    ImGui::TextWrappedV(Fmt, A);
+    ImGui::PopStyleColor();
+    va_end(A);
+}
+
+static void Label(const char* L, const char* Help = nullptr) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(L);
+    if (Help) Tip(Help);
     ImGui::SameLine(kLabelW);
     ImGui::SetNextItemWidth(-FLT_MIN);
 }
 
 static bool Slider(const char* L, float* V, float Def, float Lo, float Hi, const char* Fmt, const char* Help, bool Log = false) {
     ImGui::PushID(L);
-    Label(L);
+    Label(L, Help);
     bool Changed = ImGui::SliderFloat("##v", V, Lo, Hi, Fmt, Log ? ImGuiSliderFlags_Logarithmic : 0);
     if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { *V = Def; Changed = true; }
     char T[512];
@@ -160,10 +175,34 @@ static bool Slider(const char* L, float* V, float Def, float Lo, float Hi, const
     return Changed;
 }
 
+// On / off switch at the right end of the row; the knob slides.
+static bool Switch(const char* Id, bool* V) {
+    const float Fh = ImGui::GetFrameHeight(), H = Fh * 0.74f, W = H * 1.8f;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - W);
+    const ImVec2 P = ImGui::GetCursorScreenPos();
+    const bool Changed = ImGui::InvisibleButton(Id, ImVec2(W, Fh));
+    if (Changed) *V = !*V;
+    ImGuiStorage* St = ImGui::GetStateStorage();
+    const ImGuiID Key = ImGui::GetItemID();
+    float T = St->GetFloat(Key, *V ? 1.f : 0.f);
+    T += ((*V ? 1.f : 0.f) - T) * (std::min)(1.f, ImGui::GetIO().DeltaTime * 16.f);
+    St->SetFloat(Key, T);
+    const ImVec4 Off = ImGui::GetStyle().Colors[ImGui::IsItemHovered() ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg];
+    const ImVec4 Track(Off.x + (kAccentDim.x - Off.x) * T, Off.y + (kAccentDim.y - Off.y) * T, Off.z + (kAccentDim.z - Off.z) * T, 1.f);
+    const float Y = P.y + (Fh - H) * 0.5f;
+    ImDrawList* D = ImGui::GetWindowDrawList();
+    D->AddRectFilled(ImVec2(P.x, Y), ImVec2(P.x + W, Y + H), ImGui::GetColorU32(Track), H * 0.5f);
+    D->AddCircleFilled(ImVec2(P.x + H * 0.5f + (W - H) * T, Y + H * 0.5f), H * 0.5f - 2.5f, ImGui::GetColorU32(ImVec4(0.96f, 0.96f, 0.97f, 1.f)), 24);
+    return Changed;
+}
+
 static bool Toggle(const char* L, bool* V, const char* Help) {
     ImGui::PushID(L);
-    Label(L);
-    const bool Changed = ImGui::Checkbox("##v", V);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(L);
+    if (Help) Tip(Help);
+    ImGui::SameLine();
+    const bool Changed = Switch("##v", V);
     if (Help) Tip(Help);
     ImGui::PopID();
     return Changed;
@@ -171,7 +210,7 @@ static bool Toggle(const char* L, bool* V, const char* Help) {
 
 static bool Choice(const char* L, int* V, const char* const* Names, int N, const char* Help) {
     ImGui::PushID(L);
-    Label(L);
+    Label(L, Help);
     bool Changed = false;
     if (ImGui::BeginCombo("##v", Names[(std::clamp)(*V, 0, N - 1)])) {
         for (int I = 0; I < N; ++I)
@@ -183,15 +222,29 @@ static bool Choice(const char* L, int* V, const char* const* Names, int N, const
     return Changed;
 }
 
-static void Section(const char* Text) {
+// A foldable group: small muted title, chevron, hairline. Open / closed is kept per session.
+static bool Group(const char* Title, bool DefaultOpen = true) {
+    ImGui::PushID(Title);
     ImGui::Dummy(ImVec2(0.f, 6.f));
-    if (s_FontHead) ImGui::PushFont(s_FontHead);
-    ImGui::TextColored(kAccent, "%s", Text);
-    if (s_FontHead) ImGui::PopFont();
+    ImGuiStorage* St = ImGui::GetStateStorage();
+    const ImGuiID Id = ImGui::GetID("open");
+    bool Open = St->GetBool(Id, DefaultOpen);
     const ImVec2 P = ImGui::GetCursorScreenPos();
-    ImGui::GetWindowDrawList()->AddLine(ImVec2(P.x, P.y - 3.f), ImVec2(P.x + ImGui::GetContentRegionAvail().x, P.y - 3.f),
-        IM_COL32(255, 255, 255, 18));
-    ImGui::Dummy(ImVec2(0.f, 2.f));
+    const float W = ImGui::GetContentRegionAvail().x, H = 22.f;
+    if (ImGui::InvisibleButton("hdr", ImVec2(W, H))) { Open = !Open; St->SetBool(Id, Open); }
+    const bool Hov = ImGui::IsItemHovered();
+    ImDrawList* D = ImGui::GetWindowDrawList();
+    const ImU32 C = ImGui::GetColorU32(Hov ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+    if (s_FontHead) ImGui::PushFont(s_FontHead);
+    D->AddText(ImVec2(P.x, P.y + (H - ImGui::GetFontSize()) * 0.5f), C, Title);
+    if (s_FontHead) ImGui::PopFont();
+    const float Cx = P.x + W - 8.f, Cy = P.y + H * 0.5f, S = 3.5f;
+    if (Open) { D->AddLine(ImVec2(Cx - S, Cy - S * 0.5f), ImVec2(Cx, Cy + S * 0.5f), C, 1.5f); D->AddLine(ImVec2(Cx, Cy + S * 0.5f), ImVec2(Cx + S, Cy - S * 0.5f), C, 1.5f); }
+    else { D->AddLine(ImVec2(Cx - S * 0.5f, Cy - S), ImVec2(Cx + S * 0.5f, Cy), C, 1.5f); D->AddLine(ImVec2(Cx + S * 0.5f, Cy), ImVec2(Cx - S * 0.5f, Cy + S), C, 1.5f); }
+    D->AddLine(ImVec2(P.x, P.y + H), ImVec2(P.x + W, P.y + H), IM_COL32(255, 255, 255, 14));
+    ImGui::Dummy(ImVec2(0.f, 3.f));
+    ImGui::PopID();
+    return Open;
 }
 
 // Buttons side by side, the current one lit. Returns the clicked index or -1.
@@ -203,15 +256,35 @@ static int Segmented(const char* Id, const char* const* Names, int N, int Cur, f
         if (I) ImGui::SameLine();
         const bool On = I == Cur;
         if (On) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.62f, 0.38f, 0.12f, 1.f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.44f, 0.15f, 1.f));
+            ImGui::PushStyleColor(ImGuiCol_Button, kAccentDim);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.86f, 0.55f, 0.20f, 1.f));
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 1.f));
         }
         if (ImGui::Button(Names[I], ImVec2(W, 0.f))) Clicked = I;
-        if (On) ImGui::PopStyleColor(2);
+        if (On) ImGui::PopStyleColor(3);
     }
     ImGui::PopStyleVar();
     ImGui::PopID();
     return Clicked;
+}
+
+static bool Primary(const char* L, const ImVec2& Size = ImVec2(0.f, 0.f)) {
+    ImGui::PushStyleColor(ImGuiCol_Button, kAccentDim);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.86f, 0.55f, 0.20f, 1.f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, kAccent);
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, 1.f, 1.f, 1.f));
+    const bool Clicked = ImGui::Button(L, Size);
+    ImGui::PopStyleColor(4);
+    return Clicked;
+}
+
+static void Divider() {                             // thin vertical rule between groups of controls on one line
+    ImGui::SameLine(0.f, 10.f);
+    const ImVec2 P = ImGui::GetCursorScreenPos();
+    const float H = ImGui::GetFrameHeight();
+    ImGui::GetWindowDrawList()->AddLine(ImVec2(P.x, P.y + 4.f), ImVec2(P.x, P.y + H - 4.f), IM_COL32(255, 255, 255, 30));
+    ImGui::Dummy(ImVec2(1.f, H));
+    ImGui::SameLine(0.f, 10.f);
 }
 
 // ---------------------------------------------------------------- top bar
@@ -235,372 +308,343 @@ static void SetMode(int Want) {                     // 0 off, 1 free, 2 tripod, 
 static void TopBar(Settings& S) {
     const ImVec2 Size = ImGui::GetIO().DisplaySize;
     ImGui::SetNextWindowPos(ImVec2(Size.x * 0.5f, 12.f), ImGuiCond_Always, ImVec2(0.5f, 0.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.f, 8.f));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 12.f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.f, 7.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10.f);
     ImGui::Begin("##cinebar", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
         | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoFocusOnAppearing);
     static const char* Modes[] = { "Off", "Free", "Tripod", "Follow", "Path" };
     const int Cur = G.M == Mode::Off ? 0 : G.M == Mode::Free ? 1 : G.M == Mode::Tripod ? 2 : G.M == Mode::Follow ? 3 : 4;
-    const int Click = Segmented("mode", Modes, 5, Cur, 64.f);
+    const int Click = Segmented("mode", Modes, 5, Cur, 62.f);
     if (Click >= 0 && Click != Cur) SetMode(Click);
     else if (Click == 4 && Cur == 4) SetMode(4);
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("Path plays your keyframes (needs 2+). F8 toggles the camera.");
 
-    ImGui::SameLine(0.f, 14.f);
-    static const char* Hud[] = { "HUD" };
-    if (Segmented("hud", Hud, 1, G.HudHidden ? -1 : 0) == 0) Push(CmdType::ToggleHud);
-    Tip("Game HUD on / off (F9).");
-    ImGui::SameLine();
+    Divider();
+    static const char* Hud[] = { "Hide HUD" };
+    if (Segmented("hud", Hud, 1, G.HudHidden ? 0 : -1) == 0) Push(CmdType::ToggleHud);
+    Tip("Hide the game's HUD (F9).");
+    ImGui::SameLine(0.f, 4.f);
     static const char* Gd[] = { "Guides" };
     if (Segmented("guides", Gd, 1, S.Guides ? 0 : -1) == 0) S.Guides = !S.Guides;
-    Tip("Framing guides on / off (G in the free camera). Recordings catch them.");
-    ImGui::SameLine();
+    Tip("Framing guides (G). They show in recordings: turn them off before you record.");
+    ImGui::SameLine(0.f, 4.f);
     static ULONGLONG s_PhotoAt = 0;
-    static const char* Ph[] = { "Photo" };
-    if (Segmented("photo", Ph, 1, -1) == 0) { Push(CmdType::Photo, S.PhotoScale); s_PhotoAt = GetTickCount64(); }
-    Tip("Saves a high-resolution screenshot without HUD or menu (size: Camera > Photo).");
+    if (ImGui::Button("Photo")) { Push(CmdType::Photo, S.PhotoScale); s_PhotoAt = GetTickCount64(); }
+    Tip("High-resolution screenshot without HUD or menu. Size: Camera > Photo.");
 
-    ImGui::SameLine(0.f, 16.f);
+    Divider();
     ImGui::AlignTextToFramePadding();
-    char Info[128];
-    int N = snprintf(Info, sizeof(Info), "%.0f mm  \xC2\xB7  %.0f\xC2\xB0", FovToMm(G.CamFov), G.CamFov);
-    if (fabsf(G.CamRoll) >= 0.5f) N += snprintf(Info + N, sizeof(Info) - N, "  \xC2\xB7  roll %+.0f\xC2\xB0", G.CamRoll);
-    if (S.Dof) N += snprintf(Info + N, sizeof(Info) - N, "  \xC2\xB7  f/%.1f", S.Fstop);
-    if (G.M == Mode::Path) snprintf(Info + N, sizeof(Info) - N, "  \xC2\xB7  %.1f / %.1f s", G.PathT, PathLength(G.Keys));
-    ImGui::TextDisabled("%s", Info);
-    if (G.Dolly) { ImGui::SameLine(); ImGui::TextColored(kAccent, "DOLLY ZOOM"); }
-    if (GetTickCount64() - s_PhotoAt < 4000)
-        ImGui::TextColored(kGood, "Photo saved to Archon\\Saved\\Screenshots");
+    if (GetTickCount64() - s_PhotoAt < 3500) ImGui::TextColored(kGood, "Photo saved to Archon\\Saved\\Screenshots");
+    else {
+        char Info[128];
+        int N = snprintf(Info, sizeof(Info), "%.0f mm", FovToMm(G.CamFov));
+        if (fabsf(G.CamRoll) >= 0.5f) N += snprintf(Info + N, sizeof(Info) - N, "   roll %+.0f\xC2\xB0", G.CamRoll);
+        if (S.Dof) N += snprintf(Info + N, sizeof(Info) - N, "   f/%.1f", S.Fstop);
+        if (G.M == Mode::Path) snprintf(Info + N, sizeof(Info) - N, "   %.1f / %.1f s", G.PathT, PathLength(G.Keys));
+        ImGui::TextDisabled("%s", Info);
+        if (G.Dolly) { ImGui::SameLine(0.f, 10.f); ImGui::TextColored(kAccent, "DOLLY"); }
+    }
     ImGui::End();
     ImGui::PopStyleVar(2);
 }
 
-// ---------------------------------------------------------------- inspector sections
+// ---------------------------------------------------------------- pages
 
-static void CameraSection(Settings& S) {
-    Section("MOVEMENT");
-    Slider("Move speed", &S.Speed, kDef.Speed, 25.f, 5000.f, "%.0f cm/s", "How fast WASD flies. Shift = 4x, Alt = 1/4.", true);
-    Slider("Mouse look", &S.Look, kDef.Look, 0.05f, 10.f, "%.2f", "Mouse sensitivity while looking around.", true);
-    Slider("Smoothing", &S.Smooth, kDef.Smooth, 0.f, 0.98f, "%.2f", "0 = camera follows instantly. Higher = slow, floaty, drone-like moves.");
-    Section("FRAMING");
-    char Fmt[48];
-    snprintf(Fmt, sizeof(Fmt), "%%.0f\xC2\xB0  \xC2\xB7  %.0f mm", FovToMm(S.Fov));
-    Slider("Field of view", &S.Fov, kDef.Fov, 5.f, 120.f, Fmt, "Zoom. Low = telephoto close-up, high = wide angle. Mouse wheel changes it too.");
-    Slider("Roll", &S.Roll, kDef.Roll, -90.f, 90.f, "%.0f\xC2\xB0", "Tilts the horizon (dutch angle). Z / X change it too.");
-    const char* Shapes[std::size(kAspects)];
-    for (size_t I = 0; I < std::size(kAspects); ++I) Shapes[I] = kAspects[I].Name;
-    Choice("Frame shape", &S.Aspect, Shapes, static_cast<int>(std::size(kAspects)),
-        "Black bars rendered by the game, so they are in the recording. For crop-later framing use Guides > Crop frames.");
-    Section("PHOTO");
-    static const char* Scales[] = { "1x screen", "2x screen", "3x screen", "4x screen" };
-    int Sc = S.PhotoScale - 1;
-    if (Choice("Resolution", &Sc, Scales, 4, "Photo size as a multiple of your screen. 4x of 1440p is a 10K still; big ones take a moment.")) S.PhotoScale = Sc + 1;
-    if (ImGui::Button("Take photo", ImVec2(-FLT_MIN, 0.f))) Push(CmdType::Photo, S.PhotoScale);
-    Tip("High-resolution screenshot without HUD or this menu. Saved to Archon\\Saved\\Screenshots.");
-}
-
-static void RigSection(Settings& S) {
-    Section("TARGET");
-    std::vector<std::string> Names = { "Me", "Nearest behemoth" };
-    for (const std::string& N : G.Party) Names.push_back(N);
-    std::vector<const char*> Ptrs;
-    for (const std::string& N : Names) Ptrs.push_back(N.c_str());
-    if (S.Target >= static_cast<int>(Ptrs.size())) S.Target = 0;
-    Choice("Target", &S.Target, Ptrs.data(), static_cast<int>(Ptrs.size()),
-        "What aiming, follow and auto focus use. Other players appear here when they are near.");
-    ImGui::Dummy(ImVec2(kLabelW - 8.f, 0.f)); ImGui::SameLine();
-    ImGui::TextDisabled("Now: %s", G.TargetName.empty() ? "-" : G.TargetName.c_str());
-    Slider("Aim height", &S.AimZ, kDef.AimZ, -150.f, 600.f, "%.0f cm", "Raises the aim point above the target's middle. Behemoths often look better higher.");
-    Toggle("Aim at target", &S.Track, "Tripod and path keep pointing at the target (Y). Follow always does.");
-
-    Section("SUBJECT PLACEMENT");
-    Label("Quick");
-    static const char* Spots[] = { "Left third", "Centre", "Right third" };
-    const int Cur = fabsf(S.FrameX + 1.f / 3.f) < 0.01f ? 0 : fabsf(S.FrameX) < 0.01f ? 1 : fabsf(S.FrameX - 1.f / 3.f) < 0.01f ? 2 : -1;
-    const int Pick = Segmented("spots", Spots, 3, Cur, (ImGui::GetContentRegionAvail().x - 4.f) / 3.f);
-    if (Pick >= 0) S.FrameX = (Pick - 1) / 3.f;
-    Tip("Where the target sits on screen while aiming. Thirds read more cinematic than dead centre.");
-    Slider("Horizontal", &S.FrameX, kDef.FrameX, -1.f, 1.f, "%+.2f", "-1 left edge, 0 centre, +1 right edge.");
-    Slider("Vertical", &S.FrameY, kDef.FrameY, -1.f, 1.f, "%+.2f", "-1 bottom edge, 0 centre, +1 top edge.");
-
-    Section("FOLLOW AND ORBIT");
-    ImGui::BeginDisabled(G.M == Mode::Off);
-    if (ImGui::Button(G.M == Mode::Follow ? "Following  (F8 to free)" : "Follow target  (F)", ImVec2(-FLT_MIN, 0.f)))
-        Push(G.M == Mode::Follow ? CmdType::Free : CmdType::Follow);
-    ImGui::EndDisabled();
-    Tip("The camera rides along at its current distance and keeps the target framed. You play while it follows.");
-    Toggle("Turn with target", &S.FollowLocal, "On: stays behind / beside the target as it turns (chase cam). Off: fixed world offset (drone).");
-    Slider("Orbit speed", &S.Orbit, kDef.Orbit, -90.f, 90.f, "%.0f\xC2\xB0/s", "Tripod or follow: circles around the target. Negative goes the other way.");
-
-    Section("CAMERA SHAKE");
-    const char* Shakes[std::size(kShakes)];
-    for (size_t I = 0; I < std::size(kShakes); ++I) Shakes[I] = kShakes[I].Name;
-    Choice("Style", &S.Shake, Shakes, static_cast<int>(std::size(kShakes)), "Adds organic movement in every mode, on top of keyframes.");
-    ImGui::BeginDisabled(S.Shake == 0);
-    Slider("Amount", &S.ShakeAmt, kDef.ShakeAmt, 0.f, 5.f, "%.2f", nullptr);
-    Slider("Speed", &S.ShakeFreq, kDef.ShakeFreq, 0.1f, 5.f, "%.2fx", nullptr, true);
-    ImGui::EndDisabled();
-}
-
-static void LensSection(Settings& S) {
-    Section("FOCAL LENGTH");
-    float Mm = FovToMm(S.Fov);
-    if (Slider("Focal length", &Mm, FovToMm(kDef.Fov), 10.f, 300.f, "%.0f mm", "Full-frame equivalent. Same as field of view, in camera terms.", true))
-        S.Fov = MmToFov(Mm);
-    Label("Primes");
-    static const int Primes[] = { 14, 24, 35, 50, 85, 135, 200 };
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.f, 0.f));
-    const float Bw = (ImGui::GetContentRegionAvail().x - 3.f * (std::size(Primes) - 1)) / std::size(Primes);
-    for (size_t I = 0; I < std::size(Primes); ++I) {
-        if (I) ImGui::SameLine();
-        char B[8];
-        snprintf(B, sizeof(B), "%d", Primes[I]);
-        if (ImGui::Button(B, ImVec2(Bw, 0.f))) S.Fov = MmToFov(static_cast<float>(Primes[I]));
+static void CameraPage(Settings& S) {
+    if (Group("MOVEMENT")) {
+        Slider("Move speed", &S.Speed, kDef.Speed, 25.f, 5000.f, "%.0f cm/s", "How fast WASD flies. Shift = 4x, Alt = 1/4.", true);
+        Slider("Mouse look", &S.Look, kDef.Look, 0.05f, 10.f, "%.2f", "Mouse sensitivity while looking around.", true);
+        Slider("Smoothing", &S.Smooth, kDef.Smooth, 0.f, 0.98f, "%.2f", "0 = camera follows instantly. Higher = slow, floaty, drone-like moves.");
     }
-    ImGui::PopStyleVar();
-    Tip("14-24 wide and dramatic, 35-50 natural, 85-135 portrait close-ups, 200 long telephoto.");
-    ImGui::BeginDisabled(G.M == Mode::Off || G.M == Mode::Path);
-    if (ImGui::Button(G.Dolly ? "Stop dolly zoom" : "Dolly zoom", ImVec2(-FLT_MIN, 0.f))) Push(CmdType::Dolly);
-    ImGui::EndDisabled();
-    Tip("The 'Vertigo' effect: the target keeps its size while you fly toward or away from it and the background\n"
-        "stretches or squashes. Aim at the target, start, then fly forward or back.");
-
-    Section("DEPTH OF FIELD");
-    static const char* Dof[] = { "Off", "Manual focus", "Auto focus on target" };
-    Choice("Focus", &S.Dof, Dof, 3, "Blurs what is out of focus, like a real camera lens.");
-    ImGui::BeginDisabled(S.Dof == 0);
-    ImGui::BeginDisabled(S.Dof != 1);
-    Slider("Focus distance", &S.Focus, kDef.Focus, 0.5f, 200.f, "%.1f m", "How far away the sharp area is. Saved in keyframes, so paths can pull focus.", true);
-    ImGui::EndDisabled();
-    ImGui::BeginDisabled(G.M == Mode::Off);
-    if (ImGui::Button(G.PickingFocus.load() ? "Click something in the world..." : "Pick focus point", ImVec2(-FLT_MIN, 0.f))) {
-        G.PickingFocus = !G.PickingFocus.load();
-        S.Dof = 1;
+    if (Group("FRAMING")) {
+        char Fmt[48];
+        snprintf(Fmt, sizeof(Fmt), "%%.0f\xC2\xB0  \xC2\xB7  %.0f mm", FovToMm(S.Fov));
+        Slider("Field of view", &S.Fov, kDef.Fov, 5.f, 120.f, Fmt, "Zoom. Low = telephoto close-up, high = wide angle. Mouse wheel changes it too.");
+        Slider("Roll", &S.Roll, kDef.Roll, -90.f, 90.f, "%.0f\xC2\xB0", "Tilts the horizon (dutch angle). Z / X change it too.");
+        const char* Shapes[std::size(kAspects)];
+        for (size_t I = 0; I < std::size(kAspects); ++I) Shapes[I] = kAspects[I].Name;
+        Choice("Frame shape", &S.Aspect, Shapes, static_cast<int>(std::size(kAspects)),
+            "Black bars rendered by the game, so they are in the recording. For crop-later framing use Guides > Crop frames.");
     }
-    ImGui::EndDisabled();
-    Tip("Then click what should be sharp. Sets manual focus to its distance.");
-    Slider("Aperture", &S.Fstop, kDef.Fstop, 0.7f, 32.f, "f/%.1f", "Lower = stronger background blur. f/1.4 is very blurry, f/16 almost none.", true);
-    ImGui::EndDisabled();
-    Section("MOTION BLUR");
-    Toggle("Override", &S.MotionBlurOn, "Off = the game's own motion blur.");
-    ImGui::BeginDisabled(!S.MotionBlurOn);
-    Slider("Amount", &S.MotionBlur, kDef.MotionBlur, 0.f, 1.f, "%.2f", "0 = crisp frames, 1 = heavy streaks on fast moves.");
-    ImGui::EndDisabled();
-}
-
-static void LightSection(Settings& S) {
-    Section("WORLD LIGHT  (ONLY YOU SEE IT)");
-    Toggle("Change world light", &S.Light, "Scales the map's own sun, sky and fog on your screen. Off puts the map back.");
-    ImGui::BeginDisabled(!S.Light);
-    Slider("Sun brightness", &S.SunMul, kDef.SunMul, 0.f, 4.f, "%.2fx", nullptr);
-    float Sun[3] = { S.SunR, S.SunG, S.SunB };
-    Label("Sun colour");
-    if (ImGui::ColorEdit3("##suncol", Sun, ImGuiColorEditFlags_NoInputs)) { S.SunR = Sun[0]; S.SunG = Sun[1]; S.SunB = Sun[2]; }
-    Tip("Multiplies the map's sun colour. White = unchanged. Warm orange for golden hour, blue for night.");
-    Slider("Sun turn", &S.SunYaw, kDef.SunYaw, -180.f, 180.f, "%+.0f\xC2\xB0", "Swings the sun around the sky: moves shadows. Can double up baked shadows.");
-    Slider("Sun height", &S.SunPitch, kDef.SunPitch, -60.f, 60.f, "%+.0f\xC2\xB0", "Lower = long dramatic shadows. Can double up baked shadows.");
-    Slider("Sky brightness", &S.SkyMul, kDef.SkyMul, 0.f, 4.f, "%.2fx", "Fill light from the sky: lower = deeper shadows.");
-    Slider("Fog density", &S.FogMul, kDef.FogMul, 0.f, 8.f, "%.2fx", "Atmosphere and depth. 0 = clear air.");
-    float Fog[3] = { S.FogR, S.FogG, S.FogB };
-    Label("Fog colour");
-    if (ImGui::ColorEdit3("##fogcol", Fog, ImGuiColorEditFlags_NoInputs)) { S.FogR = Fog[0]; S.FogG = Fog[1]; S.FogB = Fog[2]; }
-    Tip("Multiplies the map's fog colour.");
-    ImGui::EndDisabled();
-}
-
-static void LookSection(Settings& S) {
-    LightSection(S);
-    Section("COLOUR GRADING");
-    Toggle("Colour grading", &S.Grade, "Off = the game's own colours.");
-    const char* Names[kCustom + 1];
-    for (int I = 0; I < kCustom; ++I) Names[I] = kLooks[I].Name;
-    Names[kCustom] = "Custom";
-    int P = (std::min)(S.Preset, kCustom);
-    if (Choice("Preset", &P, Names, kCustom + 1, nullptr) && P < kCustom) ApplyLook(S, P);
-    ImGui::BeginDisabled(!S.Grade);
-    bool Changed = false;
-    const Look& N = kLooks[0];
-    Section("LIGHT AND COLOUR");
-    Changed |= Slider("Exposure", &S.Exposure, N.Exposure, -3.f, 3.f, "%+.2f EV", "Brighter or darker.");
-    Changed |= Slider("Temperature", &S.Temp, N.Temp, 2000.f, 12000.f, "%.0f K", "Lower = warmer (orange), higher = cooler (blue). 6500 = neutral.");
-    Changed |= Slider("Tint", &S.Tint, N.Tint, -1.f, 1.f, "%+.2f", "Green (-) or magenta (+).");
-    Changed |= Slider("Saturation", &S.Saturation, N.Saturation, 0.f, 2.f, "%.2f", "0 = black and white.");
-    Changed |= Slider("Contrast", &S.Contrast, N.Contrast, 0.5f, 1.6f, "%.2f", nullptr);
-    Changed |= Slider("Teal & orange", &S.Split, N.Split, 0.f, 1.f, "%.2f", "Blockbuster split toning: teal shadows, warm highlights.");
-    Section("LENS EFFECTS");
-    Changed |= Slider("Vignette", &S.Vignette, N.Vignette, 0.f, 1.f, "%.2f", "Darker corners.");
-    Changed |= Slider("Film grain", &S.Grain, N.Grain, 0.f, 1.f, "%.2f", nullptr);
-    Changed |= Slider("Aberration", &S.Fringe, N.Fringe, 0.f, 5.f, "%.2f", "Chromatic aberration: colour fringing at the edges, like a cheap lens.");
-    Changed |= Slider("Bloom", &S.Bloom, N.Bloom, 0.f, 4.f, "%.2f", "Glow around bright lights.");
-    ImGui::EndDisabled();
-    if (Changed) S.Preset = kCustom;
-    ImGui::Dummy(ImVec2(0.f, 4.f));
-    if (ImGui::Button("Reset to natural")) ApplyLook(S, 0);
-}
-
-static void GuidesSection(Settings& S) {
-    Toggle("Show guides", &S.Guides, "Draws the guides over the game, menu open or not (G in the free camera).\n"
-        "They are part of the picture, so recordings catch them: hide them before you record.");
-    Toggle("Hide on path play", &S.GuidesHideOnPlay, "Guides disappear while a keyframe path plays, so a recorded take is clean.");
-    Slider("Line strength", &S.GOpacity, kDef.GOpacity, 0.05f, 1.f, "%.2f", nullptr);
-
-    Section("COMPOSITION");
-    Toggle("Rule of thirds", &S.Thirds, "Put subjects and horizons on the lines or where they cross.");
-    Toggle("Golden ratio", &S.GPhi, "Phi grid (0.382 / 0.618): a tighter, more classical cousin of thirds.");
-    Toggle("Centre mark", &S.GCenter, "Small cross in the middle, for symmetric shots.");
-    Toggle("Diagonals", &S.GDiagonals, "Corner-to-corner lines, for leading lines and dynamic angles.");
-    Toggle("Safe areas", &S.GSafe, "Action safe (93%) and title safe (90%): keep text and key action inside.");
-    Toggle("Horizon level", &S.GHorizon, "Level indicator for the camera's roll. Green when perfectly level.");
-
-    Section("CROP FRAMES");
-    ImGui::TextDisabled("Record the full screen, crop in your editor. Grids fit the first ticked frame.");
-    for (int I = 0; I < static_cast<int>(std::size(kCrops)); ++I) {
-        if (I) ImGui::SameLine();
-        ImGui::CheckboxFlags(kCrops[I].Name, &S.GCrop, 1 << I);
+    if (Group("PHOTO", false)) {
+        static const char* Scales[] = { "1x screen", "2x screen", "3x screen", "4x screen" };
+        int Sc = S.PhotoScale - 1;
+        if (Choice("Resolution", &Sc, Scales, 4, "Photo size as a multiple of your screen. 4x of 1440p is a 10K still; big ones take a moment.")) S.PhotoScale = Sc + 1;
+        if (ImGui::Button("Take photo", ImVec2(-FLT_MIN, 0.f))) Push(CmdType::Photo, S.PhotoScale);
+        Tip("High-resolution screenshot without HUD or this menu. Saved to Archon\\Saved\\Screenshots.");
     }
-    Slider("Dim outside", &S.GCropMask, kDef.GCropMask, 0.f, 0.9f, "%.2f", "Darkens what the first ticked crop frame cuts off.");
-    static const char* Apps[] = { "Off", kSocial[0].Name, kSocial[1].Name, kSocial[2].Name };
-    Choice("App UI zones", &S.GSocial, Apps, 4, "Shades where the app's buttons, captions and top bar sit on a vertical video.\n"
-        "Keep faces and text out of the shaded parts. Needs the 9:16 crop frame.");
-    if (S.GSocial && !(S.GCrop & 1)) ImGui::TextColored(ImVec4(1.f, 0.6f, 0.3f, 1.f), "Tick the 9:16 crop frame to see the app zones.");
 }
 
-static void PathSection(Settings& S) {
+static void LensPage(Settings& S) {
+    if (Group("FOCAL LENGTH")) {
+        float Mm = FovToMm(S.Fov);
+        if (Slider("Focal length", &Mm, FovToMm(kDef.Fov), 10.f, 300.f, "%.0f mm", "Full-frame equivalent. Same as field of view, in camera terms.", true))
+            S.Fov = MmToFov(Mm);
+        Label("Primes");
+        static const int Primes[] = { 14, 24, 35, 50, 85, 135, 200 };
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.f, 0.f));
+        const float Bw = (ImGui::GetContentRegionAvail().x - 3.f * (std::size(Primes) - 1)) / std::size(Primes);
+        for (size_t I = 0; I < std::size(Primes); ++I) {
+            if (I) ImGui::SameLine();
+            char B[8];
+            snprintf(B, sizeof(B), "%d", Primes[I]);
+            const bool On = fabsf(FovToMm(S.Fov) - Primes[I]) < 0.5f;
+            if (On) ImGui::PushStyleColor(ImGuiCol_Button, kAccentDim);
+            if (ImGui::Button(B, ImVec2(Bw, 0.f))) S.Fov = MmToFov(static_cast<float>(Primes[I]));
+            if (On) ImGui::PopStyleColor();
+        }
+        ImGui::PopStyleVar();
+        Tip("14-24 wide and dramatic, 35-50 natural, 85-135 portrait close-ups, 200 long telephoto.");
+        ImGui::BeginDisabled(G.M == Mode::Off || G.M == Mode::Path);
+        if (ImGui::Button(G.Dolly ? "Stop dolly zoom" : "Dolly zoom", ImVec2(-FLT_MIN, 0.f))) Push(CmdType::Dolly);
+        ImGui::EndDisabled();
+        Tip("The 'Vertigo' effect: the target keeps its size while you fly toward or away from it and the background\n"
+            "stretches or squashes. Aim at the target, start, then fly forward or back.");
+    }
+    if (Group("DEPTH OF FIELD")) {
+        static const char* Dof[] = { "Off", "Manual focus", "Auto focus on target" };
+        Choice("Focus", &S.Dof, Dof, 3, "Blurs what is out of focus, like a real camera lens.");
+        if (S.Dof == 1) {
+            Slider("Distance", &S.Focus, kDef.Focus, 0.5f, 200.f, "%.1f m", "How far away the sharp area is. Saved in keyframes, so paths can pull focus.", true);
+            Label("");
+            ImGui::BeginDisabled(G.M == Mode::Off);
+            if (ImGui::Button(G.PickingFocus.load() ? "Click something in the world..." : "Pick focus point", ImVec2(-FLT_MIN, 0.f)))
+                G.PickingFocus = !G.PickingFocus.load();
+            ImGui::EndDisabled();
+            Tip("Then click what should be sharp. Sets the distance to it.");
+        }
+        if (S.Dof) Slider("Aperture", &S.Fstop, kDef.Fstop, 0.7f, 32.f, "f/%.1f", "Lower = stronger background blur. f/1.4 is very blurry, f/16 almost none.", true);
+    }
+    if (Group("MOTION BLUR", false)) {
+        Toggle("Override", &S.MotionBlurOn, "Off = the game's own motion blur.");
+        if (S.MotionBlurOn) Slider("Amount", &S.MotionBlur, kDef.MotionBlur, 0.f, 1.f, "%.2f", "0 = crisp frames, 1 = heavy streaks on fast moves.");
+    }
+}
+
+static void SubjectPage(Settings& S) {
+    if (Group("TARGET")) {
+        std::vector<std::string> Names = { "Me", "Nearest behemoth" };
+        for (const std::string& N : G.Party) Names.push_back(N);
+        std::vector<const char*> Ptrs;
+        for (const std::string& N : Names) Ptrs.push_back(N.c_str());
+        if (S.Target >= static_cast<int>(Ptrs.size())) S.Target = 0;
+        Choice("Target", &S.Target, Ptrs.data(), static_cast<int>(Ptrs.size()),
+            "What aiming, follow, auto focus and anchored paths use. Other players appear here when they are near.");
+        if (!G.TargetName.empty() && G.TargetName != Ptrs[S.Target]) { ImGui::SetCursorPosX(kLabelW); Hint("%s", G.TargetName.c_str()); }
+        Slider("Aim height", &S.AimZ, kDef.AimZ, -150.f, 600.f, "%.0f cm", "Raises the aim point above the target's middle. Behemoths often look better higher.");
+        Toggle("Aim at target", &S.Track, "Tripod and path keep pointing at the target (Y). Follow always does.");
+    }
+    if (Group("PLACEMENT")) {
+        Label("Position", "Where the target sits on screen while aiming. Thirds read more cinematic than dead centre.");
+        static const char* Spots[] = { "Left third", "Centre", "Right third" };
+        const int Cur = fabsf(S.FrameX + 1.f / 3.f) < 0.01f ? 0 : fabsf(S.FrameX) < 0.01f ? 1 : fabsf(S.FrameX - 1.f / 3.f) < 0.01f ? 2 : -1;
+        const int Pick = Segmented("spots", Spots, 3, Cur, (ImGui::GetContentRegionAvail().x - 4.f) / 3.f);
+        if (Pick >= 0) S.FrameX = (Pick - 1) / 3.f;
+        Slider("Horizontal", &S.FrameX, kDef.FrameX, -1.f, 1.f, "%+.2f", "-1 left edge, 0 centre, +1 right edge.");
+        Slider("Vertical", &S.FrameY, kDef.FrameY, -1.f, 1.f, "%+.2f", "-1 bottom edge, 0 centre, +1 top edge.");
+    }
+    if (Group("FOLLOW")) {
+        ImGui::BeginDisabled(G.M == Mode::Off);
+        if (ImGui::Button(G.M == Mode::Follow ? "Stop following" : "Follow target  (F)", ImVec2(-FLT_MIN, 0.f)))
+            Push(G.M == Mode::Follow ? CmdType::Free : CmdType::Follow);
+        ImGui::EndDisabled();
+        Tip("The camera rides along at its current distance and keeps the target framed. You play while it follows.");
+        Toggle("Turn with target", &S.FollowLocal, "On: stays behind / beside the target as it turns (chase cam). Off: fixed world offset (drone).\n"
+            "Also turns anchored paths with the target.");
+        Slider("Orbit", &S.Orbit, kDef.Orbit, -90.f, 90.f, "%.0f\xC2\xB0/s", "Tripod or follow: circles around the target. Negative goes the other way.");
+    }
+    if (Group("CAMERA SHAKE", false)) {
+        const char* Shakes[std::size(kShakes)];
+        for (size_t I = 0; I < std::size(kShakes); ++I) Shakes[I] = kShakes[I].Name;
+        Choice("Style", &S.Shake, Shakes, static_cast<int>(std::size(kShakes)), "Adds organic movement in every mode, on top of keyframes.");
+        if (S.Shake) {
+            Slider("Amount", &S.ShakeAmt, kDef.ShakeAmt, 0.f, 5.f, "%.2f", nullptr);
+            Slider("Speed", &S.ShakeFreq, kDef.ShakeFreq, 0.1f, 5.f, "%.2fx", nullptr, true);
+        }
+    }
+}
+
+static void LookPage(Settings& S) {
+    if (Group("COLOUR GRADE")) {
+        Toggle("Grade", &S.Grade, "Off = the game's own colours.");
+        if (S.Grade) {
+            const char* Names[kCustom + 1];
+            for (int I = 0; I < kCustom; ++I) Names[I] = kLooks[I].Name;
+            Names[kCustom] = "Custom";
+            int P = (std::min)(S.Preset, kCustom);
+            if (Choice("Preset", &P, Names, kCustom + 1, nullptr) && P < kCustom) ApplyLook(S, P);
+            const Look& N = kLooks[0];
+            bool Changed = false;
+            Changed |= Slider("Exposure", &S.Exposure, N.Exposure, -3.f, 3.f, "%+.2f EV", "Brighter or darker.");
+            Changed |= Slider("Temperature", &S.Temp, N.Temp, 2000.f, 12000.f, "%.0f K", "Lower = warmer (orange), higher = cooler (blue). 6500 = neutral.");
+            Changed |= Slider("Tint", &S.Tint, N.Tint, -1.f, 1.f, "%+.2f", "Green (-) or magenta (+).");
+            Changed |= Slider("Saturation", &S.Saturation, N.Saturation, 0.f, 2.f, "%.2f", "0 = black and white.");
+            Changed |= Slider("Contrast", &S.Contrast, N.Contrast, 0.5f, 1.6f, "%.2f", nullptr);
+            Changed |= Slider("Teal & orange", &S.Split, N.Split, 0.f, 1.f, "%.2f", "Blockbuster split toning: teal shadows, warm highlights.");
+            if (Group("LENS EFFECTS", false)) {
+                Changed |= Slider("Vignette", &S.Vignette, N.Vignette, 0.f, 1.f, "%.2f", "Darker corners.");
+                Changed |= Slider("Film grain", &S.Grain, N.Grain, 0.f, 1.f, "%.2f", nullptr);
+                Changed |= Slider("Aberration", &S.Fringe, N.Fringe, 0.f, 5.f, "%.2f", "Chromatic aberration: colour fringing at the edges, like a cheap lens.");
+                Changed |= Slider("Bloom", &S.Bloom, N.Bloom, 0.f, 4.f, "%.2f", "Glow around bright lights.");
+            }
+            if (Changed) S.Preset = kCustom;
+            ImGui::Dummy(ImVec2(0.f, 2.f));
+            if (ImGui::Button("Reset to natural")) ApplyLook(S, 0);
+        }
+    }
+    if (Group("WORLD LIGHT")) {
+        Toggle("Change light", &S.Light, "Scales the map's own sun, sky and fog. Only you see it. Off puts the map back.");
+        if (S.Light) {
+            Slider("Sun", &S.SunMul, kDef.SunMul, 0.f, 4.f, "%.2fx", "Sun brightness.");
+            float Sun[3] = { S.SunR, S.SunG, S.SunB };
+            Label("Sun colour", "Multiplies the map's sun colour. White = unchanged. Warm orange for golden hour, blue for night.");
+            if (ImGui::ColorEdit3("##suncol", Sun, ImGuiColorEditFlags_NoInputs)) { S.SunR = Sun[0]; S.SunG = Sun[1]; S.SunB = Sun[2]; }
+            Slider("Sun turn", &S.SunYaw, kDef.SunYaw, -180.f, 180.f, "%+.0f\xC2\xB0", "Swings the sun around the sky: moves shadows. Can double up baked shadows.");
+            Slider("Sun height", &S.SunPitch, kDef.SunPitch, -60.f, 60.f, "%+.0f\xC2\xB0", "Lower = long dramatic shadows. Can double up baked shadows.");
+            Slider("Sky", &S.SkyMul, kDef.SkyMul, 0.f, 4.f, "%.2fx", "Fill light from the sky: lower = deeper shadows.");
+            Slider("Fog", &S.FogMul, kDef.FogMul, 0.f, 8.f, "%.2fx", "Fog density: atmosphere and depth. 0 = clear air.");
+            float Fog[3] = { S.FogR, S.FogG, S.FogB };
+            Label("Fog colour", "Multiplies the map's fog colour.");
+            if (ImGui::ColorEdit3("##fogcol", Fog, ImGuiColorEditFlags_NoInputs)) { S.FogR = Fog[0]; S.FogG = Fog[1]; S.FogB = Fog[2]; }
+        }
+    }
+}
+
+static void GuidesPage(Settings& S) {
+    if (Group("OVERLAY")) {
+        Toggle("Show guides", &S.Guides, "Draws the guides over the game, menu open or not (G in the free camera).\n"
+            "They are part of the picture, so recordings catch them: hide them before you record.");
+        Toggle("Hide while a path plays", &S.GuidesHideOnPlay, "So a recorded take is clean.");
+        Slider("Line strength", &S.GOpacity, kDef.GOpacity, 0.05f, 1.f, "%.2f", nullptr);
+    }
+    if (Group("COMPOSITION")) {
+        Toggle("Rule of thirds", &S.Thirds, "Put subjects and horizons on the lines or where they cross.");
+        Toggle("Golden ratio", &S.GPhi, "Phi grid (0.382 / 0.618): a tighter, more classical cousin of thirds.");
+        Toggle("Centre mark", &S.GCenter, "Small cross in the middle, for symmetric shots.");
+        Toggle("Diagonals", &S.GDiagonals, "Corner-to-corner lines, for leading lines and dynamic angles.");
+        Toggle("Safe areas", &S.GSafe, "Action safe (93%) and title safe (90%): keep text and key action inside.");
+        Toggle("Horizon level", &S.GHorizon, "Level indicator for the camera's roll. Green when perfectly level.");
+    }
+    if (Group("CROP FRAMES", false)) {
+        Hint("Record the full screen, crop in your editor. Grids fit the first ticked frame.");
+        for (int I = 0; I < static_cast<int>(std::size(kCrops)); ++I) {
+            if (I) ImGui::SameLine();
+            ImGui::CheckboxFlags(kCrops[I].Name, &S.GCrop, 1 << I);
+        }
+        if (S.GCrop) Slider("Dim outside", &S.GCropMask, kDef.GCropMask, 0.f, 0.9f, "%.2f", "Darkens what the first ticked crop frame cuts off.");
+        static const char* Apps[] = { "Off", kSocial[0].Name, kSocial[1].Name, kSocial[2].Name };
+        Choice("App UI zones", &S.GSocial, Apps, 4, "Shades where the app's buttons, captions and top bar sit on a vertical video.\n"
+            "Keep faces and text out of the shaded parts. Needs the 9:16 crop frame.");
+        if (S.GSocial && !(S.GCrop & 1)) ImGui::TextColored(kWarn, "Tick the 9:16 crop frame to see the app zones.");
+    }
+}
+
+static void PathPage(Settings& S) {
     const bool CamOn = G.M != Mode::Off, Playing = G.M == Mode::Path;
+    const int N = static_cast<int>(G.Keys.size());
+    const float Len = PathLength(G.Keys), Half = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+    ImGui::Dummy(ImVec2(0.f, 2.f));
     ImGui::BeginDisabled(!CamOn);
-    if (ImGui::Button("+ Add keyframe  (K)", ImVec2(180, 0))) Push(CmdType::AddKey);
+    if (Primary("Add keyframe   K", ImVec2(Half, 0.f))) Push(CmdType::AddKey);
+    ImGui::EndDisabled();
     Tip("Adds the camera's current position, angle, zoom and roll.");
     ImGui::SameLine();
-    ImGui::BeginDisabled(G.Keys.size() < 2 && !Playing);
-    if (ImGui::Button(Playing ? "Stop" : "Play  (L)", ImVec2(110, 0))) Push(Playing ? CmdType::Stop : CmdType::Play);
+    ImGui::BeginDisabled(N < 2 && !Playing);
+    if (ImGui::Button(Playing ? "Stop" : "Play   L", ImVec2(Half, 0.f))) Push(Playing ? CmdType::Stop : CmdType::Play);
+    ImGui::EndDisabled();
     Tip("Plays the path. You can play your character while it runs.");
-    ImGui::EndDisabled();
-    ImGui::EndDisabled();
-    if (!CamOn) ImGui::TextDisabled("Start the camera (F8) to add keyframes.");
+    if (!CamOn) Hint("Start the camera (F8), then fly to a spot and press K.");
+    else if (N == 0) Hint("Fly to a spot and press K to add the first keyframe.");
+    else Hint("%d keyframe%s  \xC2\xB7  %.1f s.  Select one on the timeline to shape the curve and set its angles.", N, N == 1 ? "" : "s", Len);
 
-    const float Len = PathLength(G.Keys);
-    ImGui::TextDisabled("Scrub, drag and retime keys in the timeline at the bottom.");
-
-    Section("ANCHOR");
-    Toggle("Keys ride with target", &S.KeysOnTarget,
-        "On: the path moves with the target (Rig > Target), so a fly-around still frames a behemoth that walked off. "
-        "With Rig > Turn with target it also turns with it. Off: keys stay where you put them in the world.");
-    if (S.KeysOnTarget) ImGui::TextDisabled("Anchored to: %s", G.TargetName.empty() ? "-" : G.TargetName.c_str());
-
-    Section("TIMING");
-    Toggle("Ease in and out", &S.Ease, "Starts and stops gently instead of at full speed.");
-    Toggle("Loop", &S.Loop, nullptr);
-    Toggle("Countdown", &S.Countdown, "3-2-1 on the first keyframe before the path moves: time to hit record and grab your controls.");
-    Slider("Play speed", &S.PlaySpeed, kDef.PlaySpeed, 0.1f, 4.f, "%.2fx", "Playback speed of the path only; the game runs at normal speed.", true);
-    Toggle("Show path", &S.ShowPath, "Draws the path and numbered keyframes in the world while the menu is open.");
-    Toggle("Hide menu on play", &S.HideMenuOnPlay, nullptr);
-    Slider("New key gap", &S.Spacing, kDef.Spacing, 0.5f, 20.f, "%.1f s", "Time between the last keyframe and a newly added one.");
-    if (G.Keys.size() >= 2) {
+    if (Group("PLAYBACK")) {
+        Toggle("Ease in and out", &S.Ease, "Starts and stops gently instead of at full speed.");
+        Toggle("Loop", &S.Loop, nullptr);
+        Toggle("Countdown", &S.Countdown, "3-2-1 on the first keyframe before the path moves: time to hit record and grab your controls.");
+        Slider("Speed", &S.PlaySpeed, kDef.PlaySpeed, 0.1f, 4.f, "%.2fx", "Playback speed of the path only; the game runs at normal speed.", true);
+    }
+    if (Group("ANCHOR")) {
+        Toggle("Ride with target", &S.KeysOnTarget,
+            "On: the path moves with the target (Subject > Target), so a fly-around still frames a behemoth that walked off.\n"
+            "With Subject > Turn with target it also turns with it. Off: keys stay where you put them in the world.");
+        if (S.KeysOnTarget) Hint("Anchored to %s.", G.TargetName.empty() ? "the target" : G.TargetName.c_str());
+    }
+    if (N >= 2 && Group("TIMING")) {
         float Total = Len;
-        Label("Total length");
+        Label("Length", "Drag to stretch or squeeze the whole path.");
         if (ImGui::DragFloat("##total", &Total, 0.1f, 0.5f, 600.f, "%.1f s") && Len > 0.f)
             for (Key& K : G.Keys) K.Time *= Total / Len;
-        Tip("Drag to stretch or squeeze the whole path.");
-        if (ImGui::Button("Even out speed")) EvenSpeed(G.Keys);
-        Tip("Re-times the keyframes so the camera moves at a steady speed. Total length stays the same.");
-        ImGui::SameLine();
+        Label("");
+        if (ImGui::Button("Even out speed", ImVec2(-FLT_MIN, 0.f))) EvenSpeed(G.Keys);
+        Tip("Re-times the keyframes so the camera moves at a steady speed. Length stays the same.");
     }
-    if (!G.Keys.empty() && ImGui::Button("Clear all")) ImGui::OpenPopup("Clear keyframes?");
+    if (Group("SAVED SHOTS")) {
+        static char Name[48] = "shot1";
+        static std::string Status;
+        static bool Listed = false;
+        if (!Listed) { Listed = true; RefreshShots(); }
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 80.f);
+        ImGui::InputTextWithHint("##name", "Shot name", Name, sizeof(Name), ImGuiInputTextFlags_CallbackCharFilter,
+            [](ImGuiInputTextCallbackData* D) { const ImWchar C = D->EventChar; return C < 128 && (isalnum(C) || C == '_' || C == '-') ? 0 : 1; });
+        ImGui::SameLine();
+        ImGui::BeginDisabled(G.Keys.empty() || !Name[0]);
+        if (ImGui::Button("Save", ImVec2(-FLT_MIN, 0.f))) { Status = SaveShot(Name) ? std::string("Saved ") + Name : "Could not save"; RefreshShots(); }
+        ImGui::EndDisabled();
+        Tip("Saves the keyframes to CINECAM_shots beside the game, to replay or retake later.");
+        if (!Status.empty()) Hint("%s", Status.c_str());
+        if (s_Shots.empty()) Hint("No saved shots yet.");
+        for (const Shot& Sh : s_Shots) {
+            ImGui::PushID(Sh.Name.c_str());
+            const bool Other = Sh.Map != G.Map && !G.Map.empty();
+            if (ImGui::Selectable("##row", false, ImGuiSelectableFlags_AllowOverlap, ImVec2(0.f, ImGui::GetFrameHeight()))) {
+                Status = LoadShot(Sh.Name) ? "Loaded " + Sh.Name : "Could not load " + Sh.Name;
+                snprintf(Name, sizeof(Name), "%s", Sh.Name.c_str());
+            }
+            Tip(Other ? "Made on another map. Click to load." : "Click to load.");
+            ImGui::SameLine(8.f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(Sh.Name.c_str());
+            if (Other) { ImGui::SameLine(); ImGui::TextColored(kWarn, "%s", Sh.Map.c_str()); }
+            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 24.f);
+            if (ImGui::SmallButton("x")) { DeleteFileW((ShotDir() + Widen(Sh.Name) + L".txt").c_str()); RefreshShots(); ImGui::PopID(); break; }
+            Tip("Delete this shot.");
+            ImGui::PopID();
+        }
+    }
+    if (Group("OPTIONS", false)) {
+        Toggle("Show path in the world", &S.ShowPath, "Draws the path and numbered keyframes while the menu is open.");
+        Toggle("Hide menu while playing", &S.HideMenuOnPlay, nullptr);
+        Slider("New key gap", &S.Spacing, kDef.Spacing, 0.5f, 20.f, "%.1f s", "Time between the last keyframe and a newly added one.");
+        ImGui::BeginDisabled(G.Keys.empty());
+        if (ImGui::Button("Clear all keyframes", ImVec2(-FLT_MIN, 0.f))) ImGui::OpenPopup("Clear keyframes?");
+        ImGui::EndDisabled();
+    }
     if (ImGui::BeginPopupModal("Clear keyframes?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Delete all %d keyframes?", static_cast<int>(G.Keys.size()));
-        if (ImGui::Button("Delete", ImVec2(100, 0))) { G.Keys.clear(); ImGui::CloseCurrentPopup(); }
+        ImGui::Text("Delete all %d keyframes?", N);
+        ImGui::Dummy(ImVec2(0.f, 4.f));
+        if (Primary("Delete", ImVec2(100, 0))) { G.Keys.clear(); ImGui::CloseCurrentPopup(); }
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ImVec2(100, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
     }
-
-    Section("KEYFRAMES");
-    if (G.Keys.empty()) ImGui::TextDisabled("None yet. Fly to a spot and press K.");
-    int Remove = -1, Up = -1;
-    bool Resort = false;
-    if (!G.Keys.empty() && ImGui::BeginTable("keys", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
-        ImGui::TableSetupColumn("#");
-        ImGui::TableSetupColumn("Time");
-        ImGui::TableSetupColumn("Move");
-        ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
-        for (int I = 0; I < static_cast<int>(G.Keys.size()); ++I) {
-            ImGui::PushID(I);
-            ImGui::TableNextRow();
-            ImGui::TableNextColumn(); ImGui::AlignTextToFramePadding(); ImGui::Text("%d", I + 1);
-            ImGui::TableNextColumn();
-            ImGui::SetNextItemWidth(70);
-            ImGui::DragFloat("##t", &G.Keys[I].Time, 0.05f, 0.f, 600.f, "%.1f s");
-            if (ImGui::IsItemDeactivatedAfterEdit()) Resort = true;
-            ImGui::TableNextColumn();
-            ImGui::SetNextItemWidth(84);
-            ImGui::Combo("##i", &G.Keys[I].Interp, kInterps, static_cast<int>(std::size(kInterps)));
-            Tip("How the camera travels to the next keyframe: smooth curve, straight line, or hold still then cut.");
-            ImGui::TableNextColumn();
-            ImGui::BeginDisabled(!CamOn);
-            if (ImGui::SmallButton("Go to")) Push(CmdType::GoToKey, I);
-            Tip("Moves the camera to this keyframe.");
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Update")) Push(CmdType::UpdateKey, I);
-            Tip("Replaces this keyframe with the camera's current view.");
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            ImGui::BeginDisabled(I == 0);
-            if (ImGui::ArrowButton("##up", ImGuiDir_Up)) Up = I;
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            if (ImGui::SmallButton("Delete")) Remove = I;
-            ImGui::PopID();
-        }
-        ImGui::EndTable();
-    }
-    if (Up > 0) std::swap(G.Keys[Up].P, G.Keys[Up - 1].P);   // swap views, keep the timing
-    if (Remove >= 0) G.Keys.erase(G.Keys.begin() + Remove);
-    if (Resort) std::stable_sort(G.Keys.begin(), G.Keys.end(), [](const Key& A, const Key& B) { return A.Time < B.Time; });
-
-    Section("SAVED SHOTS");
-    static char Name[48] = "shot1";
-    static std::string Status;
-    static bool Listed = false;
-    if (!Listed) { Listed = true; RefreshShots(); }
-    ImGui::SetNextItemWidth(180);
-    ImGui::InputText("##name", Name, sizeof(Name), ImGuiInputTextFlags_CallbackCharFilter,
-        [](ImGuiInputTextCallbackData* D) { const ImWchar C = D->EventChar; return C < 128 && (isalnum(C) || C == '_' || C == '-') ? 0 : 1; });
-    ImGui::SameLine();
-    ImGui::BeginDisabled(G.Keys.empty() || !Name[0]);
-    if (ImGui::Button("Save")) { Status = SaveShot(Name) ? std::string("Saved ") + Name : "Could not save"; RefreshShots(); }
-    ImGui::EndDisabled();
-    Tip("Saves the keyframes to CINECAM_shots beside the game, to replay or retake later.");
-    if (!Status.empty()) ImGui::TextDisabled("%s", Status.c_str());
-    for (const Shot& Sh : s_Shots) {
-        ImGui::PushID(Sh.Name.c_str());
-        if (ImGui::SmallButton("Load")) { Status = LoadShot(Sh.Name) ? "Loaded " + Sh.Name : "Could not load " + Sh.Name; snprintf(Name, sizeof(Name), "%s", Sh.Name.c_str()); }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("Delete")) { DeleteFileW((ShotDir() + Widen(Sh.Name) + L".txt").c_str()); RefreshShots(); ImGui::PopID(); break; }
-        ImGui::SameLine();
-        if (Sh.Map != G.Map && !G.Map.empty()) ImGui::TextColored(ImVec4(1.f, 0.6f, 0.3f, 1.f), "%s  (%s)", Sh.Name.c_str(), Sh.Map.c_str());
-        else ImGui::Text("%s", Sh.Name.c_str());
-        ImGui::PopID();
-    }
 }
 
-static void ShortcutsSection() {
+static void Shortcuts() {
     static const char* Rows[][2] = {
-        { "F8", "Camera on / off (from tripod, follow or path: back to free camera)" },
-        { "F9", "Hide / show the HUD" },
-        { "F10", "This menu" },
-        { "Right mouse (hold)", "Look around while the menu is open" },
+        { "F8", "Camera on / off (from tripod, follow or path: back to free)" },
+        { "F9", "Hide / show the HUD" }, { "F10", "This menu" },
+        { "Right mouse", "Hold to look around while the menu is open" },
         { "W A S D", "Fly" }, { "E / Space", "Up" }, { "Q / Ctrl", "Down" },
         { "Shift / Alt", "Faster / slower" }, { "Mouse wheel", "Zoom" }, { "Z / X", "Roll" },
         { "R", "Reset zoom and roll" }, { "T", "Tripod: camera stays, you play" },
-        { "F", "Follow: camera rides along with the target, you play" },
+        { "F", "Follow: camera rides along with the target" },
         { "Y", "Aim at the target on / off" }, { "G", "Framing guides on / off" },
         { "K", "Add keyframe" }, { "J", "Remove last keyframe" }, { "L", "Play the path" },
-        { "Timeline", "Drag keys to retime, drag the track to scrub, double-click a key to go there, Delete removes" },
+        { "Timeline", "Drag keys to retime, drag the track to scrub, double-click a key to go there" },
     };
-    ImGui::TextWrapped("In the free camera the game ignores your keys, so nothing opens by accident. "
-        "Tripod, follow and path playback hand the controls back so you can act while the camera films.");
-    ImGui::Spacing();
-    if (ImGui::BeginTable("hotkeys", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+    Hint("In the free camera the game ignores your keys. Tripod, follow and path playback hand the controls back so you can act while the camera films.");
+    ImGui::Dummy(ImVec2(0.f, 4.f));
+    if (ImGui::BeginTable("hotkeys", 2, ImGuiTableFlags_SizingFixedFit)) {
         for (auto& R : Rows) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn(); ImGui::TextColored(kAccent, "%s", R[0]);
@@ -614,55 +658,87 @@ static void ShortcutsSection() {
 
 static int s_Sel = -1;                              // selected keyframe
 
-// Second timeline row for the selected key: curve shape, where the camera looks, exact angles and position. Any
-// edit puts the camera on the key so you see it; the path overlay redraws as you drag.
+static void SmallLabel(const char* T, float Gap = 14.f) {
+    ImGui::SameLine(0.f, Gap);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", T);
+    ImGui::SameLine(0.f, 6.f);
+}
+
+// The selected key, under the transport: how it moves and looks, its exact angles, and (folded) its position.
+// Any edit puts the camera on the key so you see it; the path overlay redraws as you drag.
 static void KeyInspector(int Index, bool CamOn) {
     Key& K = G.Keys[Index];
     bool Changed = false;
-    auto Field = [&](const char* Id, float* V, float Speed, float Lo, float Hi, const char* Fmt, float W, const char* Help) {
-        ImGui::SameLine(0.f, 6.f);
-        ImGui::SetNextItemWidth(W);
+    auto Field = [&](const char* Id, float* V, float Speed, float Lo, float Hi, const char* Fmt, const char* Help) {
+        ImGui::SameLine(0.f, 4.f);
+        ImGui::SetNextItemWidth(86.f);
         Changed |= ImGui::DragFloat(Id, V, Speed, Lo, Hi, Fmt);
         if (Help) Tip(Help);
     };
     ImGui::AlignTextToFramePadding();
-    ImGui::TextDisabled("Curve");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(K.Interp != 0);
-    ImGui::SetNextItemWidth(110);
-    Changed |= ImGui::SliderFloat("##tension", &K.Tension, -1.f, 1.f, K.Tension < -0.05f ? "%.2f wide" : K.Tension > 0.05f ? "%.2f tight" : "natural");
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { K.Tension = 0.f; Changed = true; }
-    Tip("How the path bends through this key (Smooth only). Wide = big sweeping arc, tight = sharp turn. Right-click = natural.");
+    ImGui::TextColored(kAccent, "KEY %d", Index + 1);
+    SmallLabel("Move");
+    ImGui::SetNextItemWidth(92.f);
+    Changed |= ImGui::Combo("##interp", &K.Interp, kInterps, static_cast<int>(std::size(kInterps)));
+    Tip("How the camera travels to the next key: smooth curve, straight line, or hold still then cut.");
+    if (K.Interp == 0) {
+        SmallLabel("Curve");
+        ImGui::SetNextItemWidth(120.f);
+        Changed |= ImGui::SliderFloat("##tension", &K.Tension, -1.f, 1.f, K.Tension < -0.05f ? "wide %.2f" : K.Tension > 0.05f ? "tight %.2f" : "natural");
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) { K.Tension = 0.f; Changed = true; }
+        Tip("How the path bends through this key. Wide = big sweeping arc, tight = sharp turn. Right-click = natural.");
+    }
+    if (K.Interp != 2) {
+        SmallLabel("Look");
+        ImGui::SetNextItemWidth(112.f);
+        Changed |= ImGui::Combo("##aim", &K.Aim, kAims, static_cast<int>(std::size(kAims)));
+        Tip("From this key to the next. Key angles: turns from this key's view to the next one's.\n"
+            "Along path: faces where it is flying, like a drone. Subject > Aim at target overrides both.");
+    }
+    const ImGuiStyle& St = ImGui::GetStyle();
+    const float Bw = ImGui::CalcTextSize("Go to").x + ImGui::CalcTextSize("Update").x + ImGui::CalcTextSize("Delete").x + St.FramePadding.x * 6.f + 8.f;
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - Bw);
+    ImGui::BeginDisabled(!CamOn);
+    if (ImGui::Button("Go to")) Push(CmdType::GoToKey, Index);
+    ImGui::SameLine(0.f, 4.f);
+    if (ImGui::Button("Update")) Push(CmdType::UpdateKey, Index);
+    Tip("Replace this key with the camera's current view.");
     ImGui::EndDisabled();
-    ImGui::SameLine(0.f, 14.f);
-    ImGui::TextDisabled("Look");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(110);
-    Changed |= ImGui::Combo("##aim", &K.Aim, kAims, static_cast<int>(std::size(kAims)));
-    Tip("From this key to the next. Key angles: turns from this key's view to the next one's. Along path: faces where it is flying, like a drone.\nRig > Aim at target overrides both.");
-    ImGui::SameLine(0.f, 14.f);
+    ImGui::SameLine(0.f, 4.f);
+    if (ImGui::Button("Delete")) { G.Keys.erase(G.Keys.begin() + Index); s_Sel = -1; return; }
+
+    ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("Angle");
-    ImGui::BeginDisabled(K.Aim == 1);
-    Field("##yaw", &K.P[PYaw], 0.25f, -720.f, 720.f, "yaw %.1f\xC2\xB0", 92.f, "Turn left / right. Drag, or Ctrl+click to type.");
-    Field("##pitch", &K.P[PPitch], 0.25f, -89.f, 89.f, "pitch %.1f\xC2\xB0", 92.f, "Tilt up / down.");
+    ImGui::BeginDisabled(K.Aim == 1 && K.Interp != 2);
+    Field("##yaw", &K.P[PYaw], 0.25f, -720.f, 720.f, "yaw %.1f\xC2\xB0", "Turn left / right. Drag, or Ctrl+click to type.");
+    Field("##pitch", &K.P[PPitch], 0.25f, -89.f, 89.f, "pitch %.1f\xC2\xB0", "Tilt up / down.");
     ImGui::EndDisabled();
-    Field("##roll", &K.P[PRoll], 0.25f, -90.f, 90.f, "roll %.1f\xC2\xB0", 84.f, "Dutch angle.");
-    Field("##fov", &K.P[PFov], 0.2f, 5.f, 120.f, "fov %.0f\xC2\xB0", 74.f, "Zoom at this key.");
+    Field("##roll", &K.P[PRoll], 0.25f, -90.f, 90.f, "roll %.1f\xC2\xB0", "Dutch angle.");
+    Field("##fov", &K.P[PFov], 0.2f, 5.f, 120.f, "fov %.0f\xC2\xB0", "Zoom at this key.");
+    static bool s_Pos = false;
     ImGui::SameLine(0.f, 14.f);
-    ImGui::TextDisabled(G.KeySpace ? "Offset" : "Pos");
-    Field("##x", &K.P[PX], 2.f, -1e6f, 1e6f, "x %.0f", 84.f, "Position in cm (from the target when keys ride with it). Drag for small moves.");
-    Field("##y", &K.P[PY], 2.f, -1e6f, 1e6f, "y %.0f", 84.f, nullptr);
-    Field("##z", &K.P[PZ], 2.f, -1e6f, 1e6f, "z %.0f", 84.f, "Height.");
+    static const char* PosLbl[] = { "Position" };
+    if (Segmented("pos", PosLbl, 1, s_Pos ? 0 : -1) == 0) s_Pos = !s_Pos;
+    Tip(G.KeySpace ? "Exact offset from the target, in cm." : "Exact position in the world, in cm.");
+    if (s_Pos) {
+        Field("##x", &K.P[PX], 2.f, -1e6f, 1e6f, "x %.0f", nullptr);
+        Field("##y", &K.P[PY], 2.f, -1e6f, 1e6f, "y %.0f", nullptr);
+        Field("##z", &K.P[PZ], 2.f, -1e6f, 1e6f, "z %.0f", "Height.");
+    }
     if (Changed && CamOn) Push(CmdType::GoToKey, Index);
 }
 
 static void Timeline(Settings& S) {
+    (void)S;
     const ImVec2 Size = ImGui::GetIO().DisplaySize;
-    const float W = (std::min)(Size.x - 64.f, 1500.f);
+    const float W = (std::min)(Size.x - 64.f, 1400.f);
     ImGui::SetNextWindowPos(ImVec2(Size.x * 0.5f, Size.y - 20.f), ImGuiCond_Always, ImVec2(0.5f, 1.f));
     ImGui::SetNextWindowSize(ImVec2(W, 0.f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(12.f, 10.f));
     ImGui::Begin("##timeline", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove
         | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::PopStyleVar();
     std::vector<Key>& Keys = G.Keys;
     const int N = static_cast<int>(Keys.size());
     const bool CamOn = G.M != Mode::Off, Playing = G.M == Mode::Path, CanPlay = N >= 2;
@@ -671,57 +747,27 @@ static void Timeline(Settings& S) {
 
     // transport
     ImGui::BeginDisabled(!CamOn || !CanPlay);
-    if (ImGui::Button("|<", ImVec2(34, 0))) Push(CmdType::Preview, 0, Keys.front().Time);
+    if (ImGui::Button("|<", ImVec2(32, 0))) Push(CmdType::Preview, 0, Keys.front().Time);
     Tip("Jump to the start.");
     ImGui::SameLine(0.f, 3.f);
-    ImGui::PushStyleColor(ImGuiCol_Button, Playing ? ImVec4(0.55f, 0.2f, 0.18f, 1.f) : ImVec4(0.62f, 0.38f, 0.12f, 1.f));
-    if (ImGui::Button(Playing ? "Stop" : "Play", ImVec2(70, 0))) Push(Playing ? CmdType::Stop : CmdType::Play);
-    ImGui::PopStyleColor();
+    if (Playing ? ImGui::Button("Stop", ImVec2(68, 0)) : Primary("Play", ImVec2(68, 0))) Push(Playing ? CmdType::Stop : CmdType::Play);
     Tip("Play the path (L). You can play your character while it runs.");
     ImGui::SameLine(0.f, 3.f);
-    if (ImGui::Button(">|", ImVec2(34, 0))) Push(CmdType::Preview, 0, Len);
+    if (ImGui::Button(">|", ImVec2(32, 0))) Push(CmdType::Preview, 0, Len);
     Tip("Jump to the end.");
     ImGui::EndDisabled();
     ImGui::SameLine(0.f, 14.f);
-    ImGui::Checkbox("Loop", &S.Loop);
-    ImGui::SameLine();
-    ImGui::Checkbox("3-2-1", &S.Countdown);
-    Tip("Countdown on the first keyframe before the path moves.");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(110);
-    ImGui::SliderFloat("##speed", &S.PlaySpeed, 0.1f, 4.f, "%.2fx", ImGuiSliderFlags_Logarithmic);
-    if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) S.PlaySpeed = 1.f;
-    Tip("Path playback speed. Right-click to reset.");
-    ImGui::SameLine(0.f, 14.f);
     ImGui::AlignTextToFramePadding();
     ImGui::TextDisabled("%.1f / %.1f s", CanPlay ? G.PathT : 0.f, Len);
-    ImGui::SameLine(0.f, 14.f);
+    const float Kw = ImGui::CalcTextSize("+ Key").x + ImGui::GetStyle().FramePadding.x * 2.f;
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - Kw);
     ImGui::BeginDisabled(!CamOn);
     if (ImGui::Button("+ Key")) Push(CmdType::AddKey);
     ImGui::EndDisabled();
     Tip("Add a keyframe at the camera's current view (K).");
-    if (s_Sel >= 0) {
-        ImGui::SameLine(0.f, 14.f);
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(kAccent, "Key %d", s_Sel + 1);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(90);
-        ImGui::Combo("##interp", &Keys[s_Sel].Interp, kInterps, static_cast<int>(std::size(kInterps)));
-        Tip("How the camera travels to the next keyframe.");
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!CamOn);
-        if (ImGui::Button("Go to")) Push(CmdType::GoToKey, s_Sel);
-        ImGui::SameLine(0.f, 3.f);
-        if (ImGui::Button("Update")) Push(CmdType::UpdateKey, s_Sel);
-        Tip("Replace this keyframe with the camera's current view.");
-        ImGui::EndDisabled();
-        ImGui::SameLine(0.f, 3.f);
-        if (ImGui::Button("Delete")) { Keys.erase(Keys.begin() + s_Sel); s_Sel = -1; ImGui::End(); return; }
-        KeyInspector(s_Sel, CamOn);
-    }
 
     // track
-    const float H = 58.f, Pad = 10.f;
+    const float H = 46.f, Pad = 10.f;
     const ImVec2 P0 = ImGui::GetCursorScreenPos();
     const float Tw = ImGui::GetContentRegionAvail().x;
     ImGui::InvisibleButton("track", ImVec2(Tw, H));
@@ -729,30 +775,31 @@ static void Timeline(Settings& S) {
     const float Span = (std::max)(Len, 5.f) * 1.05f;
     auto Xof = [&](float T) { return P0.x + Pad + (Tw - 2.f * Pad) * T / Span; };
     auto Tof = [&](float X) { return (std::clamp)((X - P0.x - Pad) / (Tw - 2.f * Pad) * Span, 0.f, 600.f); };
-    const float Mid = P0.y + H * 0.62f;
+    const float Mid = P0.y + H * 0.64f;
     ImDrawList* D = ImGui::GetWindowDrawList();
-    D->AddRectFilled(P0, ImVec2(P0.x + Tw, P0.y + H), IM_COL32(255, 255, 255, 10), 6.f);
+    D->AddRectFilled(P0, ImVec2(P0.x + Tw, P0.y + H), IM_COL32(255, 255, 255, 8), 6.f);
     static const float Steps[] = { 0.5f, 1.f, 2.f, 5.f, 10.f, 15.f, 30.f, 60.f };
     float Step = Steps[std::size(Steps) - 1];
-    for (float St : Steps) if ((Tw - 2.f * Pad) * St / Span >= 60.f) { Step = St; break; }
+    for (float St : Steps) if ((Tw - 2.f * Pad) * St / Span >= 70.f) { Step = St; break; }
     for (float T = 0.f; T <= Span; T += Step) {
         const float X = Xof(T);
-        D->AddLine(ImVec2(X, P0.y + 2.f), ImVec2(X, P0.y + 10.f), IM_COL32(255, 255, 255, 60));
+        D->AddLine(ImVec2(X, P0.y + 3.f), ImVec2(X, P0.y + 8.f), IM_COL32(255, 255, 255, 50));
         char L[16];
         snprintf(L, sizeof(L), "%gs", T);
-        D->AddText(ImVec2(X + 3.f, P0.y + 1.f), IM_COL32(255, 255, 255, 90), L);
+        D->AddText(ImVec2(X + 3.f, P0.y + 1.f), IM_COL32(255, 255, 255, 70), L);
     }
+    D->AddLine(ImVec2(P0.x + Pad, Mid), ImVec2(P0.x + Tw - Pad, Mid), IM_COL32(255, 255, 255, 16), 1.f);
     for (int I = 0; I + 1 < N; ++I) {                   // segments, coloured by how they move
-        const ImU32 C = Keys[I].Interp == 1 ? IM_COL32(110, 170, 255, 200) : Keys[I].Interp == 2 ? IM_COL32(150, 150, 160, 160) : IM_COL32(242, 168, 66, 200);
-        D->AddLine(ImVec2(Xof(Keys[I].Time), Mid), ImVec2(Xof(Keys[I + 1].Time), Mid), C, Keys[I].Interp == 2 ? 1.f : 3.f);
+        const ImU32 C = Keys[I].Interp == 1 ? IM_COL32(110, 170, 255, 200) : Keys[I].Interp == 2 ? IM_COL32(150, 150, 160, 140) : IM_COL32(242, 168, 66, 200);
+        D->AddLine(ImVec2(Xof(Keys[I].Time), Mid), ImVec2(Xof(Keys[I + 1].Time), Mid), C, Keys[I].Interp == 2 ? 1.f : 2.5f);
     }
     const ImVec2 M = ImGui::GetIO().MousePos;
     int Under = -1;
     for (int I = 0; I < N; ++I) if (fabsf(M.x - Xof(Keys[I].Time)) < 8.f && fabsf(M.y - Mid) < 12.f) Under = I;
     for (int I = 0; I < N; ++I) {
-        const float X = Xof(Keys[I].Time), R = I == Under ? 8.f : 7.f;
+        const float X = Xof(Keys[I].Time), R = I == Under || I == s_Sel ? 7.5f : 6.5f;
         const ImVec2 Q[4] = { ImVec2(X, Mid - R), ImVec2(X + R, Mid), ImVec2(X, Mid + R), ImVec2(X - R, Mid) };
-        D->AddConvexPolyFilled(Q, 4, I == s_Sel ? IM_COL32(245, 165, 60, 255) : IM_COL32(28, 28, 32, 255));
+        D->AddConvexPolyFilled(Q, 4, I == s_Sel ? IM_COL32(245, 165, 60, 255) : IM_COL32(24, 24, 28, 255));
         D->AddPolyline(Q, 4, IM_COL32(245, 165, 60, 255), ImDrawFlags_Closed, 1.5f);
     }
     if (CanPlay) {
@@ -760,7 +807,7 @@ static void Timeline(Settings& S) {
         D->AddLine(ImVec2(X, P0.y), ImVec2(X, P0.y + H), IM_COL32(255, 255, 255, 220), 1.5f);
         D->AddTriangleFilled(ImVec2(X - 5.f, P0.y), ImVec2(X + 5.f, P0.y), ImVec2(X, P0.y + 7.f), IM_COL32(255, 255, 255, 220));
     }
-    if (N == 0) D->AddText(ImVec2(P0.x + Pad, Mid - 8.f), IM_COL32(255, 255, 255, 110), "No keyframes. Fly to a spot and press K (or + Key).");
+    if (N == 0) D->AddText(ImVec2(P0.x + Pad, Mid - 8.f), IM_COL32(255, 255, 255, 100), "No keyframes yet. Fly to a spot and press K.");
 
     // drag a key to retime it, drag empty track to scrub, double-click a key to go to it
     static int s_Drag = -1;
@@ -776,9 +823,13 @@ static void Timeline(Settings& S) {
         s_Drag = -1;
     }
     if (Hover && Under >= 0 && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && CamOn) Push(CmdType::GoToKey, Under);
-    if (Hover && Under >= 0) ImGui::SetTooltip("Key %d  \xC2\xB7  %.2f s  \xC2\xB7  %s\nDrag to retime, double-click to go to it.",
-        Under + 1, Keys[Under].Time, kInterps[(std::clamp)(Keys[Under].Interp, 0, 2)]);
-    if (s_Sel >= 0 && ImGui::IsWindowFocused() && ImGui::IsKeyPressed(ImGuiKey_Delete)) { Keys.erase(Keys.begin() + s_Sel); s_Sel = -1; }
+    if (Hover && Under >= 0) ImGui::SetTooltip("Key %d  \xC2\xB7  %.2f s\nDrag to retime, double-click to go to it.", Under + 1, Keys[Under].Time);
+    if (s_Sel >= 0 && ImGui::IsWindowFocused() && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete)) { Keys.erase(Keys.begin() + s_Sel); s_Sel = -1; }
+
+    if (s_Sel >= 0 && s_Sel < static_cast<int>(Keys.size())) {
+        ImGui::Dummy(ImVec2(0.f, 2.f));
+        KeyInspector(s_Sel, CamOn);
+    }
     ImGui::End();
 }
 
@@ -804,6 +855,7 @@ static void FocusPicker() {
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !Io.WantCaptureMouse) {
         Push(CmdType::PickFocus, static_cast<int>(Io.MousePos.x), Io.MousePos.y);
         G.PickingFocus = false;
+        G.S.Dof = 1;
     }
 }
 
@@ -812,31 +864,73 @@ static void DrawMenu() {
     TopBar(S);
     Timeline(S);
     FocusPicker();
-    ImGui::SetNextWindowPos(ImVec2(32, 80), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(ImVec2(600, 680), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Cinematic Camera", nullptr, ImGuiWindowFlags_NoCollapse)) { ImGui::End(); return; }
+    ImGui::SetNextWindowPos(ImVec2(32, 84), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(540, 620), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSizeConstraints(ImVec2(440.f, 320.f), ImVec2(FLT_MAX, FLT_MAX));
+    if (!ImGui::Begin("Cinematic Camera", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoScrollbar)) {
+        ImGui::End();
+        return;
+    }
 
-    static const char* Sections[] = { "Camera", "Rig", "Lens", "Look", "Guides", "Path", "Shortcuts" };
-    static int s_Section = 0;
-    ImGui::BeginChild("nav", ImVec2(118.f, 0.f), ImGuiChildFlags_None);
-    for (int I = 0; I < static_cast<int>(std::size(Sections)); ++I) {
-        const bool On = I == s_Section;
-        if (On) ImGui::PushStyleColor(ImGuiCol_Text, kAccent);
-        if (ImGui::Selectable(Sections[I], On, 0, ImVec2(0.f, 30.f))) s_Section = I;
-        if (On) ImGui::PopStyleColor();
+    // header: title, mode, help, close
+    static const char* ModeNames[] = { "Off", "Free", "Tripod", "Path", "Follow" };
+    if (s_FontHead) ImGui::PushFont(s_FontHead);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("CINEMATIC CAMERA");
+    if (s_FontHead) ImGui::PopFont();
+    ImGui::SameLine(0.f, 10.f);
+    {
+        const ImVec2 P = ImGui::GetCursorScreenPos();
+        const float Fh = ImGui::GetFrameHeight();
+        ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(P.x + 4.f, P.y + Fh * 0.5f), 3.5f,
+            G.M == Mode::Off ? IM_COL32(110, 110, 118, 255) : IM_COL32(245, 165, 60, 255));
+        ImGui::Dummy(ImVec2(10.f, Fh));
+        ImGui::SameLine(0.f, 2.f);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("%s", ModeNames[static_cast<int>(G.M)]);
+    }
+    const float Bw = ImGui::GetFrameHeight();
+    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - Bw * 2.f - 4.f);
+    if (ImGui::Button("?", ImVec2(Bw, Bw))) ImGui::OpenPopup("Shortcuts");
+    Tip("Keyboard shortcuts");
+    ImGui::SameLine(0.f, 4.f);
+    if (ImGui::Button("x", ImVec2(Bw, Bw))) G.MenuOpen = false;
+    Tip("Close (F10)");
+    ImGui::SetNextWindowSize(ImVec2(520.f, 0.f));
+    if (ImGui::BeginPopup("Shortcuts")) { Shortcuts(); ImGui::EndPopup(); }
+    {
+        const ImVec2 P = ImGui::GetCursorScreenPos();
+        ImGui::GetWindowDrawList()->AddLine(ImVec2(P.x, P.y + 2.f), ImVec2(P.x + ImGui::GetContentRegionAvail().x, P.y + 2.f), IM_COL32(255, 255, 255, 16));
+        ImGui::Dummy(ImVec2(0.f, 6.f));
+    }
+
+    // nav + page
+    static const char* Pages[] = { "Camera", "Lens", "Subject", "Look", "Path", "Guides" };
+    static int s_Page = 0;
+    ImGui::BeginChild("nav", ImVec2(104.f, 0.f), ImGuiChildFlags_None);
+    for (int I = 0; I < static_cast<int>(std::size(Pages)); ++I) {
+        const bool On = I == s_Page;
+        const ImVec2 P = ImGui::GetCursorScreenPos();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[On ? ImGuiCol_Text : ImGuiCol_TextDisabled]);
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(1.f, 1.f, 1.f, 0.05f));
+        if (ImGui::Selectable(Pages[I], On, 0, ImVec2(0.f, 30.f))) s_Page = I;
+        ImGui::PopStyleColor(2);
+        if (On) ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(P.x, P.y + 7.f), ImVec2(P.x + 3.f, P.y + 23.f), IM_COL32(245, 165, 60, 255), 2.f);
     }
     ImGui::EndChild();
-    ImGui::SameLine(0.f, 12.f);
+    ImGui::SameLine(0.f, 14.f);
     ImGui::BeginChild("page", ImVec2(0.f, 0.f), ImGuiChildFlags_None);
-    switch (s_Section) {
-    case 0: CameraSection(S); break;
-    case 1: RigSection(S); break;
-    case 2: LensSection(S); break;
-    case 3: LookSection(S); break;
-    case 4: GuidesSection(S); break;
-    case 5: PathSection(S); break;
-    default: ShortcutsSection(); break;
+    ImGui::PushItemWidth(-FLT_MIN);
+    switch (s_Page) {
+    case 0: CameraPage(S); break;
+    case 1: LensPage(S); break;
+    case 2: SubjectPage(S); break;
+    case 3: LookPage(S); break;
+    case 4: PathPage(S); break;
+    default: GuidesPage(S); break;
     }
+    ImGui::PopItemWidth();
+    ImGui::Dummy(ImVec2(0.f, 8.f));
     ImGui::EndChild();
     ImGui::End();
 }
@@ -958,13 +1052,14 @@ static void DrawPath(ImDrawList* D) {
     if (!G.S.ShowPath || G.M == Mode::Path) return;
     for (size_t I = 1; I < G.PathPts.size(); ++I) {
         const Point& A = G.PathPts[I - 1], & B = G.PathPts[I];
-        if (A.On && B.On) D->AddLine(ImVec2(A.X, A.Y), ImVec2(B.X, B.Y), IM_COL32(242, 168, 66, 220), 2.5f);
+        if (A.On && B.On) D->AddLine(ImVec2(A.X, A.Y), ImVec2(B.X, B.Y), IM_COL32(242, 168, 66, 200), 2.f);
     }
     for (size_t I = 0; I < G.KeyPts.size(); ++I) {
         const Point& P = G.KeyPts[I];
         if (!P.On) continue;
-        D->AddCircleFilled(ImVec2(P.X, P.Y), 11.f, IM_COL32(20, 20, 20, 220));
-        D->AddCircle(ImVec2(P.X, P.Y), 11.f, IM_COL32(242, 168, 66, 255), 0, 2.f);
+        const bool Sel = static_cast<int>(I) == s_Sel;  // the key open in the timeline inspector
+        D->AddCircleFilled(ImVec2(P.X, P.Y), Sel ? 13.f : 11.f, Sel ? IM_COL32(245, 165, 60, 240) : IM_COL32(20, 20, 20, 220));
+        D->AddCircle(ImVec2(P.X, P.Y), Sel ? 13.f : 11.f, IM_COL32(242, 168, 66, 255), 0, 2.f);
         char N[8];
         snprintf(N, sizeof(N), "%d", static_cast<int>(I + 1));
         const ImVec2 Ts = ImGui::CalcTextSize(N);
@@ -975,32 +1070,35 @@ static void DrawPath(ImDrawList* D) {
 static void ApplyStyle() {
     ImGuiStyle& St = ImGui::GetStyle();
     ImGui::StyleColorsDark();
-    St.WindowRounding = 10.f; St.ChildRounding = 6.f; St.FrameRounding = 6.f; St.GrabRounding = 6.f;
-    St.TabRounding = 6.f; St.PopupRounding = 8.f; St.ScrollbarRounding = 6.f;
-    St.WindowPadding = ImVec2(16, 14); St.FramePadding = ImVec2(10, 6); St.ItemSpacing = ImVec2(8, 8);
-    St.ItemInnerSpacing = ImVec2(6, 6); St.ScrollbarSize = 10.f; St.GrabMinSize = 10.f;
+    // graphite surfaces, one amber accent for "on" and "selected" only
+    St.WindowRounding = 10.f; St.ChildRounding = 6.f; St.FrameRounding = 5.f; St.GrabRounding = 4.f;
+    St.TabRounding = 5.f; St.PopupRounding = 8.f; St.ScrollbarRounding = 6.f;
+    St.WindowPadding = ImVec2(16, 14); St.FramePadding = ImVec2(9, 5); St.ItemSpacing = ImVec2(8, 7);
+    St.ItemInnerSpacing = ImVec2(6, 6); St.ScrollbarSize = 8.f; St.GrabMinSize = 8.f;
     St.WindowBorderSize = 1.f; St.ChildBorderSize = 0.f; St.PopupBorderSize = 1.f; St.FrameBorderSize = 0.f;
     St.WindowTitleAlign = ImVec2(0.f, 0.5f); St.SelectableTextAlign = ImVec2(0.f, 0.5f);
+    St.DisabledAlpha = 0.45f;
     ImVec4* C = St.Colors;
-    const ImVec4 Accent = kAccent, AccentDim(0.62f, 0.38f, 0.12f, 1.f);
-    C[ImGuiCol_Text] = ImVec4(0.92f, 0.92f, 0.94f, 1.f);
-    C[ImGuiCol_TextDisabled] = ImVec4(0.52f, 0.53f, 0.57f, 1.f);
-    C[ImGuiCol_WindowBg] = ImVec4(0.075f, 0.078f, 0.086f, 0.96f);
+    const ImVec4 Accent = kAccent, AccentDim = kAccentDim;
+    C[ImGuiCol_Text] = ImVec4(0.91f, 0.91f, 0.93f, 1.f);
+    C[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.51f, 0.55f, 1.f);
+    C[ImGuiCol_WindowBg] = ImVec4(0.067f, 0.07f, 0.078f, 0.97f);
     C[ImGuiCol_ChildBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
-    C[ImGuiCol_PopupBg] = ImVec4(0.09f, 0.093f, 0.10f, 0.98f);
-    C[ImGuiCol_Border] = ImVec4(1.f, 1.f, 1.f, 0.07f);
-    C[ImGuiCol_TitleBg] = C[ImGuiCol_TitleBgActive] = C[ImGuiCol_TitleBgCollapsed] = ImVec4(0.075f, 0.078f, 0.086f, 1.f);
-    C[ImGuiCol_FrameBg] = ImVec4(0.14f, 0.145f, 0.16f, 1.f);
-    C[ImGuiCol_FrameBgHovered] = ImVec4(0.19f, 0.195f, 0.215f, 1.f);
-    C[ImGuiCol_FrameBgActive] = ImVec4(0.23f, 0.235f, 0.26f, 1.f);
+    C[ImGuiCol_PopupBg] = ImVec4(0.085f, 0.088f, 0.097f, 0.99f);
+    C[ImGuiCol_Border] = ImVec4(1.f, 1.f, 1.f, 0.06f);
+    C[ImGuiCol_TitleBg] = C[ImGuiCol_TitleBgActive] = C[ImGuiCol_TitleBgCollapsed] = ImVec4(0.067f, 0.07f, 0.078f, 1.f);
+    C[ImGuiCol_FrameBg] = ImVec4(0.125f, 0.13f, 0.145f, 1.f);
+    C[ImGuiCol_FrameBgHovered] = ImVec4(0.165f, 0.17f, 0.19f, 1.f);
+    C[ImGuiCol_FrameBgActive] = ImVec4(0.195f, 0.2f, 0.225f, 1.f);
     C[ImGuiCol_SliderGrab] = AccentDim; C[ImGuiCol_SliderGrabActive] = Accent; C[ImGuiCol_CheckMark] = Accent;
-    C[ImGuiCol_Button] = ImVec4(0.15f, 0.155f, 0.17f, 1.f);
-    C[ImGuiCol_ButtonHovered] = ImVec4(0.22f, 0.225f, 0.25f, 1.f); C[ImGuiCol_ButtonActive] = AccentDim;
-    C[ImGuiCol_Header] = ImVec4(0.15f, 0.155f, 0.17f, 1.f);
-    C[ImGuiCol_HeaderHovered] = ImVec4(0.19f, 0.195f, 0.215f, 1.f); C[ImGuiCol_HeaderActive] = AccentDim;
-    C[ImGuiCol_Separator] = ImVec4(1.f, 1.f, 1.f, 0.07f);
+    C[ImGuiCol_Button] = ImVec4(0.13f, 0.135f, 0.15f, 1.f);
+    C[ImGuiCol_ButtonHovered] = ImVec4(0.18f, 0.185f, 0.205f, 1.f); C[ImGuiCol_ButtonActive] = ImVec4(0.22f, 0.225f, 0.25f, 1.f);
+    C[ImGuiCol_Header] = ImVec4(1.f, 1.f, 1.f, 0.05f);
+    C[ImGuiCol_HeaderHovered] = ImVec4(1.f, 1.f, 1.f, 0.07f); C[ImGuiCol_HeaderActive] = ImVec4(1.f, 1.f, 1.f, 0.10f);
+    C[ImGuiCol_Separator] = ImVec4(1.f, 1.f, 1.f, 0.06f);
     C[ImGuiCol_ScrollbarBg] = ImVec4(0.f, 0.f, 0.f, 0.f);
-    C[ImGuiCol_ScrollbarGrab] = ImVec4(0.22f, 0.225f, 0.25f, 1.f);
+    C[ImGuiCol_ScrollbarGrab] = ImVec4(1.f, 1.f, 1.f, 0.10f);
+    C[ImGuiCol_ScrollbarGrabHovered] = ImVec4(1.f, 1.f, 1.f, 0.16f); C[ImGuiCol_ScrollbarGrabActive] = ImVec4(1.f, 1.f, 1.f, 0.22f);
     C[ImGuiCol_TableRowBgAlt] = ImVec4(1.f, 1.f, 1.f, 0.025f);
     C[ImGuiCol_ResizeGrip] = ImVec4(0.f, 0.f, 0.f, 0.f);
     C[ImGuiCol_ResizeGripHovered] = AccentDim; C[ImGuiCol_ResizeGripActive] = Accent;
@@ -1063,8 +1161,8 @@ static bool Init(IDXGISwapChain* Sc) {
     }
     Io.IniFilename = s_Ini.c_str();
     Io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;   // the game owns the cursor shape
-    if (!Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 17.f)) Io.Fonts->AddFontDefault();
-    s_FontHead = Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguisb.ttf", 13.5f);   // null = body font
+    if (!Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\segoeui.ttf", 16.f)) Io.Fonts->AddFontDefault();
+    s_FontHead = Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguisb.ttf", 12.5f);   // null = body font
     s_FontBig = Io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\seguisb.ttf", 150.f);
     ApplyStyle();
     ImGui_ImplWin32_Init(s_Hwnd);
