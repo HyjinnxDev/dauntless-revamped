@@ -32,6 +32,8 @@ test("content routes: public manifest, files only for signed-in accounts", async
     fs.writeFileSync(path.join(Dir, "m.json"), JSON.stringify(Manifest));
     process.env.GAME_CONTENT_DIR = Dir;
     process.env.GAME_CONTENT_MANIFEST = path.join(Dir, "m.json");
+    // [Revamped] CDN base is normalised to a trailing slash and handed to the launcher.
+    process.env.GAME_CONTENT_DOWNLOAD_BASE_URL = "https://cdn.example/1.14.7";
     const { contentRouter } = await import("./routes/content");
     const App = express().use(contentRouter);
     const Server = App.listen(0);
@@ -39,12 +41,13 @@ test("content routes: public manifest, files only for signed-in accounts", async
         const Base = `http://127.0.0.1:${(Server.address() as { port: number }).port}`;
         const M = await fetch(`${Base}/content/v1/manifest`);
         assert.equal(M.status, 200);
-        assert.deepEqual(await M.json(), Manifest);
+        assert.deepEqual(await M.json(), { ...Manifest, downloadBaseUrl: "https://cdn.example/1.14.7/" });
         assert.equal((await fetch(`${Base}/content/v1/manifest`, { method: "HEAD" })).status, 200);
         // No launcher token: refused before anything is read from disk.
         assert.equal((await fetch(`${Base}/content/v1/files/Archon/a.txt`)).status, 401);
     } finally {
         Server.close();
+        delete process.env.GAME_CONTENT_DOWNLOAD_BASE_URL;
         fs.rmSync(Dir, { recursive: true, force: true });
     }
 });
