@@ -1562,6 +1562,19 @@ function renderCredits(): void {
 
 // ------------------------------------------------------------------ banners
 
+let updateBannerHidden = false;
+
+/** Fades a toast out after a few seconds (paused on hover, see .banner-fade), then removes it. */
+function autoHide(el: HTMLElement, onGone: () => void): HTMLElement {
+  el.classList.add("banner-fade");
+  el.addEventListener("animationend", (e) => {
+    if (e.animationName !== "banner-fade-out") return;
+    el.remove();
+    onGone();
+  });
+  return el;
+}
+
 function renderBanners(): void {
   const container = $("#banners");
   const snap = state.snap;
@@ -1589,23 +1602,30 @@ function renderBanners(): void {
     }
     if (snap?.notice) {
       out.push(
-        h(
-          "div",
-          { class: "banner banner-notice", role: "status" },
-          icon("info"),
-          h("span", { class: "banner-text" }, tk(`notice_${snap.notice}`)),
-          linkButton(t("err_dismiss"), () => void api.dismissNotice(), { fk: "notice-dismiss" }),
+        autoHide(
+          h(
+            "div",
+            { class: "banner banner-notice", role: "status" },
+            icon("info"),
+            h("span", { class: "banner-text" }, tk(`notice_${snap.notice}`)),
+            linkButton(t("err_dismiss"), () => void api.dismissNotice(), { fk: "notice-dismiss" }),
+          ),
+          () => void api.dismissNotice(),
         ),
       );
     }
-    if (snap?.app.updateReady) {
+    // Restart stays available in About after the toast fades.
+    if (snap?.app.updateReady && !updateBannerHidden) {
       out.push(
-        h(
-          "div",
-          { class: "banner banner-update", role: "status" },
-          icon("refresh"),
-          h("span", { class: "banner-text" }, t("update_ready")),
-          button(t("update_restart"), () => void api.installUpdate(), { cls: "btn-primary", fk: "update-restart", disabled: snap.game.running }),
+        autoHide(
+          h(
+            "div",
+            { class: "banner banner-update", role: "status" },
+            icon("refresh"),
+            h("span", { class: "banner-text" }, t("update_ready")),
+            button(t("update_restart"), () => void api.installUpdate(), { cls: "btn-primary", fk: "update-restart", disabled: snap.game.running }),
+          ),
+          () => (updateBannerHidden = true),
         ),
       );
     }
