@@ -5632,8 +5632,8 @@ static void Tick() {
 //   Wanderer  green
 //   Scout     red, dark edge + drop shadow, slow brightness pulse
 //   Slayer    purple, violet glow, ethereal breathing + lavender shimmer
-//   Legend    gold, orange glow, larger spaced capitals, white-gold shimmer
-//   Emerald   (the Owner tier) emerald/aqua cycle with diamond-white sparkles, teal glow, largest capitals, breathing
+//   Legend    gold, orange glow + deep shadow, white-gold shimmer
+//   Emerald   (the Owner tier) emerald/aqua cycle with diamond-white sparkles, teal glow, breathing teal aura
 // A style replaces the owner's gold pulse; the staff title line stays.
 // DISABLE_STAFF_NAMEPLATES.flag beside the exe turns it off.
 // ponytail: re-reads plate text every kScanMs; hook UNamePlatesWidget::UpdateName instead if that ever costs.
@@ -5713,10 +5713,9 @@ static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, Style S) {
         F.OutlineSettings.OutlineColor = Col;
         FontChanged = true;
     };
-    auto Grand = [&](int32_t ExtraSize, int32_t Spacing) {   // the "fully stylised" tiers
-        F.Size += ExtraSize;
-        F.LetterSpacing = Spacing;
-        Tb->SetTextTransformPolicy(SDK::ETextTransformPolicy::ToUpper);
+    // The plate never re-lays out for a wider name, so size/letter spacing/capitals clipped it ("Hyjinnx" -> "HY",
+    // 0.2.59). The top tiers stand out by glow and shadow only; outline 2 is the widest that still fits.
+    auto Grand = [&]() {
         Tb->SetShadowOffset(SDK::FVector2D{ 2.f, 2.f });
         Tb->SetShadowColorAndOpacity(kDarkShadow);
     };
@@ -5732,8 +5731,8 @@ static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, Style S) {
         Outline(2, kSlayerGlow);
         Tb->SetShadowOffset(SDK::FVector2D{ 0.f, 2.f });
         break;
-    case Style::Legend: Outline(2, kLegendGlow); Grand(2, 120); break;
-    case Style::Emerald: Outline(3, kEmeraldGlow); Grand(3, 160); break;
+    case Style::Legend: Outline(2, kLegendGlow); Grand(); break;
+    case Style::Emerald: Outline(2, kEmeraldGlow); Grand(); break;
     }
     if (FontChanged) Tb->SetFont(F);
     if (SDK::UTextBlock* Title = Info ? W->TextBlock_Title : nullptr) {
@@ -5766,8 +5765,7 @@ static void Animate(SDK::UTextBlock* Tb, const Plate& P, ULONGLONG Now) {
         C Col = Lerp(kEmerald, kAqua, Wave(Now, 4000));
         Col = Lerp(Col, kDiamond, (std::max)(Flash(Now, 1500, 250), 0.8f * Flash(Now + 700, 2600, 200)));   // sparkles
         SetColor(Tb, Col);
-        const float Scale = 1.f + 0.04f * Wave(Now, 2000);
-        Tb->SetRenderScale(SDK::FVector2D{ Scale, Scale });
+        Tb->SetShadowColorAndOpacity(C{ kEmeraldGlow.R, kEmeraldGlow.G, kEmeraldGlow.B, 0.4f + 0.45f * Wave(Now, 2000) });   // breathing aura
         break;
     }
     }
