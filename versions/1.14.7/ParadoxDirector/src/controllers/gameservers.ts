@@ -55,7 +55,13 @@ export type Gameserver = {
     logPath: string,
     readyTime?: Date,
     // Hunt servers only: last MYSTICPARADOX_HUNT_STATE line (join-in-progress gate, see ParseHuntStateLine).
-    huntState?: HuntState
+    huntState?: HuntState,
+    // Hunt servers only: someone has connected at least once (HUNT_STATE players > 0).
+    hadPlayers?: boolean,
+    // Hunt servers only: false = public, open to mid-hunt matchmaking joins. Unset = never joinable.
+    isPrivate?: boolean,
+    // Epoch ms of every player sent here (launch roster + joins), for the occupancy count below.
+    sentAt?: number[]
 };
 
 // hpPct: lowest live behemoth health percent, -1 before any behemoth exists. subState: EArchonInProgressGameSubState
@@ -74,6 +80,25 @@ type ExpectedPlayer = {
 };
 
 export let Gameservers: Gameserver[] = [];
+
+// [2026-10-19] Empty hunts close at once instead of waiting on the DLL's self-exit (50 s after the last
+// player leaves, 5 min if nobody ever arrived). Measured: a LAN player never reached its hunt, retried, and
+// every retry hit the 3/3 cap against its own empty server. Two cases are certain to have nobody coming:
+//   - the player count dropped to 0 after someone was in it (no hunt log ever shows it rising again);
+//   - nobody ever arrived and every player it was started for is asking for a new hunt.
+// The DLL self-exit stays as the backstop. Dropped from the list right away so the cap frees now; the exit
+// handler releases the port.
+export function IsSupersededHunt(Server: Gameserver, Requesters: Set<string>): boolean {
+    return !Server.isRamsgate && !Server.isTrainingDojo && Server.state === "ready" && !Server.hadPlayers
+        && (Server.huntState?.players ?? 0) === 0
+        && !!Server.expectedPlayers?.length && Server.expectedPlayers.every((P) => Requesters.has(P.playerUid));
+}
+
+function ReapEmptyHunt(Server: Gameserver, Why: string) {
+    logger.info(`Closing empty hunt port=${Server.port} pid=${Server.processId}: ${Why}`);
+    Gameservers = Gameservers.filter((S) => S !== Server);
+    try { process.kill(Server.processId); } catch { /* already gone */ }
+}
 // [2026-10-10 1.14.7] Hunt ports are leased per launch id (portPool.ts): a late or duplicate release cannot
 // free a port that a newer hunt holds.
 const Ports = new PortPool();
@@ -444,6 +469,10 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
         // Authoritative cap check here (after the launch queue serialized us) so concurrent spam can't
         // race past it: only spawn a new hunt if we're under the concurrent cap. Over-cap throws
         // NoHuntCapacityError, which the matchmaker falls back to Ramsgate on (no extra process, no OOM).
+        const Requesters = new Set((ExpectedPlayers ?? []).map((P) => P.playerUid));
+        for (const Server of Gameservers.filter((S) => IsSupersededHunt(S, Requesters))) {
+            ReapEmptyHunt(Server, "nobody arrived and its players asked for a new hunt");
+        }
         if(CountHuntServers() >= MAX_CONCURRENT_HUNT_SERVERS){
             throw new NoHuntCapacityError(CountHuntServers(), MAX_CONCURRENT_HUNT_SERVERS);
         }
@@ -575,7 +604,11 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
             Pending = Lines.pop()!.slice(-4096);
             for (const Line of Lines) {
                 const State = ParseHuntStateLine(Line);
-                if (State) NewGameserver.huntState = { ...State, at: Date.now() };
+                if (!State) continue;
+                const WasOccupied = (NewGameserver.huntState?.players ?? 0) > 0;
+                NewGameserver.huntState = { ...State, at: Date.now() };
+                if (State.players > 0) NewGameserver.hadPlayers = true;
+                else if (WasOccupied) ReapEmptyHunt(NewGameserver, "last player left");
             }
         });
     }
@@ -1061,7 +1094,7 @@ function GetMapPathFromMatchmakerHuntId(MatchmakerHuntId: string): string{
 }
 
 
-export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, ExpectedPlayers: string[]){
+export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, ExpectedPlayers: string[], IsPrivate: boolean = true){
     const Manifest = ResolveHuntLaunchManifest(HuntId, ExpectedPlayers);
     const MatchmakerHuntId = Manifest.matchmakerHuntId;
     const BehemothPath = Manifest.behemothPath === "NO_BEHEMOTH" ? undefined : Manifest.behemothPath;
@@ -1073,11 +1106,45 @@ export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, Expe
             playerHuntId: HuntId
         };
     }), false, false);
+    GameServerToReturn.isPrivate = IsPrivate;
+    GameServerToReturn.sentAt = ExpectedPlayers.map(() => Date.now());
 
     return {
         host: MY_IP,
         port: GameServerToReturn.port
     }
+}
+
+// [2026-10-19] Public matchmaking: a running PUBLIC hunt of the same player hunt id that can take Count more
+// players right now. Same gate as the party join-in-progress offer (backend matchmakingParty.ts
+// LateJoinBlockReason): fresh state, not ending, behemoth not under 20 %. Occupancy is the connected count
+// plus everyone sent here in the last 90 s.
+// ponytail: counts an arrived recent joiner twice (connected + sent), so a join can be refused for up to 90 s
+// when it would have fit; per-player arrival tracking if that ever matters.
+const JOIN_SENT_WINDOW_MS = 90_000;
+const JOIN_STATE_MAX_AGE_MS = 15_000;
+const JOIN_MIN_HP_PCT = 20;
+export function JoinablePublicHunt(Servers: Gameserver[], PlayerHuntId: string, Count: number, NowMs: number): Gameserver | undefined {
+    const Occupancy = (S: Gameserver) => S.huntState!.players + (S.sentAt ?? []).filter((At) => NowMs - At < JOIN_SENT_WINDOW_MS).length;
+    return Servers
+        .filter((S) => S.state === "ready" && S.isPrivate === false && !S.isRamsgate && !S.isTrainingDojo
+            && S.expectedPlayers?.[0]?.playerHuntId === PlayerHuntId
+            && S.huntState != undefined && NowMs - S.huntState.at <= JOIN_STATE_MAX_AGE_MS
+            && S.huntState.subState !== 4
+            && (S.huntState.hpPct < 0 || S.huntState.hpPct >= JOIN_MIN_HP_PCT)
+            && Occupancy(S) + Count <= PUBLIC_HUNT_MAX_PLAYERS)
+        .sort((A, B) => Occupancy(B) - Occupancy(A))[0];   // fill the fullest first
+}
+
+export function JoinPublicHunt(PlayerHuntId: string, PlayerIds: string[]): { host: string; port: number } | undefined {
+    const Server = JoinablePublicHunt(Gameservers, PlayerHuntId, PlayerIds.length, Date.now());
+    if (Server == undefined) return undefined;
+    for (const Uid of PlayerIds) {
+        if (!Server.expectedPlayers!.some((P) => P.playerUid === Uid)) Server.expectedPlayers!.push({ playerUid: Uid, playerHuntId: PlayerHuntId });
+        Server.sentAt!.push(Date.now());
+    }
+    logger.info(`[PublicMatch] ${PlayerIds.length} player(s) joining public hunt port=${Server.port} huntId=${PlayerHuntId} connected=${Server.huntState!.players}`);
+    return { host: MY_IP, port: Server.port };
 }
 
 /** Resolve and freeze the exact server arguments without allocating a port or starting a process. */

@@ -18,6 +18,7 @@ import { GetPartyForPlayer } from "../controllers/party";
 import { sessionRegistry } from "../realtime/SessionRegistry";
 import { ResolveMatchmakingParty } from "../matchmakingParty";
 import { EncryptionKeyStore, EncryptionKeyTokenFingerprint } from "../encryptionKeyStore";
+import { PickTravelHost } from "../travelHost";
 
 export const matchmakingRouter = Router();
 
@@ -208,11 +209,11 @@ matchmakingRouter.get("/candidate/status", HasParadoxBackendAuth, async (req: an
             // The client's own HTTPS requests DO reach the public domain, so its source address equals the
             // advertised host exactly when it is behind the same public address - i.e. local. Answer loopback
             // in that case so it reaches the local hub directly; remote players keep the public host.
+            // Extended 2026-10-19: LAN and Tailscale clients get this machine's address on their network (travelHost.ts).
             const AdvertisedHost = MatchmakingResult.Host;
-            const ClientAddress = typeof req.ip === "string" ? req.ip.replace(/^::ffff:/, "") : "";
-            const IsLocalClient = ClientAddress.length > 0 && AdvertisedHost.length > 0
-                && (ClientAddress === AdvertisedHost || ClientAddress === "127.0.0.1" || ClientAddress === "::1");
-            const TravelHost = IsLocalClient ? "127.0.0.1" : AdvertisedHost;
+            const ClientAddress = typeof req.ip === "string" ? req.ip : "";
+            const TravelHost = ClientAddress.length > 0 && AdvertisedHost.length > 0 ? PickTravelHost(ClientAddress, AdvertisedHost) : AdvertisedHost;
+            const IsLocalClient = TravelHost !== AdvertisedHost;
 
             // [1.14.7 REVALIDATION 2026-10-04] Before answering with a hub address, confirm the hub is STILL
             // serving. A cached candidate is not proof: measured, Ramsgate left its map for AFK while the
@@ -320,7 +321,10 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
     // Bypassing FTUE and dropping the player straight into the Ramsgate hub is the
     // achievable path — content-data population becomes a separate task.
 
-    logger.info(`UserId ${UserId} wants to join a game with GameMode ${GameMode} & GameArgs ${GameArgs} & HuntId ${HuntId}`);
+    // [2026-10-19] The client's request carries isPrivate / privateMatch (strings in the 1.14.7 exe next to
+    // gameMode/gameType/partyId). Private Hunt = its own server, never joined mid-hunt; otherwise it matchmakes.
+    const IsPrivate = [req.body.isPrivate, req.body.privateMatch].some((Value) => Value === true || Value === "true");
+    logger.info(`UserId ${UserId} wants to join a game with GameMode ${GameMode} & GameArgs ${GameArgs} & HuntId ${HuntId} private=${IsPrivate ? 1 : 0} (isPrivate=${JSON.stringify(req.body.isPrivate)} privateMatch=${JSON.stringify(req.body.privateMatch)} gameType=${JSON.stringify(req.body.gameType)})`);
 
     // TODO: We put a LOT of faith in our authenticated users not abusing the matchmaking system right now
     // A reasonable addition would be checks on frequency of MM/server spinup
@@ -359,7 +363,8 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
         UserId,
         Party.partyId,
         Party.partyMembers,
-        Party.partyRevision
+        Party.partyRevision,
+        IsPrivate
     );
 
     if(!MatchmakingResult){

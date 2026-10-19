@@ -19,11 +19,17 @@ const MATCHMAKING_MODE = process.env.MATCHMAKING_MODE;
 const DEPLOYSERVER_URL = process.env.DEPLOYSERVER_URL;
 const DEPLOYSERVER_MATCHMAKING_PATH = "/api/matchmaker/handle-matchmaking-for-player";
 
+// [2026-10-19] One public matchmaking queue per hunt id. Groups are a solo player or a whole party; Players
+// is every member, in order. The queue launches when it reaches 4 players or has waited PUBLIC_MATCH_WAIT_MS.
+type MatchmakingQueueGroup = { PartyId?: string, Members: string[] };
 type MatchmakingQueueData = {
     Players: string[],
-    LastPlayerAddedTime: Date,
+    Groups: MatchmakingQueueGroup[],
+    FirstQueuedAt: number,
     Resolved: boolean
 };
+const PUBLIC_MATCH_WAIT_MS = Number(process.env.PUBLIC_MATCH_WAIT_MS ?? "60000");
+const PUBLIC_MATCH_MAX_PLAYERS = 4;
 
 export type MatchmakingResult = {
     Ready: boolean,
@@ -154,10 +160,6 @@ function GetFallbackHuntId(GameMode: string, GameArgs: string, HuntId: string | 
     return HuntId ?? "";
 }
 
-function HuntIdRequiresMatchmaking(HuntId: string){
-    return HuntId.includes("CR19");
-}
-
 // Hub destinations are shared social spaces that never party-matchmake: the party is already together
 // there (Ramsgate is one replicated instance). Everything else — hunt islands, escalation, etc. — is a
 // hunt destination that a party must be fanned out into ONE shared instance.
@@ -189,7 +191,7 @@ function CancelHuntMatchmaking(HuntId: string, PlayerIds: readonly string[], Rea
     return true;
 }
 
-async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined){
+async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined, IsPrivate: boolean = true){
     if (!IsHubDestination(GameMode, HuntId) && GetP2PExtension().matchmaking.dedicatedHuntsDisabled()) {
         logger.error(`[HuntRoute] blocked dedicated hunt launch (dedicated hunts are disabled) huntId=${HuntId}`);
         return { succeeded: false, readyNow: false, host: "", port: 0 };
@@ -211,7 +213,8 @@ async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, Hunt
             GameMode: GameMode,
             GameArgs: GameArgs,
             HuntId: HuntId,
-            ExpectedPlayers: ExpectedPlayers!
+            ExpectedPlayers: ExpectedPlayers!,
+            IsPrivate
         })
     });
 
@@ -239,36 +242,43 @@ async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, Hunt
     }
 }
 
+// Every member of a group gets the same server; a party also gets its shared instance so members polling
+// POST /party follow, exactly like a party hunt launched directly.
+// A server that is already running needs no warm-up, so joiners get the short hub release.
+function ReleaseGroupsTo(HuntId: string, Groups: MatchmakingQueueGroup[], Host: string, Port: number, AlreadyRunning: boolean = false){
+    const GameSessionId = crypto.randomUUID();
+    const Shared: MatchmakingResult = { Ready: true, CandidateId: GameSessionId, GameSessionId, HuntId, Host, Port, ReadyAt: CreateGoNowReleaseAt(AlreadyRunning) };
+    for (const Group of Groups) {
+        if (Group.PartyId != undefined && Group.Members.length > 1) {
+            PartyInstanceMap.set(Group.PartyId, Shared);
+            PartyInstanceCreatedAtMap.set(Group.PartyId, Date.now());
+        }
+        for (const Member of Group.Members) MatchmakingResultMap.set(Member, { ...Shared, CandidateId: crypto.randomUUID() });
+    }
+    return Shared;
+}
+
 async function PopQueue(HuntId: string){
     const MatchmakingQueue = MatchmakingQueueMap.get(HuntId);
 
-    if(MatchmakingQueue!.Resolved){
+    if(MatchmakingQueue == undefined || MatchmakingQueue.Resolved){
         return;
     }
 
-    MatchmakingQueue!.Resolved = true;
-    
-    const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, MatchmakingQueue!.Players);
-    if (!GameOnDeployServer.succeeded) {
-        CancelHuntMatchmaking(HuntId, MatchmakingQueue!.Players, "DEDICATED_HUNT_DISABLED");
-        MatchmakingQueueMap.delete(HuntId);
-        return;
-    }
-    const ReleaseAt = CreateGoNowReleaseAt(false);
-    logger.info(`Hunt '${HuntId}' is online; synchronized Go Now release in ${ReleaseAt - Date.now()}ms for ${MatchmakingQueue!.Players.length} queued player(s)`);
-
-    for(const Player of MatchmakingQueue!.Players){
-        const PlayerMatchmakingResultToUpdate = MatchmakingResultMap.get(Player);
-
-        if(PlayerMatchmakingResultToUpdate != undefined){
-            PlayerMatchmakingResultToUpdate.Host = GameOnDeployServer.host;
-            PlayerMatchmakingResultToUpdate.Port = GameOnDeployServer.port;
-            PlayerMatchmakingResultToUpdate.Ready = true;
-            PlayerMatchmakingResultToUpdate.ReadyAt = ReleaseAt;
-        }
-    }
-
+    MatchmakingQueue.Resolved = true;
     MatchmakingQueueMap.delete(HuntId);
+    // Cancelled members were already removed from Groups (CancelPlayerMatchmaking).
+    const Groups = MatchmakingQueue.Groups.filter((Group) => Group.Members.length > 0);
+    const Players = Groups.flatMap((Group) => Group.Members);
+    if (Players.length === 0) return;
+
+    const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, Players, false);
+    if (!GameOnDeployServer.succeeded) {
+        CancelHuntMatchmaking(HuntId, Players, "DEDICATED_HUNT_DISABLED");
+        return;
+    }
+    const Shared = ReleaseGroupsTo(HuntId, Groups, GameOnDeployServer.host, GameOnDeployServer.port);
+    logger.info(`[PublicMatch] hunt '${HuntId}' launched for ${Players.length} queued player(s) in ${Groups.length} group(s) after ${Date.now() - MatchmakingQueue.FirstQueuedAt}ms; Go Now in ${Shared.ReadyAt - Date.now()}ms`);
 }
 
 export async function CheckAndUpdateQueueStatus(PlayerId: string){
@@ -287,10 +297,10 @@ export async function CheckAndUpdateQueueStatus(PlayerId: string){
         return ExtensionStatus;
     }
 
-    if(!PlayerMatchmakingResult.Ready){
+    if(!PlayerMatchmakingResult.Ready && !PlayerMatchmakingResult.Canceled){
         const MatchmakingQueue = MatchmakingQueueMap.get(PlayerMatchmakingResult.HuntId);
 
-        if((new Date()).getTime() - MatchmakingQueue!.LastPlayerAddedTime.getTime() > 20000){ // existing 20s queue behavior
+        if(MatchmakingQueue != undefined && Date.now() - MatchmakingQueue.FirstQueuedAt >= PUBLIC_MATCH_WAIT_MS){
             await PopQueue(PlayerMatchmakingResult.HuntId);
         }
     }
@@ -298,49 +308,62 @@ export async function CheckAndUpdateQueueStatus(PlayerId: string){
     return ClientVisibleResult(MatchmakingResultMap.get(PlayerId)!);
 }
 
-// TODO: This can fail if the previous party is waiting for the deployserver, and a new party is joining in.
-// Right now we handle this by failing all new players until the old party is cleared out
-// This can be MUCH better in the future
-async function QueuePlayer(HuntId: string, PlayerId: string){
-    if(MatchmakingQueueMap.get(HuntId) != undefined && !MatchmakingQueueMap.get(HuntId)?.Resolved){
-        const CurrentMMEntry = MatchmakingQueueMap.get(HuntId);
-
-        CurrentMMEntry!.Players.push(PlayerId);
-        CurrentMMEntry!.LastPlayerAddedTime = new Date();
-
-        if(CurrentMMEntry!.Players.length >= 4){
-            await PopQueue(HuntId);
-        }
+// Public hunt: join a running public hunt with room, else wait in this hunt's queue (merging with anyone else
+// who queues) until it has 4 players or has waited PUBLIC_MATCH_WAIT_MS, then launch a public server.
+async function JoinOrQueuePublicHunt(HuntId: string, Group: MatchmakingQueueGroup){
+    // A party member following the leader: the whole party is already queued (or its launch is in flight).
+    if (Group.Members.some((Member) => {
+        const Result = MatchmakingResultMap.get(Member);
+        return Result != undefined && Result.HuntId === HuntId && !Result.Ready && !Result.Canceled;
+    })) {
+        return true;
     }
-    else if(MatchmakingQueueMap.get(HuntId) != undefined){
-        return false;
-    }
-    else{
-        MatchmakingQueueMap.set(HuntId, {
-            Players: [PlayerId],
-            LastPlayerAddedTime: new Date(),
-            Resolved: false
-        });
+    const Queued = MatchmakingQueueMap.get(HuntId);
+
+    const Joined = await JoinPublicHuntOnDeployserver(HuntId, Group.Members);
+    if (Joined != undefined) {
+        ReleaseGroupsTo(HuntId, [Group], Joined.host, Joined.port, true);
+        logger.info(`[PublicMatch] ${Group.Members.length} player(s) joined running public hunt '${HuntId}' ${Joined.host}:${Joined.port}`);
+        return true;
     }
 
-    const CandidateId = crypto.randomUUID();
-    MatchmakingResultMap.set(PlayerId, {
-        Ready: false,
-        CandidateId,
-        GameSessionId: CandidateId,
-        HuntId: HuntId,
-        Host: "",
-        Port: 0,
-        ReadyAt: 0
-    });
+    // Doesn't fit the waiting queue: launch that one now with whoever it has, and start a new queue.
+    if (Queued != undefined && Queued.Players.length + Group.Members.length > PUBLIC_MATCH_MAX_PLAYERS) {
+        void PopQueue(HuntId);
+    }
+    const Queue = MatchmakingQueueMap.get(HuntId) ?? { Players: [], Groups: [], FirstQueuedAt: Date.now(), Resolved: false };
+    Queue.Groups.push({ PartyId: Group.PartyId, Members: [...Group.Members] });
+    Queue.Players.push(...Group.Members);
+    MatchmakingQueueMap.set(HuntId, Queue);
 
+    const GameSessionId = crypto.randomUUID();
+    for (const Member of Group.Members) {
+        MatchmakingResultMap.set(Member, { Ready: false, CandidateId: crypto.randomUUID(), GameSessionId, HuntId, Host: "", Port: 0, ReadyAt: 0 });
+    }
+    logger.info(`[PublicMatch] ${Group.Members.length} player(s) queued for '${HuntId}' (${Queue.Players.length}/${PUBLIC_MATCH_MAX_PLAYERS})`);
+
+    if (Queue.Players.length >= PUBLIC_MATCH_MAX_PLAYERS) await PopQueue(HuntId);
     return true;
+}
+
+async function JoinPublicHuntOnDeployserver(HuntId: string, Players: string[]): Promise<{ host: string, port: number } | undefined> {
+    try {
+        const Response = await fetch(`http://${DEPLOYSERVER_URL}/api/matchmaker/join-public-hunt`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ HuntId, Players })
+        });
+        if (Response.status !== 200) return undefined;
+        return await Response.json() as { host: string, port: number };
+    } catch {
+        return undefined;
+    }
 }
 
 // When a whole party joins the same hunt, they must land in ONE game instance. The first
 // member to arrive creates it (with the full party as ExpectedPlayers); everyone else — who
 // follows once GetParty shows the party's active hunt — reuses that same host:port.
-async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId: string, PartyMembers: string[]){
+async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId: string, PartyMembers: string[], IsPrivate: boolean = true){
     const Existing = PartyInstanceMap.get(PartyId);
     const ExistingCreatedAt = PartyInstanceCreatedAtMap.get(PartyId) ?? 0;
 
@@ -354,6 +377,10 @@ async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId:
         // A late follower or retry must not inherit an already-consumed candidate from the leader.
         MatchmakingResultMap.set(PlayerId, { ...Existing, CandidateId: crypto.randomUUID() });
         return true;
+    }
+
+    if(!IsPrivate){
+        return await JoinOrQueuePublicHunt(HuntId, { PartyId, Members: PartyMembers });
     }
 
     const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, PartyMembers);
@@ -464,7 +491,10 @@ export function CancelPlayerMatchmaking(PlayerId: string, PartyId?: string): Mat
     CancelledAtMap.set(PlayerId, Date.now());
     const Own = MatchmakingResultMap.get(PlayerId);
     MatchmakingResultMap.delete(PlayerId);
-    for (const Queue of MatchmakingQueueMap.values()) Queue.Players = Queue.Players.filter((Id) => Id !== PlayerId);
+    for (const Queue of MatchmakingQueueMap.values()) {
+        Queue.Players = Queue.Players.filter((Id) => Id !== PlayerId);
+        for (const Group of Queue.Groups) Group.Members = Group.Members.filter((Id) => Id !== PlayerId);
+    }
     if (Own == undefined || IsHubDestination("", Own.HuntId)) return Own;
 
     const Instance = PartyId != undefined ? PartyInstanceMap.get(PartyId) : undefined;
@@ -489,7 +519,7 @@ export async function GetPlayerCandidate(PlayerId: string): Promise<MatchmakingR
     return CheckAndUpdateQueueStatus(PlayerId);
 }
 
-export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string, HuntId: string, PlayerId: string, PartyId?: string, PartyMembers?: string[], PartyRevision?: number){
+export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string, HuntId: string, PlayerId: string, PartyId?: string, PartyMembers?: string[], PartyRevision?: number, IsPrivate: boolean = true){
     if(MATCHMAKING_MODE === "DISABLED"){
         logger.warn("Matchmaking is disabled, refusing MM!");
 
@@ -523,71 +553,66 @@ export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string
         // /candidate/status and the party's GetPartyInstance return the same server and every member follows.
         if(!IsHubDestination(GameMode, EffectiveHuntId) && EffectiveHuntId.trim().length > 0
            && PartyId != undefined && PartyMembers != undefined && PartyMembers.length > 1){
-            return await HandlePartyMatchmaking(EffectiveHuntId, PlayerId, PartyId, PartyMembers);
+            return await HandlePartyMatchmaking(EffectiveHuntId, PlayerId, PartyId, PartyMembers, IsPrivate);
         }
 
-        if(EffectiveHuntId == undefined || EffectiveHuntId.trim().length == 0 || !HuntIdRequiresMatchmaking(EffectiveHuntId)){
-            // Immediate shared instance (Ramsgate / city hub / dojo) — everyone goes to the same
-            // pre-spawned server.
-            const GameOnDeployServer = await LaunchGameOnDeployserver(GameMode, GameArgs, EffectiveHuntId, PartyMembers ?? [PlayerId]);
-
-            if(!GameOnDeployServer.succeeded){
-                return false;
-            }
-
-            const IsHub = IsHubDestination(GameMode, EffectiveHuntId);
-            const CandidateId = crypto.randomUUID();
-            const SharedResult: MatchmakingResult = {
-                Ready: true,
-                CandidateId,
-                GameSessionId: IsHub
-                    ? GetHubGameSessionId(GameOnDeployServer.host, GameOnDeployServer.port)
-                    : CandidateId,
-                HuntId: EffectiveHuntId,
-                Host: GameOnDeployServer.host,
-                Port: GameOnDeployServer.port,
-                // Hub destinations (Ramsgate/Dojo) now get the SAME synchronized, load-aware Go Now
-                // countdown as hunts instead of resolving instantly — consistent UX, and it doubles as
-                // load shedding: a burst of returning players is spread across the release window
-                // instead of every client hitting the persistent server's connect at once.
-                ReadyAt: CreateGoNowReleaseAt(IsHub)
-            };
-
-            logger.info(`${IsHub ? "Hub" : "Hunt"} '${EffectiveHuntId}' is online; synchronized Go Now release in ${SharedResult.ReadyAt - Date.now()}ms candidateId=${SharedResult.CandidateId} gameSessionId=${SharedResult.GameSessionId}`);
-
-            // [2026-07-17 hub party-follow fix] When a PARTY returns to a shared hub (Ramsgate/dojo), fan the
-            // destination out to EVERY member exactly like a party hunt, so all members follow the leader.
-            // Previously this path set ONLY the leader's result and DELETED PartyInstanceMap, so the other
-            // members polling POST /party (which reads GetPartyInstance) saw no instance and were stranded at
-            // the hunt island while only the leader got the airship (the reported bug). Storing the hub in
-            // PartyInstanceMap is safe: a later DIFFERENT hunt won't reuse it (HandlePartyMatchmaking requires a
-            // matching HuntId), and returning to the same hub again just refreshes it.
-            if(PartyId != undefined && PartyMembers != undefined && PartyMembers.length > 1){
-                PartyInstanceMap.set(PartyId, SharedResult);
-                PartyInstanceCreatedAtMap.set(PartyId, Date.now());
-                for(const Member of PartyMembers){
-                    // Each client needs a fresh candidate to notice and consume this travel. Host,
-                    // port, ReadyAt and GameSessionId remain shared so everyone lands together.
-                    MatchmakingResultMap.set(Member, { ...SharedResult, CandidateId: crypto.randomUUID() });
-                }
-            }
-            else{
-                if(PartyId != undefined){
-                    PartyInstanceMap.delete(PartyId);
-                    PartyInstanceCreatedAtMap.delete(PartyId);
-                }
-                MatchmakingResultMap.set(PlayerId, { ...SharedResult });
-            }
-
-            return true;
+        // [2026-10-19] A solo player on a public (not Private Hunt) hunt matchmakes; see JoinOrQueuePublicHunt.
+        if(!IsHubDestination(GameMode, EffectiveHuntId) && EffectiveHuntId.trim().length > 0 && !IsPrivate){
+            return await JoinOrQueuePublicHunt(EffectiveHuntId, { Members: [PlayerId] });
         }
-        else if(PartyId != undefined && PartyMembers != undefined && PartyMembers.length > 1){
-            // Party hunt — route the whole party into one instance.
-            return await HandlePartyMatchmaking(EffectiveHuntId, PlayerId, PartyId, PartyMembers);
+
+        // Immediate instance: a shared hub (Ramsgate / dojo) everyone goes to, or a private solo hunt.
+        const GameOnDeployServer = await LaunchGameOnDeployserver(GameMode, GameArgs, EffectiveHuntId, PartyMembers ?? [PlayerId]);
+
+        if(!GameOnDeployServer.succeeded){
+            return false;
+        }
+
+        const IsHub = IsHubDestination(GameMode, EffectiveHuntId);
+        const CandidateId = crypto.randomUUID();
+        const SharedResult: MatchmakingResult = {
+            Ready: true,
+            CandidateId,
+            GameSessionId: IsHub
+                ? GetHubGameSessionId(GameOnDeployServer.host, GameOnDeployServer.port)
+                : CandidateId,
+            HuntId: EffectiveHuntId,
+            Host: GameOnDeployServer.host,
+            Port: GameOnDeployServer.port,
+            // Hub destinations (Ramsgate/Dojo) now get the SAME synchronized, load-aware Go Now
+            // countdown as hunts instead of resolving instantly — consistent UX, and it doubles as
+            // load shedding: a burst of returning players is spread across the release window
+            // instead of every client hitting the persistent server's connect at once.
+            ReadyAt: CreateGoNowReleaseAt(IsHub)
+        };
+
+        logger.info(`${IsHub ? "Hub" : "Hunt"} '${EffectiveHuntId}' is online; synchronized Go Now release in ${SharedResult.ReadyAt - Date.now()}ms candidateId=${SharedResult.CandidateId} gameSessionId=${SharedResult.GameSessionId}`);
+
+        // [2026-07-17 hub party-follow fix] When a PARTY returns to a shared hub (Ramsgate/dojo), fan the
+        // destination out to EVERY member exactly like a party hunt, so all members follow the leader.
+        // Previously this path set ONLY the leader's result and DELETED PartyInstanceMap, so the other
+        // members polling POST /party (which reads GetPartyInstance) saw no instance and were stranded at
+        // the hunt island while only the leader got the airship (the reported bug). Storing the hub in
+        // PartyInstanceMap is safe: a later DIFFERENT hunt won't reuse it (HandlePartyMatchmaking requires a
+        // matching HuntId), and returning to the same hub again just refreshes it.
+        if(PartyId != undefined && PartyMembers != undefined && PartyMembers.length > 1){
+            PartyInstanceMap.set(PartyId, SharedResult);
+            PartyInstanceCreatedAtMap.set(PartyId, Date.now());
+            for(const Member of PartyMembers){
+                // Each client needs a fresh candidate to notice and consume this travel. Host,
+                // port, ReadyAt and GameSessionId remain shared so everyone lands together.
+                MatchmakingResultMap.set(Member, { ...SharedResult, CandidateId: crypto.randomUUID() });
+            }
         }
         else{
-            return await QueuePlayer(EffectiveHuntId, PlayerId);
+            if(PartyId != undefined){
+                PartyInstanceMap.delete(PartyId);
+                PartyInstanceCreatedAtMap.delete(PartyId);
+            }
+            MatchmakingResultMap.set(PlayerId, { ...SharedResult });
         }
+
+        return true;
     }
     else{
         logger.fatal("Unsupported MATCHMAKING_MODE!");
