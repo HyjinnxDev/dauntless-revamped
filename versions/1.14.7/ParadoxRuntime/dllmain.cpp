@@ -18551,6 +18551,7 @@ void InitClientHooks() {
     MpCrashReporterInstall();
     MpVoiceStart();
     MpJoinPromptStart();
+    MpWindowLockStart();
     // [1.14.7] +0x02657770 is an exception-text formatter, not the UE unhandled-exception
     // filter. Its ABI differs from UEUnhandledExceptionFilterHook, so do not detour it.
     MpLog("[ExitTrace] (client) UEUnhandledExceptionFilter hook skipped (1.14.7 target ABI mismatch)");
