@@ -33,6 +33,15 @@ int main() {
     const Rect All = FitRect(800.f, 600.f, 0.f);
     assert(Near(All.W, 800.f) && Near(All.H, 600.f));
     assert(Near(FovToMm(MmToFov(50.f)), 50.f) && fabsf(FovToMm(90.f) - 18.f) < 1e-3f);
+    Pose W; W[PX] = 300.f; W[PY] = -50.f; W[PZ] = 20.f; W[PYaw] = 45.f; W[PFov] = 60.f;
+    for (int Sp = 0; Sp <= 2; ++Sp) {                                           // key spaces round-trip
+        const Pose B = FromSpace(ToSpace(W, Sp, 100.f, 200.f, 5.f, 30.f), Sp, 100.f, 200.f, 5.f, 30.f);
+        for (int I = 0; I < PN; ++I) assert(Near(B[I], W[I]));
+    }
+    const Pose L = ToSpace(W, 2, 0.f, 0.f, 0.f, 90.f);                          // target turned 90: offset +x becomes -y
+    assert(Near(L[PX], -50.f) && Near(L[PY], -300.f) && Near(L[PYaw], -45.f) && Near(L[PFov], 60.f));
+    const Pose Moved = FromSpace(ToSpace(W, 1, 0.f, 0.f, 0.f, 0.f), 1, 1000.f, 0.f, 0.f, 77.f);   // space 1 ignores yaw
+    assert(Near(Moved[PX], 1300.f) && Near(Moved[PYaw], 45.f));
     for (float T = 0.f; T < 20.f; T += 0.37f) {                                 // shake: bounded, repeatable, off = 0
         const Pose A = ShakeAt(T, 5, 2.f, 1.5f), B = ShakeAt(T, 5, 2.f, 1.5f);
         assert(Near(A[PYaw], B[PYaw]) && fabsf(A[PYaw]) <= kShakes[5].Rot * 2.f + 1e-4f && fabsf(A[PZ]) <= kShakes[5].Pos * 2.f + 1e-4f);
@@ -51,6 +60,24 @@ int main() {
     assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 1", P, 7.f) && Near(P.P[PFocus], 12.5f) && P.Interp == 1);
     assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 9", P, 7.f) && P.Interp == 2); // bad interp clamps
     assert(!ParseKey("map Ramsgate", P, 7.f) && !ParseKey("key 1 2 3", P, 7.f));
+    assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 0 0.5 1", P, 7.f) && Near(P.Tension, 0.5f) && P.Aim == 1);
+    assert(ParseKey("key 2 1 2 3 4 5 6 7 12.5 0", P, 7.f) && P.Tension == 0.f && P.Aim == 0);   // older line
+
+    std::vector<Key> Bend = { K(0.f, 0.f), K(1.f, 100.f), K(2.f, 100.f), K(3.f, 0.f) };   // tension shapes the curve
+    Bend[1].P[PY] = 100.f; Bend[2].P[PY] = 200.f;
+    const float Loose = PathAt(Bend, 1.5f, false, false)[PX];
+    Bend[1].Tension = Bend[2].Tension = 1.f;                                    // tight: straight line between the two
+    assert(Near(PathAt(Bend, 1.5f, false, false)[PX], 100.f) && Loose > 100.f);
+    for (const Key& Q : Bend) assert(Near(PathAt(Bend, Q.Time, false, false)[PX], Q.P[PX]));   // still passes every key
+
+    std::vector<Key> Fly = { K(0.f, 0.f, 90.f), K(1.f, 0.f, 90.f) };             // along path: faces the travel direction
+    Fly[1].P[PY] = 100.f; Fly[1].P[PZ] = 100.f;
+    Fly[0].Aim = 1;
+    const Pose Mid = PathAt(Fly, 0.5f, false, false);
+    assert(fabsf(Mid[PYaw] - 90.f) < 1e-2f && Mid[PPitch] > 10.f && Mid[PPitch] < 80.f);
+    Fly[1].P[PX] = -100.f; Fly[1].P[PY] = 0.f; Fly[1].P[PZ] = 0.f;
+    assert(fabsf(fabsf(PathAt(Fly, 0.5f, false, false)[PYaw]) - 180.f) < 1e-2f);   // flying -x
+    assert(Near(PathAt(Fly, 1.f, false, false)[PYaw], 90.f));                    // the last key keeps its own angle
     puts("cinecam path ok");
     return 0;
 }

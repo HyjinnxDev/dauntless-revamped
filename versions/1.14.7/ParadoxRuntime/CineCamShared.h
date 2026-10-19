@@ -21,8 +21,11 @@ struct Key {
     Pose P;
     float Time = 0.f;                           // seconds from the start of the path
     int Interp = 0;                             // kInterps: how the camera gets from this key to the next
+    float Tension = 0.f;                        // smooth curve through this key: -1 wide and loose, 0 natural, 1 tight corner
+    int Aim = 0;                                // kAims: where the camera looks from this key to the next
 };
 inline constexpr const char* kInterps[] = { "Smooth", "Linear", "Hold" };
+inline constexpr const char* kAims[] = { "Key angles", "Along path" };
 
 enum class Mode { Off, Free, Tripod, Path, Follow };
 
@@ -55,8 +58,14 @@ struct Settings {
     int Preset = 0;
     float Exposure = 0.f, Temp = 6500.f, Tint = 0.f, Saturation = 1.f, Contrast = 1.f, Split = 0.f;
     float Vignette = 0.4f, Grain = 0.f, Fringe = 0.f, Bloom = 0.675f;
+    // World light: the map's own sun, sky light and height fog, scaled. Client-side, only you see it.
+    bool Light = false;
+    float SunMul = 1.f, SkyMul = 1.f, FogMul = 1.f;
+    float SunR = 1.f, SunG = 1.f, SunB = 1.f, FogR = 1.f, FogG = 1.f, FogB = 1.f;   // multiply the map's colours
+    float SunYaw = 0.f, SunPitch = 0.f;         // degrees added to the sun's angle (makes it movable)
     // Keyframes
     bool Loop = false, Ease = true, ShowPath = true, HideMenuOnPlay = true;
+    bool KeysOnTarget = false;                  // keys ride with the target (turning with it when FollowLocal)
     float Spacing = 3.f;                        // seconds added after the last key for a new one
     float PlaySpeed = 1.f;
     bool Countdown = true;                      // 3-2-1 on the first keyframe before a path plays
@@ -109,6 +118,8 @@ struct State {
     std::mutex Lock;
     Settings S;
     std::vector<Key> Keys;
+    int KeySpace = 0;                           // how Keys are stored (ToSpace); the game thread converts them to
+                                                // what Settings asks for whenever the target is known
     std::vector<Cmd> Cmds;
     // written by the game thread, read by the menu
     Mode M = Mode::Off;
@@ -135,8 +146,11 @@ extern State G;
 float PathLength(const std::vector<Key>& Keys);  // seconds
 Pose PathAt(const std::vector<Key>& Keys, float T, bool Ease, bool Loop);
 void EvenSpeed(std::vector<Key>& Keys);         // spread key times by distance, same total length
-// Saved shot line "key t x y z yaw pitch roll fov focus interp"; also reads the older 8-number lines (no focus /
-// interp: DefFocus, Smooth).
+// Key spaces (State::KeySpace): 0 world, 1 offset from the target, 2 offset that also turns with the target's yaw.
+Pose ToSpace(const Pose& World, int Space, float Tx, float Ty, float Tz, float TYaw);
+Pose FromSpace(const Pose& Local, int Space, float Tx, float Ty, float Tz, float TYaw);
+// Saved shot line "key t x y z yaw pitch roll fov focus interp tension aim"; also reads the older lines without
+// tension / aim (0) and without focus / interp (DefFocus, Smooth).
 bool ParseKey(const char* Line, Key& K, float DefFocus);
 
 // CineCamMenu.cpp

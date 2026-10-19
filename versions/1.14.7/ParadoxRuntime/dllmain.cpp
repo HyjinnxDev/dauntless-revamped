@@ -13241,7 +13241,10 @@ static const IniField kIni[] = {
     CINE_INI(GSocial, 'i'), CINE_INI(GCropMask, 'f'), CINE_INI(GOpacity, 'f'),
     CINE_INI(AimZ, 'f'), CINE_INI(FrameX, 'f'), CINE_INI(FrameY, 'f'), CINE_INI(FollowLocal, 'b'),
     CINE_INI(Shake, 'i'), CINE_INI(ShakeAmt, 'f'), CINE_INI(ShakeFreq, 'f'), CINE_INI(Target, 'i'),
-    CINE_INI(PlaySpeed, 'f'), CINE_INI(Countdown, 'b'), CINE_INI(PhotoScale, 'i'),
+    CINE_INI(PlaySpeed, 'f'), CINE_INI(Countdown, 'b'), CINE_INI(PhotoScale, 'i'), CINE_INI(KeysOnTarget, 'b'),
+    CINE_INI(Light, 'b'), CINE_INI(SunMul, 'f'), CINE_INI(SkyMul, 'f'), CINE_INI(FogMul, 'f'),
+    CINE_INI(SunR, 'f'), CINE_INI(SunG, 'f'), CINE_INI(SunB, 'f'), CINE_INI(FogR, 'f'), CINE_INI(FogG, 'f'),
+    CINE_INI(FogB, 'f'), CINE_INI(SunYaw, 'f'), CINE_INI(SunPitch, 'f'),
 };
 #undef CINE_INI
 
@@ -13379,7 +13382,127 @@ static void ScanTargets(SDK::APlayerController* PC, ULONGLONG Now) {
     }
 }
 
+// ---------------------------------------------------------------- world light
+// The map's sun (directional lights), sky lights and height fog, scaled from what it shipped with; only this client
+// sees it. Originals are read when it turns on and put back when it turns off. Moving the sun needs it Movable, so a
+// sun angle switches the light to Movable (baked shadows from a static sun may then double up) until it is off.
+struct Lit { Ref C; float I = 0.f; SDK::FColor Col{}; SDK::FLinearColor Fog{}; SDK::FRotator Rot{}; SDK::EComponentMobility Mob{}; };
+static std::vector<Lit> s_Suns, s_Skies, s_Fogs;
+static void* s_LitWorld = nullptr;
+static bool s_LitOn = false;
+static Settings s_LitDone;                 // what is applied now
+
+static SDK::UWorld* WorldOf(SDK::UObject* O) {
+    while (O && !O->IsA(SDK::UWorld::StaticClass())) O = O->Outer;
+    return static_cast<SDK::UWorld*>(O);
+}
+
+static void ScanLights(SDK::UWorld* World) {
+    s_Suns.clear(); s_Skies.clear(); s_Fogs.clear();
+    for (int I = 0, N = SDK::UObject::GObjects->Num(); I < N; ++I) {
+        SDK::UObject* O = SDK::UObject::GObjects->GetByIndex(I);
+        if (!O || O->IsDefaultObject() || WorldOf(O) != World) continue;
+        if (O->IsA(SDK::UDirectionalLightComponent::StaticClass())) {
+            auto* L = static_cast<SDK::UDirectionalLightComponent*>(O);
+            Lit& E = s_Suns.emplace_back();
+            E.C.Set(L); E.I = L->Intensity; E.Col = L->LightColor; E.Rot = L->K2_GetComponentRotation(); E.Mob = L->Mobility;
+        } else if (O->IsA(SDK::USkyLightComponent::StaticClass())) {
+            auto* L = static_cast<SDK::USkyLightComponent*>(O);
+            Lit& E = s_Skies.emplace_back();
+            E.C.Set(L); E.I = L->Intensity;
+        } else if (O->IsA(SDK::UExponentialHeightFogComponent::StaticClass())) {
+            auto* F = static_cast<SDK::UExponentialHeightFogComponent*>(O);
+            Lit& E = s_Fogs.emplace_back();
+            E.C.Set(F); E.I = F->FogDensity; E.Fog = F->FogInscatteringColor;
+        }
+    }
+    Log("world light: " + std::to_string(s_Suns.size()) + " sun(s), " + std::to_string(s_Skies.size()) + " sky light(s), "
+        + std::to_string(s_Fogs.size()) + " fog(s)");
+}
+
+// Off = the map's originals. Runs every frame; does nothing unless a light setting changed.
+static void ApplyLight(SDK::UWorld* World, Settings S) {
+    if (World != s_LitWorld) { s_LitWorld = World; s_LitOn = false; s_Suns.clear(); s_Skies.clear(); s_Fogs.clear(); }
+    if (!S.Light && !s_LitOn) return;
+    if (S.Light && !s_LitOn) { ScanLights(World); s_LitOn = true; s_LitDone = Settings{}; s_LitDone.Light = false; }
+    if (!S.Light) S = Settings{};                      // defaults = the map's own values
+    const Settings& D = s_LitDone;
+    if (S.Light == D.Light && S.SunMul == D.SunMul && S.SkyMul == D.SkyMul && S.FogMul == D.FogMul && S.SunR == D.SunR
+        && S.SunG == D.SunG && S.SunB == D.SunB && S.FogR == D.FogR && S.FogG == D.FogG && S.FogB == D.FogB
+        && S.SunYaw == D.SunYaw && S.SunPitch == D.SunPitch) return;
+    const bool Turn = S.SunYaw != 0.f || S.SunPitch != 0.f;
+    for (const Lit& E : s_Suns) {
+        auto* L = E.C.Get<SDK::UDirectionalLightComponent>();
+        if (!L) continue;
+        L->SetIntensity(E.I * S.SunMul);
+        L->SetLightColor(SDK::FLinearColor{ E.Col.R / 255.f * S.SunR, E.Col.G / 255.f * S.SunG, E.Col.B / 255.f * S.SunB, 1.f }, false);
+        if (Turn && L->Mobility != SDK::EComponentMobility::Movable) L->SetMobility(SDK::EComponentMobility::Movable);
+        if (Turn || D.SunYaw != 0.f || D.SunPitch != 0.f)
+            L->K2_SetWorldRotation(SDK::FRotator{ E.Rot.Pitch + S.SunPitch, E.Rot.Yaw + S.SunYaw, E.Rot.Roll }, false, nullptr, true);
+        if (!Turn && L->Mobility != E.Mob) L->SetMobility(E.Mob);
+    }
+    for (const Lit& E : s_Skies) if (auto* L = E.C.Get<SDK::USkyLightComponent>()) L->SetIntensity(E.I * S.SkyMul);
+    for (const Lit& E : s_Fogs) {
+        auto* F = E.C.Get<SDK::UExponentialHeightFogComponent>();
+        if (!F) continue;
+        F->SetFogDensity(E.I * S.FogMul);
+        F->SetFogInscatteringColor(SDK::FLinearColor{ E.Fog.R * S.FogR, E.Fog.G * S.FogG, E.Fog.B * S.FogB, E.Fog.A });
+    }
+    s_LitDone = S;
+    if (!S.Light) s_LitOn = false;
+}
+
+// [2026-10-18] Ramsgate streams sublevels (top island, plazas) in and out around the character; a hidden
+// sublevel takes its rams and fences with it. While the camera is on, every Ramsgate area sublevel is loaded and
+// shown, and any other sublevel the game has shown stays shown, all with distance streaming off. Seasonal sets
+// are not ramsgate_01_* and are never forced. Turning the camera off puts each level back as it was.
+// ponytail: area sublevels matched by name; other hubs only get "stay shown" until they need their own list.
+static bool IsRamsgateArea(SDK::ULevelStreaming* L) {
+    const std::string N = L->GetWorldAssetPackageFName().ToString();
+    return N.find("ramsgate_01_") != std::string::npos && N.find("_persistent") == std::string::npos && N.find("_temp") == std::string::npos;
+}
+
+static void HoldLevels(SDK::UWorld* World, bool On) {
+    struct Was { bool NoDistance, Loaded, Visible; };
+    static void* s_World = nullptr;
+    static std::unordered_map<SDK::ULevelStreaming*, Was> s_Held;
+    static std::unordered_map<SDK::ULevelStreaming*, bool> s_Area;
+    if (World != s_World) { s_World = World; s_Held.clear(); s_Area.clear(); }
+    if (!On) {
+        if (s_Held.empty()) return;
+        for (SDK::ULevelStreaming* L : World->StreamingLevels) {
+            auto It = L ? s_Held.find(L) : s_Held.end();
+            if (It == s_Held.end()) continue;
+            L->bDisableDistanceStreaming = It->second.NoDistance;
+            if (!It->second.Visible) L->SetShouldBeVisible(false);
+            if (!It->second.Loaded) L->SetShouldBeLoaded(false);
+        }
+        Log("let go of " + std::to_string(s_Held.size()) + " streaming levels");
+        s_Held.clear();
+        return;
+    }
+    const size_t Before = s_Held.size();
+    for (SDK::ULevelStreaming* L : World->StreamingLevels) {
+        if (!L) continue;
+        if (!s_Held.count(L)) {
+            auto A = s_Area.find(L);
+            if (A == s_Area.end()) A = s_Area.emplace(L, IsRamsgateArea(L)).first;
+            if (!A->second && !L->IsLevelVisible()) continue;
+            s_Held[L] = Was{ L->bDisableDistanceStreaming != 0, L->bShouldBeLoaded != 0, L->bShouldBeVisible != 0 };
+        }
+        L->bDisableDistanceStreaming = 1;
+        if (!L->bShouldBeLoaded) L->SetShouldBeLoaded(true);
+        if (!L->bShouldBeVisible) L->SetShouldBeVisible(true);
+    }
+    if (s_Held.size() != Before) Log("holding " + std::to_string(s_Held.size()) + " streaming levels");
+}
+
 struct Aim { SDK::FVector P{}; float Yaw = 0.f; bool Ok = false; std::string Name; };
+
+// Keys follow the target (State::KeySpace): stored relative to it, placed where it is this frame.
+static int s_KeySpace = 0;
+static Pose KeyToWorld(const Pose& P, int Space, const Aim& T) { return FromSpace(P, Space, T.P.X, T.P.Y, T.P.Z, T.Yaw); }
+static Pose KeyFromWorld(const Pose& P, int Space, const Aim& T) { return ToSpace(P, Space, T.P.X, T.P.Y, T.P.Z, T.Yaw); }
 
 // Where the camera aims this frame: the chosen target's position + aim height. Falls back to my character.
 static Aim TargetOf(SDK::APlayerController* PC, const Settings& S) {
@@ -13599,7 +13722,7 @@ static void Drive(SDK::APlayerController* PC, float Dt, Settings& S, const std::
             const bool Done = !S.Loop && s_PathT >= End;
             if (Done) s_PathT = End;
             else if (S.Loop && End > Start && s_PathT >= End) s_PathT = Start + fmodf(s_PathT - Start, End - Start);
-            s_Target = PathAt(Keys, s_PathT, S.Ease, S.Loop);
+            s_Target = KeyToWorld(PathAt(Keys, s_PathT, S.Ease, S.Loop), s_KeySpace, T);
             if (Done) EndPath(S);
         }
     } else {
@@ -13673,8 +13796,8 @@ static void Run(SDK::APlayerController* PC, const Cmd& C, Settings& S, const std
         if (S.HideMenuOnPlay && G.MenuOpen.load()) { G.MenuOpen = false; s_ReopenMenu = true; }
         break;
     case CmdType::Stop: if (s_Mode == Mode::Path) EndPath(S); break;
-    case CmdType::GoToKey: if (On && C.I >= 0 && C.I < static_cast<int>(Keys.size())) JumpTo(PC, S, Keys[C.I].P, Keys[C.I].Time); break;
-    case CmdType::Preview: if (On && !Keys.empty()) JumpTo(PC, S, PathAt(Keys, C.F, S.Ease, false), C.F); break;
+    case CmdType::GoToKey: if (On && C.I >= 0 && C.I < static_cast<int>(Keys.size())) JumpTo(PC, S, KeyToWorld(Keys[C.I].P, s_KeySpace, T), Keys[C.I].Time); break;
+    case CmdType::Preview: if (On && !Keys.empty()) JumpTo(PC, S, KeyToWorld(PathAt(Keys, C.F, S.Ease, false), s_KeySpace, T), C.F); break;
     case CmdType::ToggleHud: SetHudHidden(PC, !g_MpHudHidden); break;
     case CmdType::Photo: {
         const std::wstring Line = L"HighResShot " + std::to_wstring((std::clamp)(C.I, 1, 4));
@@ -13706,8 +13829,9 @@ static void Run(SDK::APlayerController* PC, const Cmd& C, Settings& S, const std
 }
 
 // Path line and keyframe markers on screen, for the menu to draw.
-static void Project(SDK::APlayerController* PC, const std::vector<Key>& Keys, std::vector<Point>& Path, std::vector<Point>& Marks) {
-    auto At = [&](const Pose& Q) {
+static void Project(SDK::APlayerController* PC, const std::vector<Key>& Keys, const Aim& T, std::vector<Point>& Path, std::vector<Point>& Marks) {
+    auto At = [&](const Pose& Stored) {
+        const Pose Q = KeyToWorld(Stored, s_KeySpace, T);
         SDK::FVector2D Sc{};
         const bool On = PC->ProjectWorldLocationToScreen(SDK::FVector{ Q[PX], Q[PY], Q[PZ] }, &Sc, false);
         return Point{ Sc.X, Sc.Y, On };
@@ -13806,6 +13930,7 @@ static void Update() {
 
     if (!OwnerOnly(PC, Now)) {                          // locked: undo anything still on, then nothing
         if (s_Mode != Mode::Off) Stop(PC);
+        ApplyLight(World, Settings{});
         if (g_MpHudHidden) SetHudHidden(PC, false);
         G.MenuOpen = false;
         G.GuidesShown = false;
@@ -13835,38 +13960,51 @@ static void Update() {
         if (Pressed('L')) Cmds.push_back(Cmd{ CmdType::Play });
     }
 
-    // snapshot; keyframe edits that need the camera's pose happen here, on the shared list
+    // snapshot
     Settings S;
     std::vector<Key> Keys;
     {
         std::lock_guard<std::mutex> Lk(G.Lock);
         Cmds.insert(Cmds.begin(), G.Cmds.begin(), G.Cmds.end());
         G.Cmds.clear();
-        for (const Cmd& C : Cmds) {
-            if (s_Mode == Mode::Off) break;
-            if (C.T == CmdType::AddKey) {
-                G.Keys.push_back(Key{ s_Target, G.Keys.empty() ? 0.f : G.Keys.back().Time + G.S.Spacing });
-                Log("keyframe " + std::to_string(G.Keys.size()));
-            } else if (C.T == CmdType::UpdateKey && C.I >= 0 && C.I < static_cast<int>(G.Keys.size())) {
-                G.Keys[C.I].P = s_Target;
-            }
-        }
-        if (PopKey && !G.Keys.empty()) G.Keys.pop_back();
         if (TrackFlip) G.S.Track = !G.S.Track;
         if (GuideFlip) G.S.Guides = !G.S.Guides;
         S = G.S;
-        Keys = G.Keys;
     }
     const float Fov = S.Fov, Roll = S.Roll, Focus = S.Focus;
 
     if (s_Mode != Mode::Off || MenuVisible()) ScanTargets(PC, Now);
     const Aim T = TargetOf(PC, S);
+
+    // keyframe edits that need the camera's pose or the target happen here, on the shared list
+    {
+        std::lock_guard<std::mutex> Lk(G.Lock);
+        const int Want = G.S.KeysOnTarget ? (G.S.FollowLocal ? 2 : 1) : 0;
+        if (G.KeySpace != Want && (T.Ok || G.Keys.empty())) {   // re-anchor the keys where the camera sees them now
+            for (Key& K : G.Keys) K.P = KeyFromWorld(KeyToWorld(K.P, G.KeySpace, T), Want, T);
+            G.KeySpace = Want;
+        }
+        for (const Cmd& C : Cmds) {
+            if (s_Mode == Mode::Off) break;
+            if (C.T == CmdType::AddKey) {
+                G.Keys.push_back(Key{ KeyFromWorld(s_Target, G.KeySpace, T), G.Keys.empty() ? 0.f : G.Keys.back().Time + G.S.Spacing });
+                Log("keyframe " + std::to_string(G.Keys.size()));
+            } else if (C.T == CmdType::UpdateKey && C.I >= 0 && C.I < static_cast<int>(G.Keys.size())) {
+                G.Keys[C.I].P = KeyFromWorld(s_Target, G.KeySpace, T);
+            }
+        }
+        if (PopKey && !G.Keys.empty()) G.Keys.pop_back();
+        Keys = G.Keys;
+        s_KeySpace = G.KeySpace;
+    }
     for (const Cmd& C : Cmds) Run(PC, C, S, Keys, T);
+    ApplyLight(World, S);
+    HoldLevels(World, s_Mode != Mode::Off);
     KeepHudHidden(PC, Now);
     UpdateCursor(PC, Now);
     if (s_Mode != Mode::Off) Drive(PC, Dt, S, Keys, T);
     std::vector<Point> PathPts, KeyPts;
-    if (MenuVisible() && S.ShowPath && s_Mode != Mode::Path) Project(PC, Keys, PathPts, KeyPts);
+    if (MenuVisible() && S.ShowPath && s_Mode != Mode::Path) Project(PC, Keys, T, PathPts, KeyPts);
 
     Settings Now_S;
     {
