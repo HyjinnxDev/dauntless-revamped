@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import { GetMongoDb } from "./persistence/mongo/client";
 import { Collections } from "./persistence/mongo/collections";
 import type { FriendEdgeRecord, FriendshipRepository } from "./persistence/contracts/FriendshipRepository";
+import { AllowedNameStyles, GameNameTag, type NameStyle } from "./security/staffRoles";
 
 // [Revamped 2026-10-17] Several characters per launcher account.
 //
@@ -27,6 +28,7 @@ export interface CharacterSlotRow {
     createdAt: string;
     lastLaunchedAt?: string;
     label?: string;         // launcher-only name; the game always shows the account name
+    nameStyle?: NameStyle;  // Patreon name style (security/staffRoles.ts NAME_STYLES)
 }
 
 export const MAX_LABEL_LENGTH = 24;
@@ -107,6 +109,21 @@ export async function SetLabel(ownerUserId: string, row: CharacterSlotRow, label
         { $set: { ownerUserId, slot: row.slot, label }, $setOnInsert: { createdAt: row.createdAt || new Date().toISOString() } },
         { upsert: true }
     );
+}
+
+export async function SetNameStyle(ownerUserId: string, row: CharacterSlotRow, nameStyle: NameStyle | null): Promise<void> {
+    await (await Slots()).updateOne(
+        { _id: row._id },
+        { $set: { ownerUserId, slot: row.slot, ...(nameStyle ? { nameStyle } : {}) }, ...(nameStyle ? {} : { $unset: { nameStyle: "" } }), $setOnInsert: { createdAt: row.createdAt || new Date().toISOString() } },
+        { upsert: true }
+    );
+}
+
+/** The tags the game shows before a character's name: staff tag plus its name style (GameNameTag). */
+export async function GameNameTagFor(roles: readonly string[], gameUserId: string): Promise<string> {
+    if (AllowedNameStyles(roles).length === 0) return GameNameTag(roles, undefined);
+    const Row = await (await Slots()).findOne({ _id: { $eq: gameUserId } });
+    return GameNameTag(roles, Row?.nameStyle);
 }
 
 /** owner -> the character they launched last (what friends see). Owners never launched map to themselves. */

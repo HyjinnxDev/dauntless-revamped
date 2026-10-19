@@ -33,7 +33,7 @@ import type {
   Snapshot,
   TaskProgress,
 } from "../shared/types";
-import { GAME_LANGUAGES, LANGUAGES } from "../shared/types";
+import { GAME_LANGUAGES, LANGUAGES, type NameStyle } from "../shared/types";
 import type { Endpoint } from "./http";
 import {
   fetchBrandingImage,
@@ -53,6 +53,7 @@ import {
   listCharacters,
   createCharacter as apiCreateCharacter,
   renameCharacter as apiRenameCharacter,
+  setCharacterNameStyle as apiSetCharacterNameStyle,
   deleteCharacter as apiDeleteCharacter,
   type CharactersResult,
   type ApiFailure,
@@ -303,6 +304,7 @@ export class Controller {
         characters: this.account?.characters?.characters ?? [],
         maxCharacters: this.account?.characters?.max ?? 1,
         character: this.account ? this.chosenCharacter() : null,
+        nameStyles: this.account?.characters?.nameStyles ?? [],
       },
       install: {
         dir: this.installDir,
@@ -805,6 +807,10 @@ export class Controller {
 
   renameCharacter(slot: number, label: string): Promise<ActionResult> {
     return this.characterAction(`character ${slot} renamed`, (ep, token) => apiRenameCharacter(ep, token, slot, label));
+  }
+
+  setCharacterNameStyle(slot: number, style: NameStyle | null): Promise<ActionResult> {
+    return this.characterAction(`character ${slot} name style ${style ?? "normal"}`, (ep, token) => apiSetCharacterNameStyle(ep, token, slot, style));
   }
 
   deleteCharacter(slot: number, confirmLabel: string): Promise<ActionResult> {

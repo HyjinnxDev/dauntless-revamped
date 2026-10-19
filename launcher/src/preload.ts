@@ -41,6 +41,7 @@ const api = {
   selectCharacter: (slot: number): Promise<void> => ipcRenderer.invoke(IPC.selectCharacter, Number(slot)),
   createCharacter: (label: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.createCharacter, String(label)),
   renameCharacter: (slot: number, label: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.renameCharacter, Number(slot), String(label)),
+  setCharacterNameStyle: (slot: number, style: string | null): Promise<ActionResult> => ipcRenderer.invoke(IPC.setCharacterNameStyle, Number(slot), style === null ? null : String(style)),
   deleteCharacter: (slot: number, confirmLabel: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.deleteCharacter, Number(slot), String(confirmLabel)),
   setSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke(IPC.setSettings, {

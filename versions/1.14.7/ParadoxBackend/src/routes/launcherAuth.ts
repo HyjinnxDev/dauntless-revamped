@@ -26,7 +26,7 @@ import {
     CheckUsernameAvailable,
     SetUsername
 } from "../controllers/launcherAuth";
-import { CreateCharacter, DeleteCharacter, ListCharacters, RenameCharacter } from "../controllers/characters";
+import { CreateCharacter, DeleteCharacter, ListCharacters, RenameCharacter, SetCharacterNameStyle } from "../controllers/characters";
 import { StartDiscordAuth, HandleDiscordCallback, CompleteDiscordLogin } from "../controllers/discordAuth";
 import { GetLauncherPolicy } from "../controllers/launcherPolicy";
 import { ParseRuntimeChannel } from "../security/runtimeAuthorization";
@@ -242,6 +242,10 @@ launcherAuthRouter.post("/launcher/v1/characters", HasLauncherAuth, (req, res) =
 
 launcherAuthRouter.patch("/launcher/v1/characters/:slot", HasLauncherAuth, (req, res) =>
     Handle(req, res, () => RenameCharacter((req as any).LauncherAuthData.userId, req.params.slot, req.body?.label))
+);
+
+launcherAuthRouter.patch("/launcher/v1/characters/:slot/name-style", HasLauncherAuth, (req, res) =>
+    Handle(req, res, () => SetCharacterNameStyle((req as any).LauncherAuthData.userId, req.params.slot, req.body?.style ?? null))
 );
 
 launcherAuthRouter.delete("/launcher/v1/characters/:slot", HasLauncherAuth, (req, res) =>

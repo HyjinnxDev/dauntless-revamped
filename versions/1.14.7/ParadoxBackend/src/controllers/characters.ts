@@ -18,7 +18,8 @@ import { sessionRegistry } from "../realtime/SessionRegistry";
 import { AnnounceCharacterSwitch } from "../realtime/friendEvents";
 import { logger } from "../logger";
 import { GetTrackCurve } from "./progression";
-import { ActiveCharacters, CharacterSlotRow, CleanLabel, InsertNextSlot, LabelOf, ListSlots, MaxCharacterSlots, RankForXp, SetLabel } from "../characterSlots";
+import { ActiveCharacters, CharacterSlotRow, CleanLabel, InsertNextSlot, LabelOf, ListSlots, MaxCharacterSlots, RankForXp, SetLabel, SetNameStyle } from "../characterSlots";
+import { AllowedNameStyles, IsNameStyle, type NameStyle } from "../security/staffRoles";
 
 // [Revamped 2026-10-17] The launcher's character list (src/characterSlots.ts): create, rename, delete.
 // Each character is its own game save; slot 1 is the account's own and can't be deleted.
@@ -29,6 +30,7 @@ export interface CharacterView {
     level: number;
     lastPlayedAt: string | null;
     online: boolean;
+    nameStyle: NameStyle | null;   // only while the account may still wear it
 }
 
 const PLAYER_LEVEL_TRACK = "MasteryTrack_PlayerLevel";
@@ -56,18 +58,21 @@ async function PlayerLevel(gameUserId: string): Promise<number> {
     return Curve ? Math.max(1, RankForXp(Curve.cumulativeXpForRank, Xp)) : 1;
 }
 
-export async function ListCharacters(userId: string): Promise<{ max: number; lastSlot: number; characters: CharacterView[] }> {
+export async function ListCharacters(userId: string): Promise<{ max: number; lastSlot: number; nameStyles: NameStyle[]; characters: CharacterView[] }> {
     const Rows = await ListSlots(userId);
+    const Allowed = AllowedNameStyles((await GetRepositories().launcherAccounts.findByUserId(userId))?.roles ?? []);
     const Active = (await ActiveCharacters([userId])).get(userId);
     return {
         max: MaxCharacterSlots(),
         lastSlot: Rows.find((Row) => Row._id === Active)?.slot ?? 1,
+        nameStyles: Allowed,
         characters: await Promise.all(Rows.map(async (Row) => ({
             slot: Row.slot,
             label: LabelOf(Row),
             level: await PlayerLevel(Row._id),
             lastPlayedAt: Row.lastLaunchedAt ?? null,
-            online: sessionRegistry.isOnline(Row._id)
+            online: sessionRegistry.isOnline(Row._id),
+            nameStyle: Row.nameStyle && Allowed.includes(Row.nameStyle) ? Row.nameStyle : null
         })))
     };
 }
@@ -110,6 +115,19 @@ export async function RenameCharacter(userId: string, slot: unknown, rawLabel: u
         throw new LauncherApiError("AUTH_RATE_LIMITED", "Too many attempts. Try again later.");
     }
     await SetLabel(userId, await SlotOf(userId, slot), Label);
+    return ListCharacters(userId);
+}
+
+// null clears it. The game picks the new tag up on its next name lookup (next map load at the latest).
+export async function SetCharacterNameStyle(userId: string, slot: unknown, rawStyle: unknown): Promise<Awaited<ReturnType<typeof ListCharacters>>> {
+    const Account = await EligibleAccount(userId);
+    if (rawStyle !== null && !(IsNameStyle(rawStyle) && AllowedNameStyles(Account.roles).includes(rawStyle))) {
+        throw new LauncherApiError("AUTH_VALIDATION_FAILED", "That name style isn't unlocked on this account.");
+    }
+    if (IsRateLimited(`character-style:${userId}`, 30, 60 * 60 * 1000)) {
+        throw new LauncherApiError("AUTH_RATE_LIMITED", "Too many attempts. Try again later.");
+    }
+    await SetNameStyle(userId, await SlotOf(userId, slot), rawStyle);
     return ListCharacters(userId);
 }
 

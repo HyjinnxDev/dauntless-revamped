@@ -18,7 +18,7 @@ import { checkUsername, isValidPassword } from "../shared/username";
 import { primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
 import { formatBytes, formatDate, formatRunningTime } from "../shared/format";
 import { sortInstances, type InstanceKind, type ServerStatus, type StatusInstance } from "../shared/status";
-import { CHARACTER_LABEL_MAX, GAME_LANGUAGES, LANGUAGES, type Branding, type CharacterInfo, type ExternalTarget, type GameLanguage, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
+import { CHARACTER_LABEL_MAX, GAME_LANGUAGES, LANGUAGES, type Branding, type CharacterInfo, type NameStyle, type ExternalTarget, type GameLanguage, type Language, type LauncherError, type NewsItem, type Snapshot, type TaskProgress } from "../shared/types";
 
 type View = "play" | "news" | "server" | "settings" | "credits";
 const VIEWS: readonly View[] = ["play", "news", "server", "settings", "credits"];
@@ -749,7 +749,23 @@ function characterPicker(snap: Snapshot): HTMLElement | null {
         chosen.slot > 1 ? linkButton(t("character_delete"), () => showModal({ kind: "character_delete", slot: chosen.slot, label: chosen.label }), { icon: "warning", fk: "character-delete", disabled: locked || chosen.online }) : null,
       )
     : null;
-  return h("div", { class: "character-picker" }, cards, actions);
+  return h("div", { class: "character-picker" }, cards, actions, chosen ? nameStylePicker(snap, chosen, locked) : null);
+}
+
+const NAME_STYLE_LABELS: Record<NameStyle, string> = { wanderer: "Wanderer", scout: "Scout", slayer: "Slayer", legend: "Legend", emerald: "Owner" };
+
+// The chosen character's in-game name style; only once the account has one unlocked.
+function nameStylePicker(snap: Snapshot, c: CharacterInfo, locked: boolean): HTMLElement | null {
+  if (snap.account.nameStyles.length === 0) return null;
+  const select = dropdown<NameStyle | "normal">({
+    id: "name-style-select",
+    fk: "name-style",
+    value: c.nameStyle ?? "normal",
+    options: [{ value: "normal", label: t("name_style_normal") }, ...snap.account.nameStyles.map((s) => ({ value: s, label: NAME_STYLE_LABELS[s] }))],
+    onChange: (v) => void api.setCharacterNameStyle(c.slot, v === "normal" ? null : v),
+    disabled: locked,
+  });
+  return h("div", { class: "name-style-row" }, h("label", { class: "settings-row-title", for: "name-style-select" }, t("name_style")), select);
 }
 
 function playRunning(snap: Snapshot): HTMLElement[] {

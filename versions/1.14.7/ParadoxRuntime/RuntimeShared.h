@@ -53,6 +53,8 @@ void MpJoinPromptStart();
 bool MpJoinPromptTakeOffer(std::string& Text);
 bool MpJoinPromptTakeNotice(std::string& Text);
 void MpJoinPromptAnswer(bool Join);
+// WindowLock.cpp: keeps the player's window size/position/border across map loads (client).
+void MpWindowLockStart();
 // Game thread -> voice threads: the game's Audio "Voice chat" toggle and voice chat volume (0..1).
 void MpVoiceApplySettings(bool enabled, float volume);
 // Game thread -> voice threads: the Bindings "Push to Talk" key (a VK code, 0 = unusable) and the Audio Open Mic toggle.
