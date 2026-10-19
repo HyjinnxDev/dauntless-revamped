@@ -19,17 +19,8 @@ const MATCHMAKING_MODE = process.env.MATCHMAKING_MODE;
 const DEPLOYSERVER_URL = process.env.DEPLOYSERVER_URL;
 const DEPLOYSERVER_MATCHMAKING_PATH = "/api/matchmaker/handle-matchmaking-for-player";
 
-// [2026-10-19] One public matchmaking queue per hunt id. Groups are a solo player or a whole party; Players
-// is every member, in order. The queue launches when it reaches 4 players or has waited PUBLIC_MATCH_WAIT_MS.
-type MatchmakingQueueGroup = { PartyId?: string, Members: string[] };
-type MatchmakingQueueData = {
-    Players: string[],
-    Groups: MatchmakingQueueGroup[],
-    FirstQueuedAt: number,
-    Resolved: boolean
-};
-const PUBLIC_MATCH_WAIT_MS = Number(process.env.PUBLIC_MATCH_WAIT_MS ?? "60000");
-const PUBLIC_MATCH_MAX_PLAYERS = 4;
+// [2026-10-19] A solo player or a whole party travelling together to a public hunt.
+type PublicMatchGroup = { PartyId?: string, Members: string[] };
 
 export type MatchmakingResult = {
     Ready: boolean,
@@ -45,7 +36,6 @@ export type MatchmakingResult = {
     ReadyAt: number
 };
 
-let MatchmakingQueueMap: Map<string, MatchmakingQueueData> = new Map<string, MatchmakingQueueData>(); // Key is HuntID
 let MatchmakingResultMap: Map<string, MatchmakingResult> = new Map<string, MatchmakingResult>(); // Key is PlayerID
 let PartyInstanceMap: Map<string, MatchmakingResult> = new Map<string, MatchmakingResult>(); // Key is PartyID — the party's shared hunt instance
 let PartyInstanceCreatedAtMap: Map<string, number> = new Map<string, number>(); // Key is PartyID — epoch ms the shared instance above was created (fan-out window)
@@ -245,40 +235,15 @@ async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, Hunt
 // Every member of a group gets the same server; a party also gets its shared instance so members polling
 // POST /party follow, exactly like a party hunt launched directly.
 // A server that is already running needs no warm-up, so joiners get the short hub release.
-function ReleaseGroupsTo(HuntId: string, Groups: MatchmakingQueueGroup[], Host: string, Port: number, AlreadyRunning: boolean = false){
+function ReleaseGroupTo(HuntId: string, Group: PublicMatchGroup, Host: string, Port: number, AlreadyRunning: boolean){
     const GameSessionId = crypto.randomUUID();
     const Shared: MatchmakingResult = { Ready: true, CandidateId: GameSessionId, GameSessionId, HuntId, Host, Port, ReadyAt: CreateGoNowReleaseAt(AlreadyRunning) };
-    for (const Group of Groups) {
-        if (Group.PartyId != undefined && Group.Members.length > 1) {
-            PartyInstanceMap.set(Group.PartyId, Shared);
-            PartyInstanceCreatedAtMap.set(Group.PartyId, Date.now());
-        }
-        for (const Member of Group.Members) MatchmakingResultMap.set(Member, { ...Shared, CandidateId: crypto.randomUUID() });
+    if (Group.PartyId != undefined && Group.Members.length > 1) {
+        PartyInstanceMap.set(Group.PartyId, Shared);
+        PartyInstanceCreatedAtMap.set(Group.PartyId, Date.now());
     }
+    for (const Member of Group.Members) MatchmakingResultMap.set(Member, { ...Shared, CandidateId: crypto.randomUUID() });
     return Shared;
-}
-
-async function PopQueue(HuntId: string){
-    const MatchmakingQueue = MatchmakingQueueMap.get(HuntId);
-
-    if(MatchmakingQueue == undefined || MatchmakingQueue.Resolved){
-        return;
-    }
-
-    MatchmakingQueue.Resolved = true;
-    MatchmakingQueueMap.delete(HuntId);
-    // Cancelled members were already removed from Groups (CancelPlayerMatchmaking).
-    const Groups = MatchmakingQueue.Groups.filter((Group) => Group.Members.length > 0);
-    const Players = Groups.flatMap((Group) => Group.Members);
-    if (Players.length === 0) return;
-
-    const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, Players, false);
-    if (!GameOnDeployServer.succeeded) {
-        CancelHuntMatchmaking(HuntId, Players, "DEDICATED_HUNT_DISABLED");
-        return;
-    }
-    const Shared = ReleaseGroupsTo(HuntId, Groups, GameOnDeployServer.host, GameOnDeployServer.port);
-    logger.info(`[PublicMatch] hunt '${HuntId}' launched for ${Players.length} queued player(s) in ${Groups.length} group(s) after ${Date.now() - MatchmakingQueue.FirstQueuedAt}ms; Go Now in ${Shared.ReadyAt - Date.now()}ms`);
 }
 
 export async function CheckAndUpdateQueueStatus(PlayerId: string){
@@ -297,52 +262,24 @@ export async function CheckAndUpdateQueueStatus(PlayerId: string){
         return ExtensionStatus;
     }
 
-    if(!PlayerMatchmakingResult.Ready && !PlayerMatchmakingResult.Canceled){
-        const MatchmakingQueue = MatchmakingQueueMap.get(PlayerMatchmakingResult.HuntId);
-
-        if(MatchmakingQueue != undefined && Date.now() - MatchmakingQueue.FirstQueuedAt >= PUBLIC_MATCH_WAIT_MS){
-            await PopQueue(PlayerMatchmakingResult.HuntId);
-        }
-    }
-
     return ClientVisibleResult(MatchmakingResultMap.get(PlayerId)!);
 }
 
-// Public hunt: join a running public hunt with room, else wait in this hunt's queue (merging with anyone else
-// who queues) until it has 4 players or has waited PUBLIC_MATCH_WAIT_MS, then launch a public server.
-async function JoinOrQueuePublicHunt(HuntId: string, Group: MatchmakingQueueGroup){
-    // A party member following the leader: the whole party is already queued (or its launch is in flight).
-    if (Group.Members.some((Member) => {
-        const Result = MatchmakingResultMap.get(Member);
-        return Result != undefined && Result.HuntId === HuntId && !Result.Ready && !Result.Canceled;
-    })) {
-        return true;
-    }
-    const Queued = MatchmakingQueueMap.get(HuntId);
-
+// Public hunt: join a running public hunt with room, else launch a new public one now that later players can join.
+// [2026-10-19] No waiting queue: a 60 s wait for 4 players left duos "searching" and, when one member cancelled,
+// launched the rest of the party alone.
+async function JoinOrLaunchPublicHunt(HuntId: string, Group: PublicMatchGroup){
     const Joined = await JoinPublicHuntOnDeployserver(HuntId, Group.Members);
     if (Joined != undefined) {
-        ReleaseGroupsTo(HuntId, [Group], Joined.host, Joined.port, true);
+        ReleaseGroupTo(HuntId, Group, Joined.host, Joined.port, true);
         logger.info(`[PublicMatch] ${Group.Members.length} player(s) joined running public hunt '${HuntId}' ${Joined.host}:${Joined.port}`);
         return true;
     }
 
-    // Doesn't fit the waiting queue: launch that one now with whoever it has, and start a new queue.
-    if (Queued != undefined && Queued.Players.length + Group.Members.length > PUBLIC_MATCH_MAX_PLAYERS) {
-        void PopQueue(HuntId);
-    }
-    const Queue = MatchmakingQueueMap.get(HuntId) ?? { Players: [], Groups: [], FirstQueuedAt: Date.now(), Resolved: false };
-    Queue.Groups.push({ PartyId: Group.PartyId, Members: [...Group.Members] });
-    Queue.Players.push(...Group.Members);
-    MatchmakingQueueMap.set(HuntId, Queue);
-
-    const GameSessionId = crypto.randomUUID();
-    for (const Member of Group.Members) {
-        MatchmakingResultMap.set(Member, { Ready: false, CandidateId: crypto.randomUUID(), GameSessionId, HuntId, Host: "", Port: 0, ReadyAt: 0 });
-    }
-    logger.info(`[PublicMatch] ${Group.Members.length} player(s) queued for '${HuntId}' (${Queue.Players.length}/${PUBLIC_MATCH_MAX_PLAYERS})`);
-
-    if (Queue.Players.length >= PUBLIC_MATCH_MAX_PLAYERS) await PopQueue(HuntId);
+    const Launched = await LaunchGameOnDeployserver("ISLAND", "", HuntId, Group.Members, false);
+    if (!Launched.succeeded) return false;
+    const Shared = ReleaseGroupTo(HuntId, Group, Launched.host, Launched.port, false);
+    logger.info(`[PublicMatch] launched public hunt '${HuntId}' ${Launched.host}:${Launched.port} for ${Group.Members.length} player(s); Go Now in ${Shared.ReadyAt - Date.now()}ms`);
     return true;
 }
 
@@ -380,7 +317,7 @@ async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId:
     }
 
     if(!IsPrivate){
-        return await JoinOrQueuePublicHunt(HuntId, { PartyId, Members: PartyMembers });
+        return await JoinOrLaunchPublicHunt(HuntId, { PartyId, Members: PartyMembers });
     }
 
     const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, PartyMembers);
@@ -491,10 +428,6 @@ export function CancelPlayerMatchmaking(PlayerId: string, PartyId?: string): Mat
     CancelledAtMap.set(PlayerId, Date.now());
     const Own = MatchmakingResultMap.get(PlayerId);
     MatchmakingResultMap.delete(PlayerId);
-    for (const Queue of MatchmakingQueueMap.values()) {
-        Queue.Players = Queue.Players.filter((Id) => Id !== PlayerId);
-        for (const Group of Queue.Groups) Group.Members = Group.Members.filter((Id) => Id !== PlayerId);
-    }
     if (Own == undefined || IsHubDestination("", Own.HuntId)) return Own;
 
     const Instance = PartyId != undefined ? PartyInstanceMap.get(PartyId) : undefined;
@@ -556,9 +489,9 @@ export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string
             return await HandlePartyMatchmaking(EffectiveHuntId, PlayerId, PartyId, PartyMembers, IsPrivate);
         }
 
-        // [2026-10-19] A solo player on a public (not Private Hunt) hunt matchmakes; see JoinOrQueuePublicHunt.
+        // [2026-10-19] A solo player on a public (not Private Hunt) hunt matchmakes; see JoinOrLaunchPublicHunt.
         if(!IsHubDestination(GameMode, EffectiveHuntId) && EffectiveHuntId.trim().length > 0 && !IsPrivate){
-            return await JoinOrQueuePublicHunt(EffectiveHuntId, { Members: [PlayerId] });
+            return await JoinOrLaunchPublicHunt(EffectiveHuntId, { Members: [PlayerId] });
         }
 
         // Immediate instance: a shared hub (Ramsgate / dojo) everyone goes to, or a private solo hunt.
