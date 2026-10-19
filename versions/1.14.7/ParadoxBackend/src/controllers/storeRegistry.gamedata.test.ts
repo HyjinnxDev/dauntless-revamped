@@ -359,14 +359,17 @@ test("platinum offers never overlap Lady Luck's Store or the Reward Cache", () =
     assert.deepEqual(Collisions, [], "the three stores must stay disjoint");
 
     // and no catalog id is sold twice within the platinum store itself
-    assert.equal(new Set(PlatinumGrants).size, PlatinumGrants.length);
+    // [Revamped 2026-10-20] except Patrol Keys, deliberately sold as 1 and 25 bundles.
+    const Unique = PlatinumGrants.filter((CatalogId) => CatalogId !== "TOKEN_DAILY_PATROL_BONUS_PURCHASED");
+    assert.equal(new Set(Unique).size, Unique.length);
 });
 
 test("every webstore price is a captured or wiki price, never an invented one", () => {
     const All = GetStoreSkus("webstore");
     assert(All.length > 0);
     for (const Sku of All) {
-        const Sources = ["platinum_store_captured", "platinum_store_wiki", "platinum_store_reconstructed"].filter((Tag) => Sku.tags.includes(Tag));
+        // [Revamped 2026-10-20] platinum_store_house = our own set prices (Patrol Keys).
+        const Sources = ["platinum_store_captured", "platinum_store_wiki", "platinum_store_reconstructed", "platinum_store_house"].filter((Tag) => Sku.tags.includes(Tag));
         assert.equal(Sources.length, 1, `${Sku.id} must carry exactly one price source`);
         assert.notEqual(Sources[0], "platinum_store_reconstructed", `${Sku.id} has an invented price`);
     }

@@ -12,6 +12,7 @@ test("fountain core keys roll 4-6 as one stack; other grants untouched", () => {
     assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined, 1, () => 0), "TOKEN_DAILY_PATROL_BONUS_PURCHASED"), [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 4 }]);
     assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined, 1, () => 0.999), "TOKEN_DAILY_PATROL_BONUS_PURCHASED"), [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 6 }]);
     assert.deepEqual(Rams(ApplyRamsRewards("u", "t", Add, Core, undefined)), [100]);
+    assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined), "CURRENCY_PLATINUM_UNIV"), [{ catalogId: "CURRENCY_PLATINUM_UNIV", quantity: 20 }]);
     const Keys = [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 3 }];
     assert.equal(ApplyRamsRewards("u", "t", Keys, [], "Store"), Keys);
 });
@@ -36,6 +37,8 @@ test("base bounty claim pays by the tier of the bounty just removed, once", () =
     NoteRemovedBounties("b", ["Bounty_Silver_StaggerEnraged"], 0);
     NoteRemovedBounties("c", ["Bounty_Gold_Interrupts"], 0);
     assert.deepEqual([Claim("a", 75), Claim("b", 75), Claim("c", 75)], [[250], [400], [600]]);
+    NoteRemovedBounties("e", ["Bounty_Gold_Interrupts"], 0);
+    assert.deepEqual(Of(ApplyRamsRewards("e", "t", [], [], "UBountyComponent::OnClaimBountyComplete", 1, Math.random, 75), "CURRENCY_PLATINUM_UNIV"), [{ catalogId: "CURRENCY_PLATINUM_UNIV", quantity: 6 }]);
     assert.deepEqual(Claim("a", 80), []);              // consumed
     NoteRemovedBounties("d", ["Bounty_Gold_Interrupts"], 0);
     assert.deepEqual(Claim("d", 60_000), []);          // abandon long ago, not this claim's

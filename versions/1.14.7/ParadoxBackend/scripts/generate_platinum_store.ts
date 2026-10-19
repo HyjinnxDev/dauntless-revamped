@@ -475,6 +475,25 @@ for (const Sku of ReadCapture("huntpass_store.json")) {
     });
 }
 
+// Patrol Keys: house prices (not wiki/captured). The 25-key id is the client's baked row (native art); there is no
+// 1-key row, so that one takes the catalog icon. Restockable, Supplies tab.
+const PATROL_KEY = "TOKEN_DAILY_PATROL_BONUS_PURCHASED";
+for (const [Id, Quantity, Price] of [["bundle_patrolkeys_1", 1, 25], ["bundle_patrolkeys_25", 25, 500]] as const) {
+    ClaimedSkuIds.add(Id);
+    Output.push({
+        id: Id,
+        displayName: Quantity === 1 ? "Patrol Key" : `${Quantity} Patrol Keys`,
+        displayDescription: Catalog.get(PATROL_KEY)?.description ?? "",
+        displayPriority: 1000,
+        prices: [{ currencyId: CURRENCY_ID, price: Price }],
+        maxAllowed: null,
+        images: ResolveImages(Id, [PATROL_KEY]) ?? {},
+        tags: [SECTION_WEBSTORE, CATEGORY_TAGS.tonics, "platinum_store_house"],
+        items: [{ catalogId: PATROL_KEY, quantity: Quantity, instanced: false }],
+        duplicateInstancedItems: [],
+    });
+}
+
 // ---------------------------------------------------------------------------------------------
 // TIER B ("wiki") - the items the Dauntless wiki says the store sold on their own, at that price
 // (game-data/wiki_store_prices.json, scripts/fetch_wiki_store_prices.cjs). Nothing else is sold: hunt pass, Rumour

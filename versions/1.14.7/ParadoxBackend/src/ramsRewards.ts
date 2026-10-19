@@ -3,10 +3,10 @@
  * Every rule keys on the game's own `source` string or on what the same transaction removes, so store purchases and
  * other callers are untouched. Retried transactions replay the ledger result, so nothing here can pay twice or reroll.
  *
- *   - fountain core (removes CONTAINER_CORE_REWARD_DAILY_01): 4-6 Patrol Keys, measured game roll 3
+ *   - fountain core (removes CONTAINER_CORE_REWARD_DAILY_01): 4-6 Patrol Keys, measured game roll 3; +20 Platinum daily gift
  *   - behemoth kill ("PlayerLoot"): game Rams remapped onto 200-750
  *   - patrol chest ("patrol_chest"): game Rams remapped onto 1500-5000
- *   - base bounty claim ("UBountyComponent::OnClaimBountyComplete"): +250/400/600 for Bronze/Silver/Gold
+ *   - base bounty claim ("UBountyComponent::OnClaimBountyComplete"): +250/400/600 Rams, +2/4/6 Platinum for Bronze/Silver/Gold
  *   - party bonus on kill and chest Rams: +5% per party member beyond the first (+15% at 4)
  *   - gathering ("BUNDLE_GATHER_*"): +10 Rams per node, +25 for special/chest nodes
  */
@@ -15,6 +15,10 @@ import { logger } from "./logger";
 export const FOUNTAIN_PATROL_KEYS_MIN = 4;
 export const FOUNTAIN_PATROL_KEYS_MAX = 6;
 export const BOUNTY_CLAIM_RAMS: Record<string, number> = { Bronze: 250, Silver: 400, Gold: 600 };
+// [2026-10-20] Steady platinum: a daily gift on the coin flip plus a grind share capped by 10 bounty tokens/day.
+export const DAILY_GIFT_PLATINUM = 20;
+export const BOUNTY_CLAIM_PLATINUM: Record<string, number> = { Bronze: 2, Silver: 4, Gold: 6 };
+const PLATINUM = "CURRENCY_PLATINUM_UNIV";
 const PARTY_BONUS_PERCENT_PER_MEMBER = 5, PARTY_MAX = 4;
 const GATHER_RAMS = 10, GATHER_SPECIAL_RAMS = 25;
 
@@ -61,14 +65,14 @@ export function ApplyRamsRewards(UserId: string, TransactionId: string, StackedI
     if (StackedItemsToRemove?.some((Item) => Item?.catalogId === "CONTAINER_CORE_REWARD_DAILY_01") && StackedItemsToAdd.some(IsKey)) {
         const Quantity = FOUNTAIN_PATROL_KEYS_MIN + Math.floor(Random() * (FOUNTAIN_PATROL_KEYS_MAX - FOUNTAIN_PATROL_KEYS_MIN + 1));
         Log(`fountain core patrol keys ${StackedItemsToAdd.filter(IsKey).reduce((Sum, Item) => Sum + (Item.quantity ?? 0), 0)} -> ${Quantity}`);
-        return [...StackedItemsToAdd.filter((Item) => !IsKey(Item)), { catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: Quantity }];
+        return [...StackedItemsToAdd.filter((Item) => !IsKey(Item)), { catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: Quantity }, { catalogId: PLATINUM, quantity: DAILY_GIFT_PLATINUM }];
     }
 
     if (Source === "UBountyComponent::OnClaimBountyComplete") {
         const Tier = TakeBountyTier(UserId, Now);
         if (!Tier) return StackedItemsToAdd;
-        Log(`bounty claim ${Tier} +${BOUNTY_CLAIM_RAMS[Tier]} Rams`);
-        return [...StackedItemsToAdd, { catalogId: "CURRENCY_NOTES", quantity: BOUNTY_CLAIM_RAMS[Tier] }];
+        Log(`bounty claim ${Tier} +${BOUNTY_CLAIM_RAMS[Tier]} Rams +${BOUNTY_CLAIM_PLATINUM[Tier]} Platinum`);
+        return [...StackedItemsToAdd, { catalogId: "CURRENCY_NOTES", quantity: BOUNTY_CLAIM_RAMS[Tier] }, { catalogId: PLATINUM, quantity: BOUNTY_CLAIM_PLATINUM[Tier] }];
     }
 
     if (Source?.startsWith("BUNDLE_GATHER")) {
