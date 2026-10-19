@@ -19081,10 +19081,41 @@ static int s_escalationBuffChoiceLastRound = INT_MIN;
 // churn and forced UI onto uninvolved players.
 // ============================================================================================
 
+// [2026-10-19 BOON POOL] A player's round-end boon options come from the season's relics table:
+// rows with UnlockedByDefault plus whatever their Escalation talents unlock. Our players sit at low
+// levels with few or no talents, so that pool is tiny - repro: frost (ESC_SEASON_5) at level 0, two
+// options in round 0, then SpawnPlayerBuffChoicesForFinishedRound skipped one player entirely at the
+// end of round 1 (no pickup, no choice screen) while the other got theirs. Marking every boon row
+// unlocked once per server keeps every season's pool full; the game still applies its own drop
+// conditions, uniqueness and weights. Disable with ESCALATION_KEEP_BOON_UNLOCKS.flag next to the exe.
+static void EnsureEscalationBoonsUnlocked() {
+    static bool s_done = false;
+    if (s_done) return;
+    if (MpExeRelativeFlagPresent(L"ESCALATION_KEEP_BOON_UNLOCKS.flag")) { s_done = true; return; }
+    int Tables = 0, Rows = 0, Unlocked = 0;
+    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+        if (!Obj || Obj->IsDefaultObject() || !Obj->IsA(SDK::UDataTable::StaticClass())) continue;
+        auto* Dt = static_cast<SDK::UDataTable*>(Obj);
+        if (!Dt->RowStruct || Dt->RowStruct->GetName() != "EscalationBuffDefinition") continue;
+        ++Tables;
+        for (auto& Pair : Dt->RowMap) {
+            auto* Row = reinterpret_cast<SDK::FEscalationBuffDefinition*>(Pair.Value());
+            if (!Row || !IsReadablePointer(Row, sizeof(SDK::FEscalationBuffDefinition))) continue;
+            ++Rows;
+            if (!Row->UnlockedByDefault) { Row->UnlockedByDefault = true; ++Unlocked; }
+        }
+    }
+    s_done = Tables > 0;   // retry on the next state change if the tables are not loaded yet
+    MpLog("[EscalationBoonPool] tables=" + std::to_string(Tables) + " rows=" + std::to_string(Rows)
+        + " newlyUnlocked=" + std::to_string(Unlocked));
+}
+
 // Called from ProcessEventHook when the mode component is told the state changed. Records only; the
 // actual dispatch happens on the next server tick.
 static void NoteEscalationStateChangeForBuffChoices(UObject* ModeComponent, void* Parms) {
     if (!Globals::AmServer || !ModeComponent || !Parms) return;
+    EnsureEscalationBoonsUnlocked();   // first state change (InitialPreloading) is before any choice
     if (MpExeRelativeFlagPresent(L"ESCALATION_NO_BUFF_CHOICE_SPAWN.flag")) return;
     if (!IsReadablePointer(Parms, 0x2)) return;
 
