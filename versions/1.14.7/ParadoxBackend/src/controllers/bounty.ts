@@ -9,6 +9,7 @@
 import { BountyMergeSummary, BountyStatePayload, DeleteFromBountyState, MergeBountyState } from "../bountyState";
 import { BountyStateRecord, GetRepositories } from "../persistence";
 import { PerAccountQueue } from "./perAccountQueue";
+import { NoteRemovedBounties } from "../ramsRewards";
 
 const MAX_SAVE_ATTEMPTS = 8;
 
@@ -44,7 +45,10 @@ export function DeleteBounties(userId: string, body: unknown): Promise<{ payload
             const { record, removed } = DeleteFromBountyState(Previous, body);
             if (record === undefined || removed.length === 0) return { payload: BountyStatePayload(Previous), removed };
             const Saved = await Repository.saveIfVersion(record, Previous?.updateVersion);
-            if (Saved !== undefined) return { payload: BountyStatePayload(Saved), removed };
+            if (Saved !== undefined) {
+                NoteRemovedBounties(userId, removed);
+                return { payload: BountyStatePayload(Saved), removed };
+            }
         }
         throw new Error(`Bounty state delete remained contended for ${userId}`);
     });

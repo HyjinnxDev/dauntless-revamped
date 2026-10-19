@@ -17,6 +17,7 @@ import { ApplyCurrencyDeltas, MergeWalletIntoStacked } from "./wallet";
 import { EnsureStarterBootstrapRecords, EnsureStarterBootstrapRecordsInTransaction } from "./starterManifest";
 import crypto from "node:crypto";
 import { MigrateInventoryStorageArrays, NormalizeInventoryGrantCollections } from "../inventoryStoragePolicy";
+import { ApplyRamsRewards, IsPartyBonusSource } from "../ramsRewards";
 
 // [hardening] Deterministic serialization (object keys sorted recursively) so a canonical hash of
 // a request body is stable regardless of JSON key ordering - a genuine client retry of the same
@@ -527,7 +528,10 @@ export async function RunInventoryTransaction(UserId: string, CharacterId: strin
         TransactionId, InstancedItemsToAdd ?? [], StackedItemsToAdd ?? []
     );
     const EffectiveInstancedItemsToAdd = NormalizedGrants.instancedItemsToAdd;
-    const EffectiveStackedItemsToAdd = NormalizedGrants.stackedItemsToAdd;
+    const PartySize = IsPartyBonusSource(Options.source)
+        ? (await GetRepositories().parties.findByMember(UserId))?.members.length ?? 1
+        : 1;
+    const EffectiveStackedItemsToAdd = ApplyRamsRewards(UserId, TransactionId, NormalizedGrants.stackedItemsToAdd, StackedItemsToRemove, Options.source, PartySize);
     if (NormalizedGrants.corrections.length > 0) {
         logger.warn(`[InventoryStorage] transactionId ${TransactionId} normalized ${NormalizedGrants.corrections.length} grant entr${NormalizedGrants.corrections.length === 1 ? "y" : "ies"}: ${NormalizedGrants.corrections.map((Correction) => `${Correction.catalogId}:${Correction.from}->${Correction.to}x${Correction.quantity}`).join(", ")}`);
     }

@@ -173,7 +173,30 @@ export function WeeklyCellSkus(NowMs = Date.now()): StoreSku[] {
         };
     });
 }
-const HUNT_PASS_SKUS = Object.fromEntries(HUNT_PASS_SLOT_IDS.map((Slot) => [HuntPassPassSkuTag(Slot), HuntPassSkus(Slot)]));
+// [2026-10-19] Aetherdust -> Rams exchange, a fourth Middleman tile on the same daily rotation. Once per rotation day:
+// the ownership key carries the day, so a second buy replays the first instead of charging again.
+// ponytail: the tile UI was built for cells; if the client will not render a CURRENCY_NOTES tile, move this SKU to
+// another store tag the client already lists.
+const RAMS_EXCHANGE_DUST = 150, RAMS_EXCHANGE_RAMS = 1500;
+export function RamsExchangeSku(NowMs = Date.now()): StoreSku {
+    const Day = Math.floor((NowMs - MIDDLEMAN_ROTATION_EPOCH) / MIDDLEMAN_DAY_MS);
+    const Start = MIDDLEMAN_ROTATION_EPOCH + Day * MIDDLEMAN_DAY_MS;
+    return {
+        id: "middleman_daily_rams_exchange",
+        displayName: `${RAMS_EXCHANGE_RAMS} Rams`,
+        displayDescription: `Trade ${RAMS_EXCHANGE_DUST} Aetherdust for ${RAMS_EXCHANGE_RAMS} Rams. Once a day.`,
+        displayPriority: MIDDLEMAN_TIERS.length,
+        prices: [{ currencyId: "id_currency_celldust", price: RAMS_EXCHANGE_DUST }],
+        maxAllowed: 1,
+        ownershipKey: `middleman_daily_rams_exchange:${Day}`,
+        availableFrom: new Date(Start).toISOString(),
+        availableTo: new Date(Start + MIDDLEMAN_DAY_MS).toISOString(),
+        tags: ["weekly_cell_offering"],
+        items: [{ catalogId: "CURRENCY_NOTES", quantity: RAMS_EXCHANGE_RAMS, instanced: false }],
+        duplicateInstancedItems: [],
+    };
+}
+const HUNT_PASS_SKUS =Object.fromEntries(HUNT_PASS_SLOT_IDS.map((Slot) => [HuntPassPassSkuTag(Slot), HuntPassSkus(Slot)]));
 const EXCHANGE_SLOT_SKUS = { slot2: [ExchangeSlotSku(2)], slot3: [ExchangeSlotSku(3)] };
 
 const STORE_SKUS: Record<string, StoreSku[]> = {
@@ -187,7 +210,7 @@ const STORE_SKUS: Record<string, StoreSku[]> = {
     hp_level_skip_rank: PlatinumSection("hp_level_skip_rank"),
     huntpass_store: PlatinumSection("huntpass_store"),
     get fountain_daily_free_bundle() { return [FountainDailySku()]; },   // rebuilt per read: the ownership key carries today's date
-    get weekly_cell_offering() { return WeeklyCellSkus(); },              // rebuilt per read: rotates daily
+    get weekly_cell_offering() { return [...WeeklyCellSkus(), RamsExchangeSku()]; },   // rebuilt per read: rotates daily
 };
 
 // Store-service currency ids (id_currency_x) -> our wallet's catalog currency ids (CURRENCY_X).
