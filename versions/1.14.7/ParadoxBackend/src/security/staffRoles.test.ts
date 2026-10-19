@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CanActOn, HasStaffPermission, StaffNameTag, StaffRank, StripStaffNameTag } from "./staffRoles";
+import { AllowedNameStyles, CanActOn, GameNameTag, HasStaffPermission, StaffNameTag, StaffRank, StripStaffNameTag } from "./staffRoles";
 
 test("staff tiers gate permissions", () => {
     assert.equal(StaffRank(["player"]), 0);
@@ -28,6 +28,11 @@ test("staff name tag round-trips", () => {
     assert.equal(StripStaffNameTag("[Mod] Someone"), "Someone");
     assert.equal(StripStaffNameTag("[Owner] Hyjinnx"), "Hyjinnx");
     assert.equal(StripStaffNameTag("Hyjinnx"), "Hyjinnx");
+    assert.equal(StripStaffNameTag("[Owner] [Emerald] Hyjinnx"), "Hyjinnx");
+    assert.equal(GameNameTag(["owner", "admin"], "legend"), "[Owner] [Legend] ");
+    assert.equal(GameNameTag(["admin"], "legend"), "[Admin] ");   // not allowed yet: style dropped
+    assert.equal(GameNameTag(["owner"], "bogus"), "[Owner] ");
+    assert.deepEqual(AllowedNameStyles(["player"]), []);
 });
 
 test("moderators can watch servers but only admins control them", () => {

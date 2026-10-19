@@ -5627,24 +5627,50 @@ static void Tick() {
 // comes off the nameplate (chat keeps it) and a title line under the name says the role instead: "Server Owner"
 // in legendary orange with the name pulsing gold and glowing; "Server Admin" / "Server Moderator" in the plate's
 // own text style. Client only, game thread, from ProcessEventClientHook like the behemoth bar.
+// [Revamped 2026-10-19] Patreon name styles: a second tag after the staff one ("[Owner] [Legend] Name", backend
+// staffRoles.ts GameNameTag, picked per character in the launcher) also comes off and styles the name:
+//   Wanderer  green
+//   Scout     red, dark edge + drop shadow, slow brightness pulse
+//   Slayer    purple, violet glow, ethereal breathing + lavender shimmer
+//   Legend    gold, orange glow, larger spaced capitals, white-gold shimmer
+//   Emerald   (the Owner tier) emerald/aqua cycle with diamond-white sparkles, teal glow, largest capitals, breathing
+// A style replaces the owner's gold pulse; the staff title line stays.
 // DISABLE_STAFF_NAMEPLATES.flag beside the exe turns it off.
 // ponytail: re-reads plate text every kScanMs; hook UNamePlatesWidget::UpdateName instead if that ever costs.
+// ponytail: a plate whose tags go away mid-map keeps its font; fine while a style change only lands on map load.
 namespace StaffNameplates {
 
 using BehemothHealthBar::Ref;
 enum class Tier { None, Mod, Admin, Owner };
+enum class Style { None, Wanderer, Scout, Slayer, Legend, Emerald };
 struct TierInfo { Tier T; const char* Prefix; const wchar_t* Title; const char* LogName; };
 static const TierInfo kTiers[] = {
     { Tier::Owner, "[Owner] ", L"Server Owner", "owner" },
     { Tier::Admin, "[Admin] ", L"Server Admin", "admin" },
     { Tier::Mod, "[Mod] ", L"Server Moderator", "moderator" },
 };
-struct Plate { Ref W; const TierInfo* Info = nullptr; std::string Name; };   // Name: plate text after stripping
+struct StyleInfo { Style S; const char* Prefix; const char* LogName; };
+static const StyleInfo kStyles[] = {
+    { Style::Wanderer, "[Wanderer] ", "wanderer" },
+    { Style::Scout, "[Scout] ", "scout" },
+    { Style::Slayer, "[Slayer] ", "slayer" },
+    { Style::Legend, "[Legend] ", "legend" },
+    { Style::Emerald, "[Emerald] ", "emerald" },
+};
+struct Plate { Ref W; const TierInfo* Info = nullptr; Style S = Style::None; std::string Name; };   // Name: plate text after stripping
 
 constexpr ULONGLONG kTickMs = 100, kScanMs = 1000;
-static const SDK::FLinearColor kOwnerLo{ 1.f, 0.62f, 0.08f, 1.f }, kOwnerHi{ 1.f, 0.9f, 0.45f, 1.f };
-static const SDK::FLinearColor kOwnerGlow{ 0.95f, 0.3f, 0.f, 1.f };
-static const SDK::FLinearColor kOwnerTitle{ 1.f, 0.5f, 0.05f, 1.f };   // legendary orange
+using C = SDK::FLinearColor;
+static const C kOwnerLo{ 1.f, 0.62f, 0.08f, 1.f }, kOwnerHi{ 1.f, 0.9f, 0.45f, 1.f };
+static const C kOwnerGlow{ 0.95f, 0.3f, 0.f, 1.f };
+static const C kOwnerTitle{ 1.f, 0.5f, 0.05f, 1.f };   // legendary orange
+static const C kWanderer{ 0.37f, 0.85f, 0.42f, 1.f };
+static const C kScoutLo{ 0.85f, 0.18f, 0.14f, 1.f }, kScoutHi{ 1.f, 0.42f, 0.32f, 1.f }, kScoutEdge{ 0.3f, 0.02f, 0.01f, 1.f };
+static const C kSlayer{ 0.61f, 0.33f, 1.f, 1.f }, kSlayerShimmer{ 0.93f, 0.87f, 1.f, 1.f }, kSlayerGlow{ 0.45f, 0.1f, 1.f, 1.f };
+static const C kLegend{ 1.f, 0.7f, 0.1f, 1.f }, kLegendShimmer{ 1.f, 0.97f, 0.82f, 1.f }, kLegendGlow{ 0.9f, 0.35f, 0.f, 1.f };
+static const C kEmerald{ 0.08f, 0.79f, 0.48f, 1.f }, kAqua{ 0.45f, 1.f, 0.92f, 1.f }, kDiamond{ 1.f, 1.f, 1.f, 1.f };
+static const C kEmeraldGlow{ 0.f, 0.6f, 0.4f, 1.f };
+static const C kDarkShadow{ 0.05f, 0.02f, 0.f, 0.85f };
 
 static std::vector<Plate> s_Plates;
 static ULONGLONG s_NextTick = 0, s_NextScan = 0;
@@ -5655,25 +5681,95 @@ static void Log(const std::string& Msg) {
     if (s_Logs++ < 40) MpLog("[StaffNameplate] " + Msg);
 }
 
-static void SetColor(SDK::UTextBlock* Tb, const SDK::FLinearColor& C) {
+static void SetColor(SDK::UTextBlock* Tb, const C& Col) {
     SDK::FSlateColor S{};
-    S.SpecifiedColor = C;
+    S.SpecifiedColor = Col;
     S.ColorUseRule = SDK::ESlateColorStylingMode::UseColor_Specified;
     Tb->SetColorAndOpacity(S);
 }
 
-// One-time look per plate when its tier is first seen: the title line, plus the owner's glow.
-static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo& Info) {
-    if (Info.T == Tier::Owner) {
-        SDK::FSlateFontInfo F = W->TextBlock_Name->Font;   // copied bitwise; SetFont copies it natively
-        F.OutlineSettings.OutlineSize = 2;
-        F.OutlineSettings.OutlineColor = kOwnerGlow;
-        W->TextBlock_Name->SetFont(F);
+static C Lerp(const C& A, const C& B, float T) {
+    return C{ A.R + (B.R - A.R) * T, A.G + (B.G - A.G) * T, A.B + (B.B - A.B) * T, A.A + (B.A - A.A) * T };
+}
+// 0..1 sine over PeriodMs.
+static float Wave(ULONGLONG Now, ULONGLONG PeriodMs) {
+    return 0.5f + 0.5f * std::sin(static_cast<float>(Now % PeriodMs) / PeriodMs * 6.2831853f);
+}
+// A WidthMs bump (0 -> 1 -> 0) at the start of every PeriodMs: the shimmer passing over the name.
+static float Flash(ULONGLONG Now, ULONGLONG PeriodMs, ULONGLONG WidthMs) {
+    const ULONGLONG T = Now % PeriodMs;
+    if (T >= WidthMs) return 0.f;
+    const float S = std::sin(static_cast<float>(T) / WidthMs * 3.1415927f);
+    return S * S;
+}
+
+// One-time look per plate when its tier/style is first seen: the title line, outline glow, size and shadow.
+static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, Style S) {
+    SDK::UTextBlock* Tb = W->TextBlock_Name;
+    SDK::FSlateFontInfo F = Tb->Font;   // copied bitwise; SetFont copies it natively
+    bool FontChanged = false;
+    auto Outline = [&](int32_t Size, const C& Col) {
+        F.OutlineSettings.OutlineSize = Size;
+        F.OutlineSettings.OutlineColor = Col;
+        FontChanged = true;
+    };
+    auto Grand = [&](int32_t ExtraSize, int32_t Spacing) {   // the "fully stylised" tiers
+        F.Size += ExtraSize;
+        F.LetterSpacing = Spacing;
+        Tb->SetTextTransformPolicy(SDK::ETextTransformPolicy::ToUpper);
+        Tb->SetShadowOffset(SDK::FVector2D{ 2.f, 2.f });
+        Tb->SetShadowColorAndOpacity(kDarkShadow);
+    };
+    switch (S) {
+    case Style::None: if (Info && Info->T == Tier::Owner) Outline(2, kOwnerGlow); break;
+    case Style::Wanderer: break;
+    case Style::Scout:
+        Outline(1, kScoutEdge);
+        Tb->SetShadowOffset(SDK::FVector2D{ 1.5f, 1.5f });
+        Tb->SetShadowColorAndOpacity(kDarkShadow);
+        break;
+    case Style::Slayer:
+        Outline(2, kSlayerGlow);
+        Tb->SetShadowOffset(SDK::FVector2D{ 0.f, 2.f });
+        break;
+    case Style::Legend: Outline(2, kLegendGlow); Grand(2, 120); break;
+    case Style::Emerald: Outline(3, kEmeraldGlow); Grand(3, 160); break;
     }
-    if (SDK::UTextBlock* Title = W->TextBlock_Title) {
-        Title->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(Info.Title)));
-        if (Info.T == Tier::Owner) SetColor(Title, kOwnerTitle);
+    if (FontChanged) Tb->SetFont(F);
+    if (SDK::UTextBlock* Title = Info ? W->TextBlock_Title : nullptr) {
+        Title->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(Info->Title)));
+        if (Info->T == Tier::Owner) SetColor(Title, kOwnerTitle);
         Title->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
+    }
+}
+
+// Re-applied every tick: the game recolours names on its own updates.
+static void Animate(SDK::UTextBlock* Tb, const Plate& P, ULONGLONG Now) {
+    switch (P.S) {
+    case Style::None:   // owner's gold pulse, ~2.5 s
+        if (P.Info && P.Info->T == Tier::Owner) SetColor(Tb, Lerp(kOwnerLo, kOwnerHi, Wave(Now, 2500)));
+        break;
+    case Style::Wanderer: SetColor(Tb, kWanderer); break;
+    case Style::Scout: SetColor(Tb, Lerp(kScoutLo, kScoutHi, Wave(Now, 2400))); break;
+    case Style::Slayer: {
+        C Col = Lerp(kSlayer, kSlayerShimmer, Flash(Now, 3000, 600));
+        const float Breath = Wave(Now, 3200);
+        Col.A = 0.78f + 0.22f * Breath;   // ethereal waver
+        SetColor(Tb, Col);
+        Tb->SetShadowColorAndOpacity(C{ kSlayerGlow.R, kSlayerGlow.G, kSlayerGlow.B, 0.2f + 0.5f * Breath });
+        break;
+    }
+    case Style::Legend:
+        SetColor(Tb, Lerp(kLegend, kLegendShimmer, (std::max)(Flash(Now, 2200, 450), 0.2f * Wave(Now, 2200))));
+        break;
+    case Style::Emerald: {
+        C Col = Lerp(kEmerald, kAqua, Wave(Now, 4000));
+        Col = Lerp(Col, kDiamond, (std::max)(Flash(Now, 1500, 250), 0.8f * Flash(Now + 700, 2600, 200)));   // sparkles
+        SetColor(Tb, Col);
+        const float Scale = 1.f + 0.04f * Wave(Now, 2000);
+        Tb->SetRenderScale(SDK::FVector2D{ Scale, Scale });
+        break;
+    }
     }
 }
 
@@ -5702,47 +5798,50 @@ static void Update() {
             if (!W || !W->TextBlock_Name) continue;
             const std::string Text = SDK::UKismetTextLibrary::Conv_TextToString(W->TextBlock_Name->GetText()).ToString();
             auto Old = std::find_if(s_Plates.begin(), s_Plates.end(), [&](const Plate& P) { return P.W.Get() == W; });
+            // New plate, or the game re-set the name: staff tag, then style tag, both optional.
             const TierInfo* Info = nullptr;
-            std::string Name;
+            Style S = Style::None;
+            size_t Pos = 0;
             for (const TierInfo& Ti : kTiers) {
                 const size_t Len = std::strlen(Ti.Prefix);
-                if (Text.compare(0, Len, Ti.Prefix) == 0) {  // new plate, or the game re-set the name: strip again
-                    Info = &Ti;
-                    Name = Text.substr(Len);
-                    SetName(W->TextBlock_Name, Name);
-                    break;
-                }
+                if (Text.compare(0, Len, Ti.Prefix) == 0) { Info = &Ti; Pos = Len; break; }
             }
-            if (!Info && Old != s_Plates.end() && Text == Old->Name) {   // already stripped
+            const char* StyleLog = "-";
+            for (const StyleInfo& Si : kStyles) {
+                const size_t Len = std::strlen(Si.Prefix);
+                if (Text.compare(Pos, Len, Si.Prefix) == 0) { S = Si.S; StyleLog = Si.LogName; Pos += Len; break; }
+            }
+            std::string Name;
+            if (Pos > 0) {
+                Name = Text.substr(Pos);
+                SetName(W->TextBlock_Name, Name);
+            } else if (Old != s_Plates.end() && Text == Old->Name) {   // already stripped
                 Info = Old->Info;
+                S = Old->S;
                 Name = Text;
             }
-            if (!Info) continue;
-            if (Old == s_Plates.end() || Old->Info != Info) {
-                Decorate(W, *Info);
-                Log(std::string(Info->LogName) + " plate " + W->GetFullName());
+            if (!Info && S == Style::None) continue;
+            if (Old == s_Plates.end() || Old->Info != Info || Old->S != S) {
+                Decorate(W, Info, S);
+                Log(std::string(Info ? Info->LogName : "-") + "/" + StyleLog + " plate " + W->GetFullName());
             }
             Next.push_back(Plate{});
             Next.back().W.Set(W);
             Next.back().Info = Info;
+            Next.back().S = S;
             Next.back().Name = Name;
         }
         static bool s_LoggedCount = false;
         if (!s_LoggedCount && s_Found->Num() > 0) {
             s_LoggedCount = true;
-            Log("first scan: " + std::to_string(s_Found->Num()) + " nameplates, " + std::to_string(Next.size()) + " staff");
+            Log("first scan: " + std::to_string(s_Found->Num()) + " nameplates, " + std::to_string(Next.size()) + " styled");
         }
         s_Plates.swap(Next);
     }
 
-    // Owner pulse, ~2.5 s period, re-applied every tick: the game recolours names on its own updates.
-    const float Phase = 0.5f + 0.5f * std::sin(static_cast<float>(Now % 2500) / 2500.f * 6.2831853f);
-    const SDK::FLinearColor Pulse{
-        kOwnerLo.R + (kOwnerHi.R - kOwnerLo.R) * Phase, kOwnerLo.G + (kOwnerHi.G - kOwnerLo.G) * Phase,
-        kOwnerLo.B + (kOwnerHi.B - kOwnerLo.B) * Phase, 1.f };
     for (const Plate& P : s_Plates) {
         auto* W = P.W.Get<SDK::UNamePlatesWidget>();
-        if (W && W->TextBlock_Name && P.Info->T == Tier::Owner) SetColor(W->TextBlock_Name, Pulse);
+        if (W && W->TextBlock_Name) Animate(W->TextBlock_Name, P, Now);
     }
 }
 

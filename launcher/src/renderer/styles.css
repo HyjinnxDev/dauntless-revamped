@@ -3209,3 +3209,11 @@ img {
     opacity: 0.7;
   }
 }
+
+/* Character name style (Patreon) picker. */
+.name-style-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}

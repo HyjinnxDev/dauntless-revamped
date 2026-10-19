@@ -5,7 +5,7 @@
 import net from "node:net";
 import { Endpoint, HttpError, HttpResponse, parseJsonBody, request } from "./http";
 import { cleanText } from "../shared/status";
-import { CHARACTER_LABEL_MAX, type CharacterInfo, type ErrorCode, type NewsItem } from "../shared/types";
+import { CHARACTER_LABEL_MAX, NAME_STYLES, isNameStyle, type NameStyle, type CharacterInfo, type ErrorCode, type NewsItem } from "../shared/types";
 import { CONNECT_TIMEOUT_MS, TARGET_CHANGELIST } from "./constants";
 import { UNSAFE_CHARS_MULTILINE } from "../shared/text";
 
@@ -208,6 +208,7 @@ export interface RuntimeArtifact {
 export interface CharacterList {
   max: number;
   lastSlot: number; // the one played last
+  nameStyles: NameStyle[]; // unlocked on this account
   characters: CharacterInfo[];
 }
 
@@ -228,10 +229,12 @@ function parseCharacters(res: HttpResponse): CharactersResult {
       level: Number.isInteger(c.level) && (c.level as number) >= 0 && (c.level as number) < 1000 ? (c.level as number) : 1,
       lastPlayedAt: played,
       online: c.online === true,
+      nameStyle: isNameStyle(c.nameStyle) ? c.nameStyle : null,
     });
   }
   characters.sort((a, b) => a.slot - b.slot);
-  return { ok: true, characters: { max: body.max, lastSlot: body.lastSlot, characters } };
+  const nameStyles = NAME_STYLES.filter((s) => Array.isArray(body.nameStyles) && body.nameStyles.includes(s));
+  return { ok: true, characters: { max: body.max, lastSlot: body.lastSlot, nameStyles, characters } };
 }
 
 async function characterCall(ep: Endpoint, accessToken: string, path: string, method: "GET" | "POST" | "PATCH" | "DELETE", body?: Record<string, unknown>): Promise<CharactersResult> {
@@ -249,6 +252,9 @@ export const createCharacter = (ep: Endpoint, accessToken: string, label: string
 
 export const renameCharacter = (ep: Endpoint, accessToken: string, slot: number, label: string) =>
   characterCall(ep, accessToken, `/launcher/v1/characters/${slot}`, "PATCH", { label });
+
+export const setCharacterNameStyle = (ep: Endpoint, accessToken: string, slot: number, style: NameStyle | null) =>
+  characterCall(ep, accessToken, `/launcher/v1/characters/${slot}/name-style`, "PATCH", { style });
 
 // Permanent on the server: the character's whole game save. confirmLabel must repeat its label.
 export const deleteCharacter = (ep: Endpoint, accessToken: string, slot: number, confirmLabel: string) =>

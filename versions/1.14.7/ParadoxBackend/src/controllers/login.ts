@@ -10,7 +10,7 @@
  */
 
 import { GetRepositories } from "../persistence";
-import { StaffNameTag } from "../security/staffRoles";
+import { GameNameTagFor } from "../characterSlots";
 
 export async function GetUsernameForUserId(userId: string){
     // Launcher accounts are now the authoritative source for player-facing names.
@@ -34,9 +34,9 @@ export async function GetUsernameForUserId(userId: string){
     return UserFromDb?.name ?? userId;
 }
 
-/** GetUsernameForUserId plus the staff tag ("[Owner] Name"), for names the game shows.
+/** GetUsernameForUserId plus the staff and name-style tags ("[Owner] [Legend] Name"), for names the game shows.
  *  Character creation keeps the plain name so a demotion never leaves a stale tag behind. */
 export async function GetDisplayNameForUserId(userId: string){
     const Account = await GetRepositories().launcherAccounts.findByUserId(userId).catch(() => undefined);
-    return (Account ? StaffNameTag(Account.roles) : "") + await GetUsernameForUserId(userId);
+    return (Account ? await GameNameTagFor(Account.roles, userId) : "") + await GetUsernameForUserId(userId);
 }

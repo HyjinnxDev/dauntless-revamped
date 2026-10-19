@@ -145,9 +145,15 @@ export interface CharacterInfo {
   level: number;
   lastPlayedAt: string | null;
   online: boolean;
+  nameStyle: NameStyle | null; // in-game name style (Patreon), null = normal
 }
 
 export const CHARACTER_LABEL_MAX = 24;
+
+// In-game name styles, in tier order; the server says which ones the account has unlocked.
+export const NAME_STYLES = ["wanderer", "scout", "slayer", "legend", "emerald"] as const;
+export type NameStyle = (typeof NAME_STYLES)[number];
+export const isNameStyle = (v: unknown): v is NameStyle => NAME_STYLES.includes(v as NameStyle);
 
 export interface Snapshot {
   phase: Phase;
@@ -166,6 +172,7 @@ export interface Snapshot {
     characters: CharacterInfo[]; // on this server, slot 1 = the account's first; empty until loaded
     maxCharacters: number;
     character: number | null; // the slot Play starts
+    nameStyles: NameStyle[]; // unlocked on this account; empty = no style picker
   };
   install: {
     dir: string;
@@ -244,6 +251,7 @@ export const IPC = {
   selectCharacter: "dr:select-character",
   createCharacter: "dr:create-character",
   renameCharacter: "dr:rename-character",
+  setCharacterNameStyle: "dr:set-character-name-style",
   deleteCharacter: "dr:delete-character",
   setSettings: "dr:set-settings",
   setStatusPolling: "dr:set-status-polling",

@@ -159,7 +159,7 @@ function snap(over: Partial<Snapshot>): Snapshot {
     savedServers: [],
     server: { host: "203.0.113.10", port: 443, name: "S", hasPendingInvite: false, tailnet: false, loopback: false, fingerprint: "a".repeat(64) },
     connect: { checking: false, problem: null, tailscaleInstalled: false, lastCheckedAt: null },
-    account: { username: "U", signedIn: true, characters: [{ slot: 1, label: "Character 1", level: 1, lastPlayedAt: null, online: false }], maxCharacters: 1, character: 1 },
+    account: { username: "U", signedIn: true, characters: [{ slot: 1, label: "Character 1", level: 1, lastPlayedAt: null, online: false, nameStyle: null }], maxCharacters: 1, character: 1, nameStyles: [] },
     install: { dir: "C:\\g", defaultDir: "C:\\g", installed: true, missingFiles: 0, verified: true, runtimeOk: true, freeBytes: 5e10, requiredBytes: 1e9, totalBytes: 1e10, contentAvailable: true },
     task: null,
     game: { running: false, relayPort: null },
