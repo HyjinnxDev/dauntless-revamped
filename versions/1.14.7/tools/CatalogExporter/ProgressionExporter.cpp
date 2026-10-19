@@ -276,6 +276,22 @@ static std::string SerializeExperienceTrackRow(const std::string& rowName, const
     return o;
 }
 
+// FPrestigeTrackTableData row -> one JSONL line. Reforge banking curve + the currency a reforge costs
+// (PrestigeCurrencyRequirements; Currency is a row handle into the currency table, RowName = catalog id).
+static std::string SerializePrestigeTrackRow(const std::string& rowName, const FPrestigeTrackTableData& row) {
+    std::string o = "{";
+    o += "\"rowName\":" + Q(rowName);
+    o += ",\"base\":" + WriteOnlineProgressionTrackBaseFields(row);
+    o += ",\"prestigeCurrencyRequirements\":[";
+    for (int i = 0; i < row.PrestigeCurrencyRequirements.Num(); ++i) {
+        if (i) o += ",";
+        o += "{\"currency\":" + Q(FNm(row.PrestigeCurrencyRequirements[i].Currency.RowName)) +
+             ",\"amount\":" + std::to_string(row.PrestigeCurrencyRequirements[i].Amount) + "}";
+    }
+    o += "]}";
+    return o;
+}
+
 // FExperienceTableData row -> one JSONL line (the "award" table — objective+amount pairs).
 static std::string SerializeExperienceAwardRow(const std::string& rowName, const FExperienceTableData& row) {
     std::string o = "{";
@@ -582,6 +598,19 @@ int RunProgressionExport() {
         "MasteryTrackTableData",
         pDir + L"\\mastery-tracks.jsonl",
         SerializeMasteryTrackRow));
+
+    // Prestige (reforge) tracks - table name unknown, so by row struct; first match wins.
+    {
+        std::vector<UDataTable*> prestigeTables = FindDataTablesByRowStruct("PrestigeTrackTableData");
+        Status("prestige tracks: " + std::to_string(prestigeTables.size()) + " table(s) by row struct");
+        if (!prestigeTables.empty()) {
+            total += std::max(0, ExportTable<FPrestigeTrackTableData>(
+                prestigeTables[0],
+                "PrestigeTrackTableData",
+                pDir + L"\\prestige-tracks.jsonl",
+                SerializePrestigeTrackRow));
+        }
+    }
 
     Status("RunProgressionExport DONE total_rows=" + std::to_string(total));
     return total;

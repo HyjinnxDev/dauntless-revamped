@@ -118,6 +118,23 @@ for (const Line of fs.readFileSync(MasteryExport, "utf8").split("\n").filter(Boo
     console.log(`mastery ${P.progression_id}: ${Row.requirements.length} ranks, ${P.free_rewards.length} reward levels (client table)`);
 }
 
+// XP: same story for ExperienceTrack_Weapon_* (client weapon experience table, 20 levels, 27,775 XP) and
+// ExperienceTrack_PlayerLevel (player experience table, 20 levels). Reforge only unlocks at the max weapon level
+// the client reads from this curve, so the old 100 x 1000 guess made reforge unreachable. The tables have no
+// rewards; keep the source's (empty) tiers up to the new max rank.
+for (const File of ["weapon-experience-tracks.jsonl", "player-experience-tracks.jsonl"]) {
+    const XpExport = path.resolve(__dirname, "../../Items_Analysis/progression_1_14_7", File);
+    if (!fs.existsSync(XpExport)) Fail(`experience export not found at ${XpExport} (CatalogExporter EXPORT_PROGRESSION=1)`);
+    for (const Line of fs.readFileSync(XpExport, "utf8").split("\n").filter(Boolean)) {
+        const Row = JSON.parse(Line).base;
+        const P = Paths.find((X) => X?.progression_id === Row.progressionTrack);
+        if (!P) continue;
+        P.requirements = [{ rank_id: 0, xp_required: 0 }, ...Row.requirements.map((R) => ({ rank_id: R.rankId, xp_required: R.requiredXP }))];
+        P.free_rewards = (P.free_rewards ?? []).filter((R) => R.rank_id <= Row.requirements.length);
+        console.log(`xp ${P.progression_id}: ${Row.requirements.length} ranks (client table)`);
+    }
+}
+
 const Output = {
     code: Source.code ?? null,
     message: typeof Source.message === "string" ? Source.message : "OK",
