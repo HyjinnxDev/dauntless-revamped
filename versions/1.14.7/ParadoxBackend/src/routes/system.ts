@@ -33,14 +33,14 @@ systemRouter.get("/dauntless-status", (req, res) => {
 
     res.json({
 	    "show-status": true,
-	    "en": "Welcome to Dauntless Awakened!",
-	    "fr": "Welcome to Dauntless Awakened!",
-	    "it": "Welcome to Dauntless Awakened!",
-	    "es": "Welcome to Dauntless Awakened!",
-	    "de": "Welcome to Dauntless Awakened!",
-	    "pt": "Welcome to Dauntless Awakened!",
-	    "ru": "Welcome to Dauntless Awakened!",
-	    "ja": "Welcome to Dauntless Awakened!"
+	    "en": "Welcome to Dauntless Revamped!",
+	    "fr": "Welcome to Dauntless Revamped!",
+	    "it": "Welcome to Dauntless Revamped!",
+	    "es": "Welcome to Dauntless Revamped!",
+	    "de": "Welcome to Dauntless Revamped!",
+	    "pt": "Welcome to Dauntless Revamped!",
+	    "ru": "Welcome to Dauntless Revamped!",
+	    "ja": "Welcome to Dauntless Revamped!"
     });
 });
 
@@ -783,13 +783,13 @@ systemRouter.get("/patchnotes/:language/:gameversion", (req, res) => {
 		message: "OK",
 		payload: {
 			date: "2026-10-08T00:00:00.000+00:00",
-			description: "Dauntless Awakened is a community-run revival of Dauntless. Gather your party in Ramsgate and return to the hunt.",
+			description: "Dauntless Revamped is a community-run revival of Dauntless. Gather your party in Ramsgate and return to the hunt.",
 			language: req.params.language ?? "en",
 			notes: [
 				{
 					sections: [
 						{
-							description: "Dauntless Awakened is a community project that keeps Dauntless alive. Your Slayer, gear and loadouts are kept on Dauntless Awakened servers, so you can pick up right where you left off.",
+							description: "Dauntless Revamped is a community project that keeps Dauntless alive. Your Slayer, gear and loadouts are kept on Dauntless Revamped servers, so you can pick up right where you left off.",
 							title: "The hunt continues",
 							type: "featured"
 						},
@@ -807,7 +807,7 @@ systemRouter.get("/patchnotes/:language/:gameversion", (req, res) => {
 							type: "default"
 						}
 					],
-					title: "Welcome to Dauntless Awakened",
+					title: "Welcome to Dauntless Revamped",
 					type: "new_to_dauntless"
 				},
 				{
@@ -816,8 +816,8 @@ systemRouter.get("/patchnotes/:language/:gameversion", (req, res) => {
 							changes: [
 								{
 									list: [
-										"Dauntless Awakened is still growing, so you may run into the odd bug",
-										"If something goes wrong, tell the Dauntless Awakened team what you were doing and roughly when it happened",
+										"Dauntless Revamped is still growing, so you may run into the odd bug",
+										"If something goes wrong, tell the Dauntless Revamped team what you were doing and roughly when it happened",
 										"Thank you for hunting with us!"
 									]
 								}
@@ -832,7 +832,7 @@ systemRouter.get("/patchnotes/:language/:gameversion", (req, res) => {
 			],
 			permalink: "/patch-notes/mysticparadox/",
 			release_version: "",
-			title: "About Dauntless Awakened"
+			title: "About Dauntless Revamped"
 		}
 	});
 });

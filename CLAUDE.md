@@ -30,10 +30,6 @@ versions\1.14.7\host\restart-server.ps1 -Stop      # stop backend, Director, gam
 versions\1.14.7\ParadoxRuntime\_build.bat          # -> x64\Release\MysticParadox.dll
 # publish runtime to clients (from versions\1.14.7\ParadoxLauncher; bump version; live without restart)
 node scripts/publish-runtime-update.mjs --dll ../ParadoxRuntime/x64/Release/MysticParadox.dll --extra <prev version dir>/winmm.dll --target client --version <bump> --changelist 647472 --channel stable --output 'D:\MysticParadoxData\updates' --base-url https://paradox.test --key .secrets/selfhost-runtime-update.private.pem
-# tests (all green 2026-10-17)
-cd versions\1.14.7\ParadoxBackend; npm test        # 293 tests
-cd versions\1.14.7\ParadoxDirector; npm test
-cd launcher; npm run typecheck; npm test
 ```
 
 Backend/Director code changes need a restart to go live; game-data regen needs a backend restart. Client DLL changes only reach players through a signed publish (hand-copied DLLs are rejected by hash).
