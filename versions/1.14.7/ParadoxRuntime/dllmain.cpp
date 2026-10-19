@@ -8797,7 +8797,7 @@ void __fastcall ArchonRouteAddNetworkActorHook(
                     + " route=global-always-relevant");
             }
         } else if (ActorObject->Class && ActorObject->Class->GetName() == "adventure_island_arrival_trigger_bp_C"
-            && !MpExeRelativeFlagPresent(L"DISABLE_PARTY_DROP_IN.flag")) {
+            && MpExeRelativeFlagPresent(L"ENABLE_PARTY_DROP_IN.flag")) {
             // [PartyDropIn] Each player's hunt arrival trigger is bOnlyRelevantToOwner, and the graph picks the
             // node here, once. Clearing the bit later (at BeginPlay, 0.2.35) left it on the owner route: the
             // test got the other player's trigger 17 s late, after both had landed, so their drop-in played on
@@ -14299,14 +14299,16 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
     // player's arrival sequence on their real pawn here as a non-viewer (camera/HUD/overlay are gated on
     // bIsClientViewingCinematic, i.e. only the owner). Its start path still calls SetCinematicState(2) +
     // HideGameplayHUD on the local PC, so remote copies are only kept until our own arrival has ended
-    // (late joiners keep retail behaviour). DISABLE_PARTY_DROP_IN.flag = retail for all of it.
+    // (late joiners keep retail behaviour). Opt-in via ENABLE_PARTY_DROP_IN.flag (server and client): since
+    // 2026-10-18 the remote cine really plays, and it is the whole sequence in island space - a second airship,
+    // and the remote pawn driven onto our own landing spot (players inside each other). Default = retail.
     if (Object && !s_MutedArrivalTriggers.empty()
         && FunctionName.find("dynamic_cinematic_component_bp_C.") != std::string::npos
         && s_MutedArrivalTriggers.count(Object->Outer)) {
         return;
     }
     if (Object && FunctionName.find("adventure_island_arrival_trigger_bp_C.") != std::string::npos) {
-        static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_PARTY_DROP_IN.flag");
+        static const bool s_Disabled = !MpExeRelativeFlagPresent(L"ENABLE_PARTY_DROP_IN.flag");
         if (s_MutedArrivalTriggers.count(Object)) return;
         if (!s_Disabled) {
             const bool IsTick = FunctionName.find("_C.ReceiveTick") != std::string::npos;
