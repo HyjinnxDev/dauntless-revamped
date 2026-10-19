@@ -10,6 +10,8 @@
 //   GET      /content/v1/files/<path>  one listed file, signed-in launcher accounts only, with Range resume
 // GAME_CONTENT_MANIFEST is the JSON the launcher pins (scripts/make-game-manifest.mjs) and GAME_CONTENT_DIR the
 // install it was made from. Either unset = no content routes (404), as before.
+// [Revamped] GAME_CONTENT_DOWNLOAD_BASE_URL (https, e.g. the R2 bucket's custom domain) is added to the manifest as
+// downloadBaseUrl: launchers then fetch files from there without credentials and still check them against their pinned hashes.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -29,8 +31,18 @@ function Content(): { raw: string; byPath: Map<string, ContentFile>; dir: string
     Loaded = null;
     if (!ManifestPath || !Dir) return Loaded;
     try {
-        const Raw = fs.readFileSync(ManifestPath, "utf8");
-        const Files = (JSON.parse(Raw) as { files: ContentFile[] }).files;
+        let Raw = fs.readFileSync(ManifestPath, "utf8");
+        const Manifest = JSON.parse(Raw) as { files: ContentFile[] };
+        const Files = Manifest.files;
+        const DownloadBase = process.env.GAME_CONTENT_DOWNLOAD_BASE_URL?.trim();
+        if (DownloadBase) {
+            const Url = new URL(DownloadBase);
+            if (Url.protocol !== "https:" || Url.username || Url.password || Url.search || Url.hash) {
+                throw new Error("GAME_CONTENT_DOWNLOAD_BASE_URL must be HTTPS without credentials, query or fragment");
+            }
+            Raw = JSON.stringify({ ...Manifest, downloadBaseUrl: Url.href.replace(/\/+$/, "") + "/" });
+            logger.info(`[Content] launchers download game files from ${Url.href}`);
+        }
         Loaded = { raw: Raw, byPath: new Map(Files.map((f) => [f.path.toLowerCase(), f])), dir: path.resolve(Dir) };
         logger.info(`[Content] serving ${Files.length} game files from ${Loaded.dir}`);
     } catch (error) {

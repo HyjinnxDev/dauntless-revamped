@@ -2016,6 +2016,21 @@ img {
   color: var(--dr-ice);
 }
 
+.banner-fade {
+  animation: drop 0.25s ease-out, banner-fade-out 0.4s ease-in 6s forwards;
+}
+
+.banner-fade:hover,
+.banner-fade:focus-within {
+  animation-play-state: paused;
+}
+
+@keyframes banner-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
 @keyframes drop {
   from {
     transform: translateY(-8px);

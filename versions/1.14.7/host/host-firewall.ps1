@@ -1,9 +1,9 @@
-# Opens the host's Dauntless 1.14.7 ports to Tailscale peers (100.64.0.0/10) and this home network
-# (192.168.1.0/24), nothing else. Run once as admin (again after changing it):
+# Opens the host's Dauntless 1.14.7 ports to everyone (public server; forward the same ports on the router).
+# Run once as admin (again after changing it):
 #   right-click > Run with PowerShell (as administrator), or from an admin PowerShell:
 #   powershell -ExecutionPolicy Bypass -File "D:\Dev\dauntless-revamped\versions\1.14.7\host\host-firewall.ps1"
 # Undo: Get-NetFirewallRule -DisplayName 'Dauntless 1.14.7 *' | Remove-NetFirewallRule
-# ponytail: tailnet + home LAN only. For a public server, add rules without -RemoteAddress (and forward the ports).
+# ponytail: open to Any. Tailnet + LAN only was @('100.64.0.0/10', '192.168.1.0/24').
 
 $ErrorActionPreference = 'Stop'
 $allowed = @('100.64.0.0/10', '192.168.1.0/24')

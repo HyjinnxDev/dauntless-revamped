@@ -12,7 +12,7 @@
 import { logger } from "../logger";
 import { GetRamsgateConnectionDetails, GetTrainingDojoConnectionDetails, StartupGameserverWithArgs, StartupGameserverWithHuntIdAndPlayers, TryReuseSharedHuntServer } from "./gameservers";
 
-export async function HandleMatchmakingRequest(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined){
+export async function HandleMatchmakingRequest(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined, IsPrivate: boolean = true){
     logger.info(`Handling matchmaking with GameMode: ${GameMode} HuntId: ${HuntId} and GameArgs: ${GameArgs}`);
 
     if(GameMode === "CITY"){
@@ -57,7 +57,7 @@ export async function HandleMatchmakingRequest(GameMode: string, GameArgs: strin
             }
 
             if(HuntId != undefined && HuntId.trim().length > 0 && ExpectedPlayers != undefined){
-                return await StartupGameserverWithHuntIdAndPlayers(HuntId, ExpectedPlayers!);
+                return await StartupGameserverWithHuntIdAndPlayers(HuntId, ExpectedPlayers!, IsPrivate);
             }
         } catch(Err: any) {
             // A missing 1.12 row, capacity failure or failed readiness check must remain

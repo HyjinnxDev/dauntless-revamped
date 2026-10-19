@@ -12,6 +12,7 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { HandleMatchmakingRequest } from "../controllers/matchmaker";
+import { JoinPublicHunt } from "../controllers/gameservers";
 import { GetP2PExtension } from "../extensions/p2p";
 import express from "express";
 
@@ -23,8 +24,10 @@ matchmakingRouter.post("/handle-matchmaking-for-player", express.json(), async (
         const GameArgs = req.body.GameArgs;
         const HuntId = req.body.HuntId;
         const ExpectedPlayers = req.body.ExpectedPlayers;
+        // Only an explicit false makes a hunt public (joinable mid-hunt); older callers stay private.
+        const IsPrivate = req.body.IsPrivate !== false;
 
-        const MatchmakingResult = await HandleMatchmakingRequest(GameMode, GameArgs, HuntId, ExpectedPlayers);
+        const MatchmakingResult = await HandleMatchmakingRequest(GameMode, GameArgs, HuntId, ExpectedPlayers, IsPrivate);
 
         res.status(200);
         res.json(MatchmakingResult);
@@ -35,6 +38,20 @@ matchmakingRouter.post("/handle-matchmaking-for-player", express.json(), async (
         res.status(500);
         res.json({ error: "matchmaking_failed" });
     }
+});
+
+// [2026-10-19] Public matchmaking: a running public hunt the players can join now (200), or none (204).
+matchmakingRouter.post("/join-public-hunt", express.json(), (req, res) => {
+    const HuntId = req.body?.HuntId;
+    const Players = req.body?.Players;
+    if (typeof HuntId !== "string" || !Array.isArray(Players) || Players.length < 1 || Players.length > 4
+        || Players.some((P: unknown) => typeof P !== "string" || P.length === 0)) {
+        res.status(400).json({ error: "bad_request" });
+        return;
+    }
+    const Joined = JoinPublicHunt(HuntId, Players);
+    if (Joined == undefined) { res.status(204).send(); return; }
+    res.status(200).json(Joined);
 });
 
 // Routes of the optional player-hosted hunt module (src/extensions; none without it).

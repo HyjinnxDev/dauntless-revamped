@@ -31,7 +31,8 @@ async function Main(): Promise<void> {
     logger.warn({ error }, "Server runtime update failed; continuing with the installed DLL");
   }
 
-  app.listen(PORT, () => {
+  // Backend reaches the Director at 127.0.0.1 (DEPLOYSERVER_URL); its matchmaker routes have no auth, so stay off the network.
+  app.listen(Number(PORT), "127.0.0.1", () => {
     void Startup().then(
       () => SetPersistentHubsReady(true),
       (error) => logger.error({ error }, "Persistent gameserver startup failed"),

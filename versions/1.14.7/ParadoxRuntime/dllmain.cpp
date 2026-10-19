@@ -2475,8 +2475,9 @@ static void AutoPressStartFromEvent(SDK::UObject* Object, const std::string& Fun
 //     cooked asset's imports), which is why the art followed the season. The PNG embedded by MysticParadox.rc
 //     is decoded by KismetRenderingLibrary.ImportBufferAsTexture2D and set with Image.SetBrushFromTexture, which
 //     also cancels the season texture's pending async load. Applied from Construct onward.
-//   - The DAUNTLESS logo (ArchonLogoMat, /Game/UI/Textures/Logo/ArchonLogo_Mat) is collapsed; the background
-//     carries the Mystic Paradox logo.
+//   - The DAUNTLESS logo slot (ArchonLogoMat, /Game/UI/Textures/Logo/ArchonLogo_Mat) shows the embedded Dauntless
+//     Revamped wordmark instead (2026-10-19; it was collapsed before). The screen's blueprint still decides when the
+//     slot is visible.
 //   - The patch-notes "Update <release_version>" line (preview and popup) is collapsed; the Metagame serves the
 //     title and text (routes/system.ts /patchnotes).
 // Re-asserted after every LoginScreen event because the screen's own animations and native refreshes may
@@ -2488,24 +2489,19 @@ static SDK::UTexture2D* s_Background = nullptr;
 static int32_t s_BackgroundIndex = -1;
 static bool s_ImportFailed = false;
 
-static bool EmbeddedBackground(const uint8_t*& Data, uint32_t& Size) {
-    static const uint8_t* s_Data = nullptr;
-    static uint32_t s_Size = 0;
-    static bool s_Looked = false;
-    if (!s_Looked) {
-        s_Looked = true;
-        HMODULE Self = nullptr;
-        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-                reinterpret_cast<LPCWSTR>(&EmbeddedBackground), &Self) && Self) {
-            if (HRSRC Res = FindResourceW(Self, MAKEINTRESOURCEW(IDR_MP_LOGIN_BACKGROUND), MAKEINTRESOURCEW(10) /*RT_RCDATA*/)) {
-                HGLOBAL Loaded = LoadResource(Self, Res);
-                s_Data = Loaded ? static_cast<const uint8_t*>(LockResource(Loaded)) : nullptr;
-                s_Size = s_Data ? SizeofResource(Self, Res) : 0;
-            }
+// Resource bytes stay mapped with the DLL, so no caching is needed.
+static bool EmbeddedPng(int Id, const uint8_t*& Data, uint32_t& Size) {
+    Data = nullptr;
+    Size = 0;
+    HMODULE Self = nullptr;
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            reinterpret_cast<LPCWSTR>(&EmbeddedPng), &Self) && Self) {
+        if (HRSRC Res = FindResourceW(Self, MAKEINTRESOURCEW(Id), MAKEINTRESOURCEW(10) /*RT_RCDATA*/)) {
+            HGLOBAL Loaded = LoadResource(Self, Res);
+            Data = Loaded ? static_cast<const uint8_t*>(LockResource(Loaded)) : nullptr;
+            Size = Data ? SizeofResource(Self, Res) : 0;
         }
     }
-    Data = s_Data;
-    Size = s_Size;
     return Data && Size > 0;
 }
 
@@ -2517,11 +2513,11 @@ static bool BackgroundAlive() {
         && s_Background->IsA(SDK::UTexture2D::StaticClass());
 }
 
-static SDK::UTexture2D* ImportBackground(SDK::UObject* WorldContext) {
+static SDK::UTexture2D* ImportPng(SDK::UObject* WorldContext, int Id) {
     const uint8_t* Data = nullptr;
     uint32_t Size = 0;
-    if (!EmbeddedBackground(Data, Size)) {
-        MpLog("[LoginBranding] embedded background resource not found - keeping the season image");
+    if (!EmbeddedPng(Id, Data, Size)) {
+        MpLog("[LoginBranding] embedded PNG resource " + std::to_string(Id) + " not found - keeping the stock image");
         return nullptr;
     }
     SDK::UFunction* Fn = SDK::UKismetRenderingLibrary::StaticClass()->GetFunction("KismetRenderingLibrary", "ImportBufferAsTexture2D");
@@ -2543,19 +2539,137 @@ static SDK::UTexture2D* ImportBackground(SDK::UObject* WorldContext) {
     static_assert(sizeof(Parms) == 0x20, "KismetRenderingLibrary_ImportBufferAsTexture2D is 0x20 bytes");
     const uint64_t StartMs = GetTickCount64();
     Library->ProcessEvent(Fn, &Parms);
-    MpLog("[LoginBranding] decoded embedded background (" + std::to_string(Size) + " bytes) in "
+    MpLog("[LoginBranding] decoded embedded PNG " + std::to_string(Id) + " (" + std::to_string(Size) + " bytes) in "
         + std::to_string(GetTickCount64() - StartMs) + "ms -> texture=" + MpPtr(Parms.ReturnValue));
     return Parms.ReturnValue;
 }
 
+// [LOGIN VIDEO 2026-10-19] Looping background video ahead of the still: Archon\Content\Movies\Windows\LoginLoop.mp4
+// (installed by the launcher beside Logo.mp4) is opened by a MediaPlayer (WmfMedia) that feeds a MediaTexture, and
+// the texture becomes SplashImage's brush. The clip's last 3 s already cross-fade into its first 3 s, so looping
+// shows no seam. Both objects are owned by the screen: the brush references the texture and the texture's
+// MediaPlayer property the player, so they are collected with the screen like the still, and a later screen
+// re-creates them. No file, or a player that will not open it, falls back to the embedded PNG.
+// DISABLE_LOGIN_VIDEO.flag beside the executable keeps the still.
+static SDK::UMediaTexture* s_Video = nullptr;
+static int32_t s_VideoIndex = -1;
+static bool s_VideoFailed = false;
+
+static bool VideoAlive() {
+    return s_Video && s_VideoIndex >= 0
+        && SDK::UObject::GObjects->GetByIndex(s_VideoIndex) == static_cast<SDK::UObject*>(s_Video)
+        && s_Video->IsA(SDK::UMediaTexture::StaticClass());
+}
+
+static bool CallOn(SDK::UObject* Object, const char* ClassName, const char* FunctionName, void* Parms) {
+    SDK::UFunction* Fn = Object && Object->Class ? Object->Class->GetFunction(ClassName, FunctionName) : nullptr;
+    if (!Fn) {
+        MpLog(std::string("[LoginBranding] ") + ClassName + "." + FunctionName + " not found - using the still background");
+        return false;
+    }
+    Object->ProcessEvent(Fn, Parms);
+    return true;
+}
+
+static SDK::UObject* SpawnOwned(SDK::UClass* Class, SDK::UObject* Outer) {
+    struct { SDK::UClass* ObjectClass; SDK::UObject* Outer; SDK::UObject* ReturnValue; } Parms{ Class, Outer, nullptr };
+    return CallOn(SDK::UGameplayStatics::GetDefaultObj(), "GameplayStatics", "SpawnObject", &Parms) ? Parms.ReturnValue : nullptr;
+}
+
+// A MediaTexture made at runtime has no render resource and no media-clock sink until UTexture::UpdateResource
+// (virtual, not reflected) runs; without it Slate draws the brush white. Its vtable slot is read from the one
+// reflected wrapper of it, CanvasRenderTarget2D.execUpdateResource, whose body is P_THIS->UpdateResource(): the
+// first `call/jmp [reg+disp]` (FF /2 or FF /4, mod 01 or 10) in the thunk carries the slot offset.
+static bool UpdateTextureResource(SDK::UObject* Texture) {
+    static int32_t s_Offset = -1;
+    if (s_Offset < 0) {
+        SDK::UFunction* Fn = SDK::UCanvasRenderTarget2D::StaticClass()->GetFunction("CanvasRenderTarget2D", "UpdateResource");
+        const uint8_t* p = Fn ? reinterpret_cast<const uint8_t*>(Fn->ExecFunction) : nullptr;
+        for (int i = 0; p && IsReadablePointer(p, 72) && i < 64; ++i) {
+            const uint8_t ModRM = p[i + 1];
+            const uint8_t Mod = ModRM >> 6, Reg = (ModRM >> 3) & 7, Rm = ModRM & 7;
+            if (p[i] != 0xFF || (Reg != 2 && Reg != 4) || (Mod != 1 && Mod != 2) || Rm == 4) continue;
+            s_Offset = Mod == 1 ? p[i + 2] : *reinterpret_cast<const int32_t*>(p + i + 2);
+            break;
+        }
+        MpLog("[LoginBranding] UTexture::UpdateResource vtable offset=" + std::to_string(s_Offset));
+        if (s_Offset <= 0 || s_Offset % 8 != 0 || s_Offset > 0x1000) { s_Offset = 0; }
+    }
+    if (s_Offset == 0) return false;
+    using UpdateResourceFn = void(*)(SDK::UObject*);
+    void** VTable = *reinterpret_cast<void***>(Texture);
+    reinterpret_cast<UpdateResourceFn>(VTable[s_Offset / 8])(Texture);
+    return true;
+}
+
+static SDK::UMediaTexture* CreateVideo(SDK::UObject* Outer) {
+    wchar_t Exe[MAX_PATH];
+    const DWORD n = GetModuleFileNameW(nullptr, Exe, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return nullptr;
+    std::wstring Path(Exe, n);
+    Path.resize(Path.find_last_of(L"\\/") + 1);                     // ...\Archon\Binaries\Win64\ (exe dir)
+    Path += L"..\\..\\Content\\Movies\\Windows\\LoginLoop.mp4";
+    if (GetFileAttributesW(Path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+        MpLog("[LoginBranding] LoginLoop.mp4 not installed - using the still background");
+        return nullptr;
+    }
+
+    auto* Player = static_cast<SDK::UMediaPlayer*>(SpawnOwned(SDK::UMediaPlayer::StaticClass(), Outer));
+    auto* Texture = static_cast<SDK::UMediaTexture*>(SpawnOwned(SDK::UMediaTexture::StaticClass(), Outer));
+    if (!Player || !Texture) return nullptr;
+
+    struct { SDK::UMediaPlayer* NewMediaPlayer; } SetPlayer{ Player };
+    if (!CallOn(Texture, "MediaTexture", "SetMediaPlayer", &SetPlayer)) return nullptr;
+    if (!UpdateTextureResource(Texture)) {
+        MpLog("[LoginBranding] UpdateResource slot not found - using the still background");
+        return nullptr;
+    }
+    Player->PlayOnOpen = true;
+    struct { bool Looping; bool ReturnValue; } Loop{ true, false };
+    if (!CallOn(Player, "MediaPlayer", "SetLooping", &Loop)) return nullptr;
+    // Params::MediaPlayer_OpenFile with the FString spelled out; ProcessEvent never frees caller-owned parameters.
+    struct { const wchar_t* Data; int32_t Num; int32_t Max; bool ReturnValue; uint8_t Pad[7]; } Open{
+        Path.c_str(), static_cast<int32_t>(Path.size()) + 1, static_cast<int32_t>(Path.size()) + 1, false, {} };
+    static_assert(sizeof(Open) == 0x18, "MediaPlayer_OpenFile is 0x18 bytes");
+    if (!CallOn(Player, "MediaPlayer", "OpenFile", &Open)) return nullptr;
+    MpLog(std::string("[LoginBranding] login video open=") + (Open.ReturnValue ? "1" : "0")
+        + " player=" + MpPtr(Player) + " texture=" + MpPtr(Texture));
+    return Open.ReturnValue ? Texture : nullptr;
+}
+
+// True while SplashImage shows the video; false sends the caller on to the still.
+static bool ApplyVideo(SDK::ULoginScreen_bps_C* Screen, SDK::UImage* Splash) {
+    static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_LOGIN_VIDEO.flag");
+    if (s_Disabled || s_VideoFailed) return false;
+
+    const bool Alive = VideoAlive();
+    if (Alive && Splash->Brush.ResourceObject == static_cast<SDK::UObject*>(s_Video)) return true;   // already ours
+    if (!Alive) {
+        s_Video = CreateVideo(Screen);
+        s_VideoIndex = s_Video ? s_Video->Index : -1;
+        if (!s_Video) {
+            s_VideoFailed = true;                                    // do not retry on every event
+            return false;
+        }
+    }
+    struct { SDK::UObject* ResourceObject; } Parms{ s_Video };
+    if (!CallOn(Splash, "Image", "SetBrushResourceObject", &Parms)) {
+        s_VideoFailed = true;
+        return false;
+    }
+    return true;
+}
+
 static void ApplyBackground(SDK::ULoginScreen_bps_C* Screen, const std::string& FunctionName) {
     SDK::UImage* Splash = Screen->SplashImage;
-    if (s_ImportFailed || !Splash || !IsReadablePointer(Splash, sizeof(SDK::UImage))) return;
+    if (!Splash || !IsReadablePointer(Splash, sizeof(SDK::UImage))) return;
+    if (ApplyVideo(Screen, Splash)) return;
+    if (s_ImportFailed) return;
 
     const bool Alive = BackgroundAlive();
     if (Alive && Splash->Brush.ResourceObject == static_cast<SDK::UObject*>(s_Background)) return;   // already ours
     if (!Alive) {
-        s_Background = ImportBackground(Screen);
+        s_Background = ImportPng(Screen, IDR_MP_LOGIN_BACKGROUND);
         s_BackgroundIndex = s_Background ? s_Background->Index : -1;
         if (!s_Background) {
             s_ImportFailed = true;                                   // do not retry on every event
@@ -2578,6 +2692,49 @@ static void ApplyBackground(SDK::ULoginScreen_bps_C* Screen, const std::string& 
     if (s_Logged++ < 16) {
         MpLog("[LoginBranding] background set after " + FunctionName + " screen=" + MpPtr(Screen)
             + " applied=" + std::to_string(Splash->Brush.ResourceObject == static_cast<SDK::UObject*>(s_Background)));
+    }
+}
+
+// The wordmark replaces the stock material in ArchonLogoMat. The brush is a little taller than the stock
+// logo and takes the wordmark's width for that height, so it is not stretched to the stock logo's shape.
+static SDK::UTexture2D* s_Logo = nullptr;
+static int32_t s_LogoIndex = -1;
+static bool s_LogoFailed = false;
+
+static void ApplyLogo(SDK::ULoginScreen_bps_C* Screen) {
+    SDK::UImage* Logo = Screen->ArchonLogoMat;
+    if (s_LogoFailed || !Logo || !IsReadablePointer(Logo, sizeof(SDK::UImage))) return;
+
+    const bool Alive = s_Logo && s_LogoIndex >= 0
+        && SDK::UObject::GObjects->GetByIndex(s_LogoIndex) == static_cast<SDK::UObject*>(s_Logo)
+        && s_Logo->IsA(SDK::UTexture2D::StaticClass());
+    if (Alive && Logo->Brush.ResourceObject == static_cast<SDK::UObject*>(s_Logo)) return;   // already ours
+    if (!Alive) {
+        s_Logo = ImportPng(Screen, IDR_MP_LOGIN_LOGO);
+        s_LogoIndex = s_Logo ? s_Logo->Index : -1;
+        if (!s_Logo) {
+            s_LogoFailed = true;                                     // do not retry on every event
+            return;
+        }
+    }
+
+    constexpr float kAspect = 1400.0f / 519.0f;                      // assets\mp_login_logo.png
+    // Fixed height: 1.875x the stock logo's 512 (logged as 1024x512), so a re-apply never compounds the scale.
+    constexpr float Height = 960.0f;
+    const SDK::FVector2D Stock = Logo->Brush.ImageSize;
+    Logo->Brush.ImageSize.X = Height * kAspect;
+    Logo->Brush.ImageSize.Y = Height;
+    struct { SDK::UTexture2D* Texture; bool bMatchSize; uint8_t Pad[7]; } Parms{ s_Logo, false, {} };
+    if (!CallOn(Logo, "Image", "SetBrushFromTexture", &Parms)) {
+        s_LogoFailed = true;
+        return;
+    }
+
+    static int s_Logged = 0;
+    if (s_Logged++ < 4) {
+        MpLog("[LoginBranding] logo set: stock size " + std::to_string(Stock.X) + "x" + std::to_string(Stock.Y)
+            + " -> " + std::to_string(Logo->Brush.ImageSize.X) + "x" + std::to_string(Logo->Brush.ImageSize.Y)
+            + " vis=" + std::to_string(static_cast<int>(Logo->Visibility)));
     }
 }
 
@@ -2649,7 +2806,7 @@ static void OnLoginScreenEvent(SDK::UObject* Object, const std::string& Function
     Collapse(s_EpicIcon, "Epic Games badge (Icon_EpicAccount)");
 
     ApplyBackground(Screen, FunctionName);
-    Collapse(Screen->ArchonLogoMat, "DAUNTLESS logo (ArchonLogoMat)");
+    ApplyLogo(Screen);
 
     SDK::UPatchNotesPreviewWidget* Preview = Screen->PatchNotesPreviewWidget;
     if (Preview && IsReadablePointer(Preview, sizeof(SDK::UPatchNotesPreviewWidget))) {
@@ -13929,7 +14086,7 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
                 const bool Own = TriggerOwner && TriggerOwner == LocalPawn;
                 if (IsArrivalStop) {
                     reinterpret_cast<void(*)(UObject*, UFunction*, void*)>(OrigProcessEventClient)(Object, Function, Parms);
-                    if (Own) { s_LocalArrivalDone = true; MpLog("[PartyDropIn] local arrival ended"); }
+                    if (Own && !s_LocalArrivalDone) { s_LocalArrivalDone = true; MpLog("[PartyDropIn] local arrival ended"); }
                     return;
                 }
                 if (Own || !s_LocalArrivalDone) {
@@ -13939,11 +14096,18 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
                     std::string Ready = "own";
                     if (!Own) {
                         Ready = "no-component";
-                        FProperty* CompProp = FindPropertyByNameInChain(Object->Class, "dynamic_cinematic_component_bp");
-                        UObject* Comp = CompProp ? *reinterpret_cast<UObject**>(reinterpret_cast<uint8_t*>(Object) + CompProp->Offset) : nullptr;
-                        FProperty* ReadyProp = Comp && IsReadablePointer(Comp, sizeof(UObject))
-                            ? FindPropertyByNameInChain(Comp->Class, "ClientReady") : nullptr;
-                        if (ReadyProp) { *(reinterpret_cast<uint8_t*>(Comp) + ReadyProp->Offset) = 1; Ready = "set"; }
+                        // [2026-10-18] The member-name lookup never matched (logged no-component every hunt), so
+                        // the remote cine waited forever and party members never visibly landed. Find the
+                        // component by class among the trigger's subobjects instead (one GObjects walk).
+                        for (int32_t i = 0; i < SDK::UObject::GObjects->Num(); ++i) {
+                            SDK::UObject* O = SDK::UObject::GObjects->GetByIndex(i);
+                            if (!O || O->Outer != Object
+                                || !O->IsA(SDK::Udynamic_cinematic_component_bp_C::StaticClass())) continue;
+                            auto* Comp = static_cast<SDK::Udynamic_cinematic_component_bp_C*>(O);
+                            Comp->ClientReady = true;
+                            Ready = std::string("set wait=") + (Comp->WaitForClientReady ? "1" : "0");
+                            break;
+                        }
                     }
                     MpLog("[PartyDropIn] keeping arrival trigger " + MpPtr(Object) + " owner=" + MpPtr(TriggerOwner)
                         + " localPawn=" + MpPtr(LocalPawn) + " clientReady=" + Ready);

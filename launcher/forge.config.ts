@@ -18,7 +18,7 @@ const config: ForgeConfig = {
     // the brand icons in brand/launcher/, made by npm run icon.
     icon: "assets/icon",
     // The window icon and the third-party license texts. The game's runtime comes from each server.
-    extraResource: ["assets/icon.png", "assets/intro-Logo.mp4", "THIRD-PARTY-NOTICES.txt"],
+    extraResource: ["assets/icon.png", "assets/intro-Logo.mp4", "assets/login-loop.mp4", "THIRD-PARTY-NOTICES.txt"],
     win32metadata: {
       CompanyName: "Dauntless Revamped",
       FileDescription: "Dauntless Revamped Launcher",
