@@ -155,6 +155,7 @@ if ($Setup) {
     GAMESERVER_BINARY_PATH = "$game\Archon\Binaries\Win64\Dauntless-Win64-Shipping.exe"
     GAMESERVER_LOG_DIR = "$logs\gameservers"; SERVER_RUNTIME_AUTO_UPDATE = 'false'
     MAX_CONCURRENT_HUNT_SERVERS = 2
+    GAMESERVER_CHARACTER_LOG = 'VeryVerbose'   # live runs Log; test keeps full character traces
     MYSTICPARADOX_API_BASE = "https://paradox.test:$($ports.Https)"   # inherited by test game servers
   })
 

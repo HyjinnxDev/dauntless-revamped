@@ -149,6 +149,9 @@ const GAMESERVER_BINARY_PATH = process.env.GAMESERVER_BINARY_PATH!;
 // hunt's lifetime. Verbose (not VeryVerbose) still keeps LogOnline's warnings/errors (the original
 // reason it was bumped - "Failed to update player account progress flag") without the per-tick
 // object-name formatting tier that's the actual crash trigger.
+// [2026-10-19] GAMESERVER_CHARACTER_LOG sets the LogPhoenixCharacter verbosity: live .env uses Log (VeryVerbose
+// formats + writes a line per character event, real CPU/disk in combat); unset keeps VeryVerbose for the test stack.
+const GAMESERVER_CHARACTER_LOG = process.env.GAMESERVER_CHARACTER_LOG?.trim() || "VeryVerbose";
 const STANDARD_GAMESERVER_ARGS = [
     "-EpicPortal",
     "-server",
@@ -164,7 +167,7 @@ const STANDARD_GAMESERVER_ARGS = [
     // "WorldContext requested with invalid context object" (the client build's UI/world-lookup noise,
     // see Progress/34 section AA) until the runtime log reaches 500+ MB, which makes the log useless for
     // diagnosis and expensive to read. LogOnline/LogPhoenixCharacter verbosity is unchanged.
-    "-LogCmds=\"LogPhoenixCharacter VeryVerbose, LogOnline Verbose, LogLoad Off\""
+    `-LogCmds="LogPhoenixCharacter ${GAMESERVER_CHARACTER_LOG}, LogOnline Verbose, LogLoad Off"`
 ];
 const METAGAME_API_KEY = process.env.METAGAME_API_KEY!;
 const MY_IP = process.env.MY_IP!;
