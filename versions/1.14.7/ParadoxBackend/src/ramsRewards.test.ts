@@ -46,7 +46,7 @@ test("base bounty claim pays by the tier of the bounty just removed, once", () =
 
 test("Middleman lists a once-a-day dust -> Rams exchange keyed on the rotation day", () => {
     const Sku = GetStoreSkus("weekly_cell_offering").find((S) => S.id === "middleman_daily_rams_exchange");
-    assert.deepEqual(Sku?.prices, [{ currencyId: "id_currency_celldust", price: 150 }]);
+    assert.deepEqual(Sku?.prices, [{ currencyId: "CURRENCY_CELLDUST", price: 150 }]);
     assert.deepEqual(Sku?.items, [{ catalogId: "CURRENCY_NOTES", quantity: 1500, instanced: false }]);
     const Reset = Date.UTC(2026, 9, 19, 18);
     assert.equal(RamsExchangeSku(Reset).ownershipKey, RamsExchangeSku(Reset + 86_399_000).ownershipKey);

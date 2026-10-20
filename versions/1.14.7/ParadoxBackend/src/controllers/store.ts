@@ -137,6 +137,9 @@ function FountainDailySku(): StoreSku {
 // there also has _R (+2) and _E (+3) catalog cells). Tier prices set by the server owner; +2/+3 cost more than fusing
 // +1s yourself, the premium buys skipping the fusion.
 // ponytail: the wiki says each cell has a purchase limit "depending on the cell" but not what it is, so no limit.
+// [2026-10-20] Aetherdust prices use currencyId "CURRENCY_CELLDUST": the client's cell tile builder (exe 0x1ebf620)
+// matches price ids literally, "id_currency_platinum" -> PlatPrice and "CURRENCY_CELLDUST" -> DustPrice; with
+// "id_currency_celldust" every dust price showed -1.
 const MIDDLEMAN_DAY_MS = 24 * 60 * 60 * 1000;
 const MIDDLEMAN_ROTATION_EPOCH = Date.UTC(1970, 0, 1, 18);
 const MIDDLEMAN_TIERS = [
@@ -163,7 +166,7 @@ export function WeeklyCellSkus(NowMs = Date.now()): StoreSku[] {
             displayName: Family.name.replace(/^\+1 /, `+${Tier.level} `),
             displayDescription: "Purchase one cell with Platinum or Aetherdust.",
             displayPriority: Index,
-            prices: [{ currencyId: "id_currency_platinum", price: Tier.platinum }, { currencyId: "id_currency_celldust", price: Tier.dust }],
+            prices: [{ currencyId: "id_currency_platinum", price: Tier.platinum }, { currencyId: "CURRENCY_CELLDUST", price: Tier.dust }],
             maxAllowed: null,
             availableFrom: new Date(Start).toISOString(),
             availableTo: new Date(Start + MIDDLEMAN_DAY_MS).toISOString(),
@@ -186,7 +189,7 @@ export function RamsExchangeSku(NowMs = Date.now()): StoreSku {
         displayName: `${RAMS_EXCHANGE_RAMS} Rams`,
         displayDescription: `Trade ${RAMS_EXCHANGE_DUST} Aetherdust for ${RAMS_EXCHANGE_RAMS} Rams. Once a day.`,
         displayPriority: MIDDLEMAN_TIERS.length,
-        prices: [{ currencyId: "id_currency_celldust", price: RAMS_EXCHANGE_DUST }],
+        prices: [{ currencyId: "CURRENCY_CELLDUST", price: RAMS_EXCHANGE_DUST }],
         maxAllowed: 1,
         ownershipKey: `middleman_daily_rams_exchange:${Day}`,
         availableFrom: new Date(Start).toISOString(),
@@ -232,7 +235,6 @@ const CURRENCY_ID_MAP: Record<string, string> = {
     // InsufficientStackedItemError (unmapped -> 500) instead of charging anything. It failed closed,
     // but it would have failed. See Progress/33_PLATINUM_STORE.md.
     id_currency_platinum: "CURRENCY_PLATINUM",
-    id_currency_celldust: "CURRENCY_CELLDUST",   // Middleman weekly cell offers
 };
 
 export function GetLadyLuckSkus(): StoreSku[] {
@@ -351,6 +353,10 @@ export type PurchaseResult =
 
 // The client's currency path segment (/token/{currency}/{sku}): a price's currencyId without `id_currency_` and underscores.
 export const CurrencySlug = (CurrencyId: string) => CurrencyId.replace(/^id_currency_/, "").replace(/_/g, "");
+// The Middleman sends the price's raw currencyId instead of the slug (/token/id_currency_platinum/...), so accept both.
+export const PricesForCurrency = (Sku: StoreSku, Currency?: string) => Sku.prices.length > 1
+    ? Sku.prices.filter((p) => p.currencyId === Currency || CurrencySlug(p.currencyId) === Currency)
+    : Sku.prices;
 
 // [2026-07-24] Confirmed real purchase flow (see routes/store.ts's /token/platinum and
 // /notification/platinum handlers): the client never calls a skuId-in-path/characterId-in-body
@@ -365,7 +371,7 @@ export async function PurchaseStoreSku(userId: string, characterId: string, stor
         return { ok: false, reason: "unknown_sku" };
     }
     // A SKU priced in several currencies (Middleman cells: Platinum or Aetherdust) is paid in the one the player chose.
-    const Prices = Sku.prices.length > 1 ? Sku.prices.filter((p) => CurrencySlug(p.currencyId) === currency) : Sku.prices;
+    const Prices = PricesForCurrency(Sku, currency);
     if (Prices.length === 0) {
         return { ok: false, reason: "unknown_currency" };
     }

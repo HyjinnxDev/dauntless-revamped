@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-    CurrencySlug,
+    PricesForCurrency,
     FindStoreSkuByIdOrCatalogId,
     GetLadyLuckSkus,
     GetStoreSkus,
@@ -481,9 +481,14 @@ test("Middleman offers: one +1/+2/+3 cell at tiered Platinum or Aetherdust price
     const This = WeeklyCellSkus(Reset);
     assert.deepEqual(This.map((S) => S.items[0].catalogId.replace(/^CELL_.+_/, "")), ["UC", "R", "E"]);
     assert.deepEqual(This.map((S) => S.displayName.slice(0, 3)), ["+1 ", "+2 ", "+3 "]);
-    assert.deepEqual(This.map((S) => S.prices.map((P) => [CurrencySlug(P.currencyId), P.price])), [
-        [["platinum", 50], ["celldust", 40]], [["platinum", 150], ["celldust", 100]], [["platinum", 300], ["celldust", 250]],
+    // Raw ids the client's cell tile matches: id_currency_platinum -> PlatPrice, CURRENCY_CELLDUST -> DustPrice.
+    assert.deepEqual(This.map((S) => S.prices.map((P) => [P.currencyId, P.price])), [
+        [["id_currency_platinum", 50], ["CURRENCY_CELLDUST", 40]], [["id_currency_platinum", 150], ["CURRENCY_CELLDUST", 100]], [["id_currency_platinum", 300], ["CURRENCY_CELLDUST", 250]],
     ]);
+    // Purchase currency arrives as the raw id (Middleman) or the slug (other stores).
+    for (const Currency of ["id_currency_platinum", "platinum"]) assert.deepEqual(PricesForCurrency(This[0], Currency), [This[0].prices[0]]);
+    for (const Currency of ["CURRENCY_CELLDUST", "CURRENCYCELLDUST"]) assert.deepEqual(PricesForCurrency(This[0], Currency), [This[0].prices[1]]);
+    assert.deepEqual(PricesForCurrency(This[0], "None"), []);
     assert.equal(new Set(This.map((S) => S.items[0].catalogId.replace(/_(UC|R|E)$/, ""))).size, 3);
     for (const Sku of This) {
         assert.equal(Sku.maxAllowed, null);
