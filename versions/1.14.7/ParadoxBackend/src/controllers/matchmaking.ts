@@ -181,7 +181,7 @@ function CancelHuntMatchmaking(HuntId: string, PlayerIds: readonly string[], Rea
     return true;
 }
 
-async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined, IsPrivate: boolean = true){
+async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, HuntId: string, ExpectedPlayers: string[] | undefined, IsPrivate: boolean = true, GauntletLevel?: number){
     if (!IsHubDestination(GameMode, HuntId) && GetP2PExtension().matchmaking.dedicatedHuntsDisabled()) {
         logger.error(`[HuntRoute] blocked dedicated hunt launch (dedicated hunts are disabled) huntId=${HuntId}`);
         return { succeeded: false, readyNow: false, host: "", port: 0 };
@@ -204,7 +204,8 @@ async function LaunchGameOnDeployserver(GameMode: string, GameArgs: string, Hunt
             GameArgs: GameArgs,
             HuntId: HuntId,
             ExpectedPlayers: ExpectedPlayers!,
-            IsPrivate
+            IsPrivate,
+            GauntletLevel
         })
     });
 
@@ -300,7 +301,7 @@ async function JoinPublicHuntOnDeployserver(HuntId: string, Players: string[]): 
 // When a whole party joins the same hunt, they must land in ONE game instance. The first
 // member to arrive creates it (with the full party as ExpectedPlayers); everyone else — who
 // follows once GetParty shows the party's active hunt — reuses that same host:port.
-async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId: string, PartyMembers: string[], IsPrivate: boolean = true){
+async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId: string, PartyMembers: string[], IsPrivate: boolean = true, GauntletLevel?: number){
     const Existing = PartyInstanceMap.get(PartyId);
     const ExistingCreatedAt = PartyInstanceCreatedAtMap.get(PartyId) ?? 0;
 
@@ -320,7 +321,7 @@ async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId:
         return await JoinOrLaunchPublicHunt(HuntId, { PartyId, Members: PartyMembers });
     }
 
-    const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, PartyMembers);
+    const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, PartyMembers, true, GauntletLevel);
 
     if(!GameOnDeployServer.succeeded){
         return false;
@@ -452,7 +453,7 @@ export async function GetPlayerCandidate(PlayerId: string): Promise<MatchmakingR
     return CheckAndUpdateQueueStatus(PlayerId);
 }
 
-export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string, HuntId: string, PlayerId: string, PartyId?: string, PartyMembers?: string[], PartyRevision?: number, IsPrivate: boolean = true){
+export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string, HuntId: string, PlayerId: string, PartyId?: string, PartyMembers?: string[], PartyRevision?: number, IsPrivate: boolean = true, GauntletLevel?: number){
     if(MATCHMAKING_MODE === "DISABLED"){
         logger.warn("Matchmaking is disabled, refusing MM!");
 
@@ -486,7 +487,7 @@ export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string
         // /candidate/status and the party's GetPartyInstance return the same server and every member follows.
         if(!IsHubDestination(GameMode, EffectiveHuntId) && EffectiveHuntId.trim().length > 0
            && PartyId != undefined && PartyMembers != undefined && PartyMembers.length > 1){
-            return await HandlePartyMatchmaking(EffectiveHuntId, PlayerId, PartyId, PartyMembers, IsPrivate);
+            return await HandlePartyMatchmaking(EffectiveHuntId, PlayerId, PartyId, PartyMembers, IsPrivate, GauntletLevel);
         }
 
         // [2026-10-19] A solo player on a public (not Private Hunt) hunt matchmakes; see JoinOrLaunchPublicHunt.
@@ -495,7 +496,7 @@ export async function HandlePlayerMatchmaking(GameMode: string, GameArgs: string
         }
 
         // Immediate instance: a shared hub (Ramsgate / dojo) everyone goes to, or a private solo hunt.
-        const GameOnDeployServer = await LaunchGameOnDeployserver(GameMode, GameArgs, EffectiveHuntId, PartyMembers ?? [PlayerId]);
+        const GameOnDeployServer = await LaunchGameOnDeployserver(GameMode, GameArgs, EffectiveHuntId, PartyMembers ?? [PlayerId], true, GauntletLevel);
 
         if(!GameOnDeployServer.succeeded){
             return false;

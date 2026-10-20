@@ -3474,6 +3474,58 @@ static int LaunchExpectedPlayerCount() {
     return std::clamp(Count, 0, HubMaxPlayers());
 }
 
+// [2026-10-20] Gauntlet level from the Director (candidate body gauntlet_level), -1 when not a Gauntlet launch.
+static int LaunchGauntletLevel() {
+    static const int Level = [] {
+        char Value[16] = {};
+        DWORD n = GetEnvironmentVariableA("MYSTICPARADOX_GAUNTLET_LEVEL", Value, static_cast<DWORD>(sizeof(Value)));
+        if (n == 0 || n >= sizeof(Value)) return -1;
+        char* End = nullptr;
+        long Parsed = std::strtol(Value, &End, 10);
+        const int L = (End != Value && *End == '\0' && Parsed >= 0 && Parsed <= INT_MAX) ? static_cast<int>(Parsed) : -1;
+        MpLog("[Gauntlet] launch level env='" + std::string(Value) + "' -> " + std::to_string(L));
+        return L;
+    }();
+    return Level;
+}
+
+// [2026-10-20 GAUNTLET PROBE] No Gauntlet component UFunction ever passes ProcessEvent, so read the live
+// components directly: logs a line whenever mode/state fields change. Gauntlet launches only, 2 s cadence.
+// Remove once Gauntlet spawns.
+static void MpTickGauntletProbe() {
+    if (LaunchGauntletLevel() < 0 || !SDK::UObject::GObjects) return;
+    static uint64_t s_LastMs = 0;
+    const uint64_t NowMs = GetTickCount64();
+    if (NowMs - s_LastMs < 2000) return;
+    s_LastMs = NowMs;
+    static std::string s_Last;
+    std::string Line;
+    const int Count = SDK::UObject::GObjects->Num();
+    for (int i = 0; i < Count; i++) {
+        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+        if (!Obj || Obj->IsDefaultObject() || !IsRegisteredLiveObject(Obj)) continue;
+        auto* B = reinterpret_cast<uint8_t*>(Obj);
+        if (Obj->IsA(SDK::AArchonGameMode::StaticClass())) {
+            Line += " gm=" + Obj->Class->GetName();
+        } else if (Obj->IsA(SDK::UGauntletGameModeComponent::StaticClass()) && IsReadablePointer(B, 0x3D0)) {
+            Line += " mode{level=" + std::to_string(*reinterpret_cast<int32_t*>(B + 0x3C4))
+                + " debug=" + std::to_string(B[0x3C8])
+                + " specLevel=" + std::to_string(*reinterpret_cast<int32_t*>(B + 0x118 + 0x8))
+                + " timeLimit=" + std::to_string(*reinterpret_cast<float*>(B + 0x118 + 0xD0))
+                + " rounds=" + std::to_string(*reinterpret_cast<int32_t*>(B + 0x118 + 0x130 + 8))
+                + " hasTuning=" + std::to_string(B[0x300]) + "}";
+        } else if (Obj->IsA(SDK::UGauntletGameStateComponent::StaticClass()) && IsReadablePointer(B, 0x1C0)) {
+            Line += " state{state=" + std::to_string(B[0x148])
+                + " level=" + std::to_string(*reinterpret_cast<int32_t*>(B + 0x138))
+                + " round=" + std::to_string(*reinterpret_cast<int32_t*>(B + 0x160))
+                + " hasEnc=" + std::to_string(B[0x180])
+                + " modifiersTable=" + MpPtr(*reinterpret_cast<void**>(B + 0x140)) + "}";
+        }
+    }
+    if (Line.empty()) Line = " no gauntlet components";
+    if (Line != s_Last) { s_Last = Line; MpLog("[GauntletProbe]" + Line); }
+}
+
 FString* GetGameDefaultMap(FString* a1) {
     // [2026-07-19] Per-call entry/return traces are VERBOSE_DIAG-only; this hook fires constantly.
     if (VerboseDiag()) MpLog("[GetGameDefaultMap] entry out=" + MpPtr(a1));
@@ -3510,6 +3562,19 @@ FString* GetGameDefaultMap(FString* a1) {
     // concrete launch roster in the server tick.
     FinalURL += std::wstring(L"?MaxPlayers=");
     FinalURL += std::to_wstring(HubMaxPlayers());
+
+    // [2026-10-20] Gauntlet: the exe's own travel URL carries ?GauntletLevel=%d and BPGM_ArchonGauntlet has no
+    // behemoth in its hunt row, so without it the run spawns nothing. The Director passes the client's chosen
+    // level (candidate body gauntlet_level) as MYSTICPARADOX_GAUNTLET_LEVEL.
+    static const int GauntletLevel = LaunchGauntletLevel();
+    if (GauntletLevel >= 0) {
+        FinalURL += std::wstring(L"?GauntletLevel=");
+        FinalURL += std::to_wstring(GauntletLevel);
+        // The hunt row's GameModeOverride is never applied, so adventure_destroyed_ramsgate_00 ran its default
+        // BPGM_ArchonExploration ([GauntletProbe] gm=). ?game= is UE's own per-URL game mode switch.
+        // ponytail: Gauntlet-only path; pass GameModeOverride from the Director if other rows need it.
+        FinalURL += std::wstring(L"?game=/Game/Blueprints/GameMode/BPGM_ArchonGauntlet.BPGM_ArchonGauntlet_C");
+    }
 
     // [1.14.7 2026-10-03] With MAP_URL_LISTEN.flag present, advertise the map as a LISTEN server so the
     // ENGINE builds the GameNetDriver during map load (the standard UE dedicated-server path,
@@ -6281,6 +6346,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
 
     if (Globals::Listening) {
         MpTickPartyRestartHold();
+        MpTickGauntletProbe();
 
         // [1.12.0 player-host roster gate] Keep ExpectedPlayerCount synchronized with the
         // concrete launch roster. The previous blanket zero forced a two-player hunt to enter
@@ -15940,7 +16006,12 @@ static bool IsEscalationFlowFunction(const std::string& FunctionName) {
         "EscalationGameModeComponent.AuthCleanupActiveContentForRound",
         "EscalationGameModeComponent.PrepareEncounterForRound",
         "EscalationGameModeComponent.StartEncounterForRound",
-        "EscalationGameModeComponent.EndOfHuntStarted"
+        "EscalationGameModeComponent.EndOfHuntStarted",
+        // [2026-10-20 GAUNTLET PROBE] Gauntlet runs spawn nothing and log nothing past "Gauntlet Initialized".
+        // Trace its state machine + AuthInitialize to see how far the mode gets.
+        "GauntletGameModeComponent.",
+        "GauntletGameStateComponent.",
+        "GauntletPlayerStateComponent."
     };
     for (const char* Marker : Markers) {
         if (FunctionName.find(Marker) != std::string::npos) return true;
@@ -16291,7 +16362,8 @@ static bool IsEscalationStateTraceFunction(const std::string& FunctionName) {
         || FunctionName.find("EscalationGameModeComponent.Auth") != std::string::npos
         || FunctionName.find("EscalationGameModeComponent.PrepareEncounterForRound") != std::string::npos
         || FunctionName.find("EscalationGameModeComponent.StartEncounterForRound") != std::string::npos
-        || FunctionName.find("EscalationGameModeComponent.EndOfHuntStarted") != std::string::npos;
+        || FunctionName.find("EscalationGameModeComponent.EndOfHuntStarted") != std::string::npos
+        || FunctionName.find("Gauntlet") != std::string::npos;
 }
 
 static constexpr int kEscalationRelicTraceMax = 512;
@@ -16319,6 +16391,16 @@ static int TraceEscalationFlowEnter(const char* Side, UObject* Object,
     const int Seq = s_EscalationFlowSequence.fetch_add(1, std::memory_order_relaxed);
     MpLog(std::string("[EscalationFlow][") + Side + "][ENTER #" + std::to_string(Seq)
         + "] fn=" + FunctionName + EscalationFlowContext(Object, FunctionName, Parms, Side));
+    // AuthInitialize(FGauntletModeRoundSpecification Spec 0x198, int32 LevelNumber @0x198, bool bIsDebugSeason @0x19C).
+    if (FunctionName.find("GauntletGameModeComponent.AuthInitialize") != std::string::npos
+        && Parms && IsReadablePointer(Parms, 0x1A0)) {
+        auto* P = static_cast<uint8_t*>(Parms);
+        MpLog("[Gauntlet] AuthInitialize specLevel=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x8))
+            + " timeLimit=" + std::to_string(*reinterpret_cast<float*>(P + 0xD0))
+            + " roundStructures=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x130 + 8))
+            + " levelNumber=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x198))
+            + " debugSeason=" + std::to_string(P[0x19C]));
+    }
     return Seq;
 }
 

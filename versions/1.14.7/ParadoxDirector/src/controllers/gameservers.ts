@@ -167,7 +167,8 @@ const STANDARD_GAMESERVER_ARGS = [
     // "WorldContext requested with invalid context object" (the client build's UI/world-lookup noise,
     // see Progress/34 section AA) until the runtime log reaches 500+ MB, which makes the log useless for
     // diagnosis and expensive to read. LogOnline/LogPhoenixCharacter verbosity is unchanged.
-    `-LogCmds="LogPhoenixCharacter ${GAMESERVER_CHARACTER_LOG}, LogOnline Verbose, LogLoad Off"`
+    // [2026-10-20] LogGauntlet/LogPhoenixGauntlet VeryVerbose: Gauntlet runs spawned nothing and logged only "Gauntlet Initialized".
+    `-LogCmds="LogPhoenixCharacter ${GAMESERVER_CHARACTER_LOG}, LogOnline Verbose, LogLoad Off, LogGauntlet VeryVerbose, LogPhoenixGauntlet VeryVerbose"`
 ];
 const METAGAME_API_KEY = process.env.METAGAME_API_KEY!;
 const MY_IP = process.env.MY_IP!;
@@ -446,7 +447,7 @@ async function WaitForHuntLaunchQueue(Label: string): Promise<void> {
     else if (WaitedMs >= 100) logger.info(`[HubSupervisor] ${Label} waited ${WaitedMs} ms for the hunt launch queue before cold start`);
 }
 
-async function StartServer(Map: string, Behemoth: string | undefined, MatchmakerHuntId: string | undefined, ExpectedPlayers: ExpectedPlayer[] | undefined, IsRamsgate: boolean, IsTrainingDojo: boolean){
+async function StartServer(Map: string, Behemoth: string | undefined, MatchmakerHuntId: string | undefined, ExpectedPlayers: ExpectedPlayer[] | undefined, IsRamsgate: boolean, IsTrainingDojo: boolean, GauntletLevel?: number){
     // The stagger queue exists to stop a BURST of hunt-server spawns (real matchmaking requests)
     // from slamming the box with several simultaneous UE4 process starts. Ramsgate and Training are
     // the two persistent hubs: exactly one of each, spawned once at boot (or restarted individually
@@ -503,6 +504,7 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
         `=== Gameserver launch ${new Date().toLocaleString()} (local time) ===\n` +
         `port=${Port} map=${Map} behemoth=${Behemoth ?? "NO_BEHEMOTH"} ` +
         `mmHunt=${MatchmakerHuntId ?? "NO_MM_HUNTID"} ` +
+        (GauntletLevel != undefined ? `gauntletLevel=${GauntletLevel} ` : "") +
         `players=${ExpectedPlayers != undefined ? TransformExpectedPlayerArgs(ExpectedPlayers) : "NO_EXPECTED_PLAYERS"}\n\n`
     );
 
@@ -513,7 +515,9 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     const ChildEnvironment = {
         ...process.env,
         MYSTICPARADOX_GAMESERVER_LAUNCH_ID: Id,
-        ...(ArenaWeekMatch ? { MYSTICPARADOX_TRIALS_WEEK: ArenaWeekMatch[1] } : {})
+        ...(ArenaWeekMatch ? { MYSTICPARADOX_TRIALS_WEEK: ArenaWeekMatch[1] } : {}),
+        // [2026-10-20] The DLL appends ?GauntletLevel=N to the map URL; BPGM_ArchonGauntlet picks its lineup from it.
+        ...(GauntletLevel != undefined ? { MYSTICPARADOX_GAUNTLET_LEVEL: String(GauntletLevel) } : {})
     };
 
     let Child: ReturnType<typeof spawn>;
@@ -1097,7 +1101,7 @@ function GetMapPathFromMatchmakerHuntId(MatchmakerHuntId: string): string{
 }
 
 
-export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, ExpectedPlayers: string[], IsPrivate: boolean = true){
+export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, ExpectedPlayers: string[], IsPrivate: boolean = true, GauntletLevel?: number){
     const Manifest = ResolveHuntLaunchManifest(HuntId, ExpectedPlayers);
     const MatchmakerHuntId = Manifest.matchmakerHuntId;
     const BehemothPath = Manifest.behemothPath === "NO_BEHEMOTH" ? undefined : Manifest.behemothPath;
@@ -1108,7 +1112,7 @@ export async function StartupGameserverWithHuntIdAndPlayers(HuntId: string, Expe
             playerUid: PlayerId,
             playerHuntId: HuntId
         };
-    }), false, false);
+    }), false, false, GauntletLevel);
     GameServerToReturn.isPrivate = IsPrivate;
     GameServerToReturn.sentAt = ExpectedPlayers.map(() => Date.now());
 

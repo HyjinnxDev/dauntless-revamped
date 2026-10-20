@@ -326,6 +326,15 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
     const IsPrivate = [req.body.isPrivate, req.body.privateMatch].some((Value) => Value === true || Value === "true");
     logger.info(`UserId ${UserId} wants to join a game with GameMode ${GameMode} & GameArgs ${GameArgs} & HuntId ${HuntId} private=${IsPrivate ? 1 : 0} (isPrivate=${JSON.stringify(req.body.isPrivate)} privateMatch=${JSON.stringify(req.body.privateMatch)} gameType=${JSON.stringify(req.body.gameType)})`);
 
+    // [2026-10-20] Gauntlet: the 1.14.7 exe lists gauntlet_level beside privateMatch in the candidate body. The game
+    // mode reads the level from the map URL (?GauntletLevel=%d), so it rides to the Director and into the server.
+    // Seen 2026-10-20: gauntlet_level=10000001 (an encoded level id, not a small index), so it is passed through as-is.
+    const RawGauntletLevel = Number(req.body.gauntlet_level ?? req.body.gauntletLevel);
+    const GauntletLevel = Number.isInteger(RawGauntletLevel) && RawGauntletLevel >= 0 && RawGauntletLevel <= 0x7fffffff ? RawGauntletLevel : undefined;
+    if (req.body.gameType === "GAUNTLET") {
+        logger.info(`[Gauntlet] candidate body=${JSON.stringify({ ...req.body, session_id: undefined }).slice(0, 2000)} -> level=${GauntletLevel ?? "none"}`);
+    }
+
     // TODO: We put a LOT of faith in our authenticated users not abusing the matchmaking system right now
     // A reasonable addition would be checks on frequency of MM/server spinup
     // Best scenario is 1-1 for server session<->player and a new server cooldown
@@ -364,7 +373,8 @@ matchmakingRouter.post("/candidate/join", HasParadoxBackendAuth, async (req: any
         Party.partyId,
         Party.partyMembers,
         Party.partyRevision,
-        IsPrivate
+        IsPrivate,
+        GauntletLevel
     );
 
     if(!MatchmakingResult){

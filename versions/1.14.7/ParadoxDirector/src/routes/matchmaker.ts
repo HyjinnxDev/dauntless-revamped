@@ -26,8 +26,9 @@ matchmakingRouter.post("/handle-matchmaking-for-player", express.json(), async (
         const ExpectedPlayers = req.body.ExpectedPlayers;
         // Only an explicit false makes a hunt public (joinable mid-hunt); older callers stay private.
         const IsPrivate = req.body.IsPrivate !== false;
+        const GauntletLevel = Number.isInteger(req.body.GauntletLevel) ? req.body.GauntletLevel as number : undefined;
 
-        const MatchmakingResult = await HandleMatchmakingRequest(GameMode, GameArgs, HuntId, ExpectedPlayers, IsPrivate);
+        const MatchmakingResult = await HandleMatchmakingRequest(GameMode, GameArgs, HuntId, ExpectedPlayers, IsPrivate, GauntletLevel);
 
         res.status(200);
         res.json(MatchmakingResult);
