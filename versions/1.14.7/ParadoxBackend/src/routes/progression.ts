@@ -15,6 +15,7 @@ import { loadGameData } from "../gameData/loader";
 import { WidenHuntPassWindows } from "./system";
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
 import { logger } from "../logger";
+import { GetRepositories } from "../persistence";
 import { AddEncounteredContent, GetBreadcrumbsForCharacterIdAndUserId, GetPlayerJourney, QueryEncounteredContent, SavePlayerJourney, SetBreadcrumbsForCharacterIdAndUserId, GrantProgressionXp, GetPersistedProgressionForUser, CaptureProgressionObjectiveEvent, GetPersistedObjectivesForUser, ConfirmPublicProgressionRank, IsAuthorizedProgressionReader, IsAuthorizedProgressionReporter, IsApprovedXpProgressionTrack, IsValidProgressionGrantId, ProgressionGrantConflictError, IsCharacterOwnedByUser, GetTrackCurve } from "../controllers/progression";
 import { GetUnlockedNodeIds, GrantSlayersPathRewards } from "../controllers/slayersPath";
 import { HUNT_PASS_SLOT_IDS } from "../huntPassRotation";
@@ -585,6 +586,32 @@ progressionRouter.post("/progression/:userId/:progressionId/:rank/confirm/:track
         payload: {
             phx_account_id: RequestedUserId,
             progression_id: ProgressionId,
+            progress: Updated.progress,
+            confirmed_fremium_rank: Updated.confirmedFremiumRank,
+            confirmed_premium_rank: Updated.confirmedPremiumRank,
+            confirmed_date: Updated.updatedAt,
+        }
+    });
+});
+
+// Reforge (UPlayerExperienceComponent::ServerPrestigeExperience) resets the weapon XP track with this
+// DELETE, then charges 100 Aether Shards in a separate inventory txn. Unrouted it 404'd: shards
+// taken, weapon never reset (2026-10-20). Gameserver-only, weapon XP tracks only.
+progressionRouter.delete("/progression/:userId/:progressionId", HasParadoxBackendAuth, async (req: any, res) => {
+    const { userId, progressionId } = req.params;
+    if(req.AuthData?.IsGameserver !== true || !/^ExperienceTrack_Weapon_\w+$/.test(progressionId) || userId === NO_PLAYER_SENTINEL){
+        logger.warn(`Rejected progression reset (user=${userId}, track=${progressionId}, gs=${req.AuthData?.IsGameserver === true})`);
+        res.status(403).json({ code: null, message: "Forbidden", payload: {} });
+        return;
+    }
+    const Updated = await GetRepositories().progressionTracks.reset(userId, progressionId);
+    logger.info(`[Reforge] reset ${progressionId} for ${userId}`);
+    res.status(200).json({
+        code: null,
+        message: "OK",
+        payload: {
+            phx_account_id: userId,
+            progression_id: progressionId,
             progress: Updated.progress,
             confirmed_fremium_rank: Updated.confirmedFremiumRank,
             confirmed_premium_rank: Updated.confirmedPremiumRank,

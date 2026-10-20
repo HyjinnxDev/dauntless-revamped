@@ -60,6 +60,9 @@ export interface ProgressionTrackRepository {
      */
     setConfirmedRank(userId: string, progressionId: string, rank: number, premium?: boolean): Promise<ProgressionTrackRecord>;
 
+    /** Zeroes progress and both confirmed ranks (weapon reforge reset). Upserts. */
+    reset(userId: string, progressionId: string): Promise<ProgressionTrackRecord>;
+
     /** Appends one raw mastery/objective event. Append-only — never updates or dedupes here. */
     appendObjectiveEvent(event: ProgressionObjectiveEventRecord): Promise<void>;
 

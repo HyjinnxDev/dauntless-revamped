@@ -227,6 +227,30 @@ export class MongoProgressionTrackRepository implements ProgressionTrackReposito
         };
     }
 
+    async reset(userId: string, progressionId: string): Promise<ProgressionTrackRecord> {
+        const Db = await GetMongoDb();
+        const Now = new Date().toISOString();
+        const Doc = await Db.collection(Collections.ProgressionTracks).findOneAndUpdate(
+            { _id: this.TrackId(userId, progressionId) as any },
+            {
+                $set: { userId, progressionId, progress: 0, confirmedFremiumRank: 0, confirmedPremiumRank: 0, updatedAt: Now },
+                $inc: { updateVersion: 1 },
+                $setOnInsert: { createdAt: Now }
+            },
+            { upsert: true, returnDocument: "after" }
+        ) as any;
+        return {
+            userId: Doc.userId,
+            progressionId: Doc.progressionId,
+            progress: Doc.progress,
+            confirmedFremiumRank: Doc.confirmedFremiumRank,
+            confirmedPremiumRank: Doc.confirmedPremiumRank,
+            updateVersion: Doc.updateVersion,
+            createdAt: Doc.createdAt,
+            updatedAt: Doc.updatedAt
+        };
+    }
+
     async appendObjectiveEvent(event: ProgressionObjectiveEventRecord): Promise<void> {
         const Db = await GetMongoDb();
         await Db.collection(Collections.ProgressionObjectiveEvents).insertOne({
