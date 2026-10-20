@@ -5917,6 +5917,34 @@ static bool Read(Snap& S) {
     }
 }
 
+// [1.14.7 FIX 2026-10-20] Self-heal for the empty inventory above. On hunting-ground maps
+// (BPPC_Adventure_PlayerController) the client never runs its join-time inventory query: server logs show no
+// client GET and no hash check at join on those maps, while Ramsgate/escalation joins always do one - which is
+// why a relog (back through Ramsgate) fixes it. When the local player's InventoryData stays unloaded or empty for
+// 5 s on a live controller, run AArchonInventory::ClientQueryInventory(true) locally (a client RPC on the owning
+// client executes here), i.e. the same query those maps start. At most 3 tries per controller, 10 s apart.
+// Log tag [InvHeal]. DISABLE_INVENTORY_HEAL.flag beside the exe turns only the heal off.
+static void Heal(const Snap& S, uint64_t Now) {
+    static const bool s_HealDisabled = MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_HEAL.flag");
+    static void* s_Pc = nullptr;
+    static uint64_t s_EmptySinceMs = 0, s_NextTryMs = 0;
+    static int s_Tries = 0;
+    if (s_HealDisabled) return;
+    if (S.Pc != s_Pc) { s_Pc = S.Pc; s_EmptySinceMs = 0; s_NextTryMs = 0; s_Tries = 0; }
+    const bool Empty = S.Pc && S.Inv && S.Data && (S.Loaded == 0 || S.Items == 0);
+    if (!Empty) { s_EmptySinceMs = 0; return; }
+    if (!s_EmptySinceMs) s_EmptySinceMs = Now;
+    if (Now - s_EmptySinceMs < 5000 || Now < s_NextTryMs || s_Tries >= 3) return;
+    if (!reinterpret_cast<UObject*>(S.Pc)->IsA(AArchonPlayerController::StaticClass())) return;
+    ++s_Tries;
+    s_NextTryMs = Now + 10000;
+    MpLog("[InvHeal] inventory empty for " + std::to_string((Now - s_EmptySinceMs) / 1000) + " s (loaded="
+        + std::to_string(S.Loaded) + " items=" + std::to_string(S.Items) + " repItems=" + std::to_string(S.RepItems)
+        + ") on " + SafeObjectNameForDiagnostic(reinterpret_cast<UObject*>(S.Pc))
+        + " - ClientQueryInventory(true) try " + std::to_string(s_Tries) + "/3");
+    reinterpret_cast<AArchonInventory*>(S.Inv)->ClientQueryInventory(true);
+}
+
 static void Tick() {
     if (Globals::AmServer || s_Faulted) return;
     static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_PROBE.flag");
@@ -5931,6 +5959,7 @@ static void Tick() {
         MpLog("[InvProbe] fault reading inventory - probe off for this session");
         return;
     }
+    Heal(S, Now);
     if (std::memcmp(&S, &s_Last, sizeof(Snap)) == 0) return;
     s_Last = S;
     // ponytail: change-only logging with a session cap; per-map budget if 4000 ever runs out.
