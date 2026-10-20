@@ -5917,6 +5917,34 @@ static bool Read(Snap& S) {
     }
 }
 
+// [1.14.7 FIX 2026-10-20] Self-heal for the empty inventory above. On hunting-ground maps
+// (BPPC_Adventure_PlayerController) the client never runs its join-time inventory query: server logs show no
+// client GET and no hash check at join on those maps, while Ramsgate/escalation joins always do one - which is
+// why a relog (back through Ramsgate) fixes it. When the local player's InventoryData stays unloaded or empty for
+// 5 s on a live controller, run AArchonInventory::ClientQueryInventory(true) locally (a client RPC on the owning
+// client executes here), i.e. the same query those maps start. At most 3 tries per controller, 10 s apart.
+// Log tag [InvHeal]. DISABLE_INVENTORY_HEAL.flag beside the exe turns only the heal off.
+static void Heal(const Snap& S, uint64_t Now) {
+    static const bool s_HealDisabled = MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_HEAL.flag");
+    static void* s_Pc = nullptr;
+    static uint64_t s_EmptySinceMs = 0, s_NextTryMs = 0;
+    static int s_Tries = 0;
+    if (s_HealDisabled) return;
+    if (S.Pc != s_Pc) { s_Pc = S.Pc; s_EmptySinceMs = 0; s_NextTryMs = 0; s_Tries = 0; }
+    const bool Empty = S.Pc && S.Inv && S.Data && (S.Loaded == 0 || S.Items == 0);
+    if (!Empty) { s_EmptySinceMs = 0; return; }
+    if (!s_EmptySinceMs) s_EmptySinceMs = Now;
+    if (Now - s_EmptySinceMs < 5000 || Now < s_NextTryMs || s_Tries >= 3) return;
+    if (!reinterpret_cast<UObject*>(S.Pc)->IsA(AArchonPlayerController::StaticClass())) return;
+    ++s_Tries;
+    s_NextTryMs = Now + 10000;
+    MpLog("[InvHeal] inventory empty for " + std::to_string((Now - s_EmptySinceMs) / 1000) + " s (loaded="
+        + std::to_string(S.Loaded) + " items=" + std::to_string(S.Items) + " repItems=" + std::to_string(S.RepItems)
+        + ") on " + SafeObjectNameForDiagnostic(reinterpret_cast<UObject*>(S.Pc))
+        + " - ClientQueryInventory(true) try " + std::to_string(s_Tries) + "/3");
+    reinterpret_cast<AArchonInventory*>(S.Inv)->ClientQueryInventory(true);
+}
+
 static void Tick() {
     if (Globals::AmServer || s_Faulted) return;
     static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_PROBE.flag");
@@ -5931,6 +5959,7 @@ static void Tick() {
         MpLog("[InvProbe] fault reading inventory - probe off for this session");
         return;
     }
+    Heal(S, Now);
     if (std::memcmp(&S, &s_Last, sizeof(Snap)) == 0) return;
     s_Last = S;
     // ponytail: change-only logging with a session cap; per-map budget if 4000 ever runs out.
@@ -8797,7 +8826,7 @@ void __fastcall ArchonRouteAddNetworkActorHook(
                     + " route=global-always-relevant");
             }
         } else if (ActorObject->Class && ActorObject->Class->GetName() == "adventure_island_arrival_trigger_bp_C"
-            && !MpExeRelativeFlagPresent(L"DISABLE_PARTY_DROP_IN.flag")) {
+            && MpExeRelativeFlagPresent(L"ENABLE_PARTY_DROP_IN.flag")) {
             // [PartyDropIn] Each player's hunt arrival trigger is bOnlyRelevantToOwner, and the graph picks the
             // node here, once. Clearing the bit later (at BeginPlay, 0.2.35) left it on the owner route: the
             // test got the other player's trigger 17 s late, after both had landed, so their drop-in played on
@@ -14299,14 +14328,16 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
     // player's arrival sequence on their real pawn here as a non-viewer (camera/HUD/overlay are gated on
     // bIsClientViewingCinematic, i.e. only the owner). Its start path still calls SetCinematicState(2) +
     // HideGameplayHUD on the local PC, so remote copies are only kept until our own arrival has ended
-    // (late joiners keep retail behaviour). DISABLE_PARTY_DROP_IN.flag = retail for all of it.
+    // (late joiners keep retail behaviour). Opt-in via ENABLE_PARTY_DROP_IN.flag (server and client): since
+    // 2026-10-18 the remote cine really plays, and it is the whole sequence in island space - a second airship,
+    // and the remote pawn driven onto our own landing spot (players inside each other). Default = retail.
     if (Object && !s_MutedArrivalTriggers.empty()
         && FunctionName.find("dynamic_cinematic_component_bp_C.") != std::string::npos
         && s_MutedArrivalTriggers.count(Object->Outer)) {
         return;
     }
     if (Object && FunctionName.find("adventure_island_arrival_trigger_bp_C.") != std::string::npos) {
-        static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_PARTY_DROP_IN.flag");
+        static const bool s_Disabled = !MpExeRelativeFlagPresent(L"ENABLE_PARTY_DROP_IN.flag");
         if (s_MutedArrivalTriggers.count(Object)) return;
         if (!s_Disabled) {
             const bool IsTick = FunctionName.find("_C.ReceiveTick") != std::string::npos;
@@ -19081,10 +19112,41 @@ static int s_escalationBuffChoiceLastRound = INT_MIN;
 // churn and forced UI onto uninvolved players.
 // ============================================================================================
 
+// [2026-10-19 BOON POOL] A player's round-end boon options come from the season's relics table:
+// rows with UnlockedByDefault plus whatever their Escalation talents unlock. Our players sit at low
+// levels with few or no talents, so that pool is tiny - repro: frost (ESC_SEASON_5) at level 0, two
+// options in round 0, then SpawnPlayerBuffChoicesForFinishedRound skipped one player entirely at the
+// end of round 1 (no pickup, no choice screen) while the other got theirs. Marking every boon row
+// unlocked once per server keeps every season's pool full; the game still applies its own drop
+// conditions, uniqueness and weights. Disable with ESCALATION_KEEP_BOON_UNLOCKS.flag next to the exe.
+static void EnsureEscalationBoonsUnlocked() {
+    static bool s_done = false;
+    if (s_done) return;
+    if (MpExeRelativeFlagPresent(L"ESCALATION_KEEP_BOON_UNLOCKS.flag")) { s_done = true; return; }
+    int Tables = 0, Rows = 0, Unlocked = 0;
+    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+        if (!Obj || Obj->IsDefaultObject() || !Obj->IsA(SDK::UDataTable::StaticClass())) continue;
+        auto* Dt = static_cast<SDK::UDataTable*>(Obj);
+        if (!Dt->RowStruct || Dt->RowStruct->GetName() != "EscalationBuffDefinition") continue;
+        ++Tables;
+        for (auto& Pair : Dt->RowMap) {
+            auto* Row = reinterpret_cast<SDK::FEscalationBuffDefinition*>(Pair.Value());
+            if (!Row || !IsReadablePointer(Row, sizeof(SDK::FEscalationBuffDefinition))) continue;
+            ++Rows;
+            if (!Row->UnlockedByDefault) { Row->UnlockedByDefault = true; ++Unlocked; }
+        }
+    }
+    s_done = Tables > 0;   // retry on the next state change if the tables are not loaded yet
+    MpLog("[EscalationBoonPool] tables=" + std::to_string(Tables) + " rows=" + std::to_string(Rows)
+        + " newlyUnlocked=" + std::to_string(Unlocked));
+}
+
 // Called from ProcessEventHook when the mode component is told the state changed. Records only; the
 // actual dispatch happens on the next server tick.
 static void NoteEscalationStateChangeForBuffChoices(UObject* ModeComponent, void* Parms) {
     if (!Globals::AmServer || !ModeComponent || !Parms) return;
+    EnsureEscalationBoonsUnlocked();   // first state change (InitialPreloading) is before any choice
     if (MpExeRelativeFlagPresent(L"ESCALATION_NO_BUFF_CHOICE_SPAWN.flag")) return;
     if (!IsReadablePointer(Parms, 0x2)) return;
 
