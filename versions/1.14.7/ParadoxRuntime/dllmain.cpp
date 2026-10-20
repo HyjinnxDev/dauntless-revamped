@@ -5657,7 +5657,7 @@ static const StyleInfo kStyles[] = {
     { Style::Legend, "[Legend] ", "legend" },
     { Style::Emerald, "[Emerald] ", "emerald" },
 };
-struct Plate { Ref W; const TierInfo* Info = nullptr; Style S = Style::None; std::string Name; };   // Name: plate text after stripping
+struct Plate { Ref W; const TierInfo* Info = nullptr; Style S = Style::None; std::string Name; bool FitLogged = false; };   // Name: plate text after stripping
 
 constexpr ULONGLONG kTickMs = 100, kScanMs = 1000;
 using C = SDK::FLinearColor;
@@ -5735,11 +5735,25 @@ static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, Style S) {
     case Style::Emerald: Outline(2, kEmeraldGlow); Grand(); break;
     }
     if (FontChanged) Tb->SetFont(F);
+    // Outline/shadow make the name a few px wider than the slot the plate last gave it; with auto-wrap on, Slate
+    // wraps it to that width and the plate only shows the first line, so the name looks cut off.
+    Tb->SetAutoWrapText(false);
     if (SDK::UTextBlock* Title = Info ? W->TextBlock_Title : nullptr) {
         Title->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(Info->Title)));
         if (Info->T == Tier::Owner) SetColor(Title, kOwnerTitle);
         Title->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
     }
+    W->ForceLayoutPrepass();
+}
+
+// One line per plate a scan after Decorate: if the name is still cut off, desired > local says the slot is too small.
+static void LogFit(SDK::UNamePlatesWidget* W) {
+    SDK::UTextBlock* Tb = W->TextBlock_Name;
+    const SDK::FVector2D D = Tb->GetDesiredSize();
+    const SDK::FVector2D L = SDK::USlateBlueprintLibrary::GetLocalSize(Tb->GetCachedGeometry());
+    char Buf[160];
+    snprintf(Buf, sizeof(Buf), "fit: name desired %.0fx%.0f local %.0fx%.0f wrap=%d", D.X, D.Y, L.X, L.Y, Tb->AutoWrapText ? 1 : 0);
+    Log(Buf);
 }
 
 // Re-applied every tick: the game recolours names on its own updates.
@@ -5777,6 +5791,42 @@ static void SetName(SDK::UTextBlock* Tb, const std::string& Utf8) {
     Tb->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(W.c_str())));
 }
 
+// Staff tag then style tag, both optional; returns where the bare name starts (0 = untagged).
+static size_t ParseTags(const std::string& Text, const TierInfo*& Info, const StyleInfo*& Si) {
+    size_t Pos = 0;
+    for (const TierInfo& Ti : kTiers) {
+        const size_t Len = std::strlen(Ti.Prefix);
+        if (Text.compare(0, Len, Ti.Prefix) == 0) { Info = &Ti; Pos = Len; break; }
+    }
+    for (const StyleInfo& S : kStyles) {
+        const size_t Len = std::strlen(S.Prefix);
+        if (Text.compare(Pos, Len, S.Prefix) == 0) { Si = &S; Pos += Len; break; }
+    }
+    return Pos;
+}
+
+static void StripTags(SDK::UTextBlock* Tb) {
+    if (!Tb) return;
+    const std::string Text = SDK::UKismetTextLibrary::Conv_TextToString(Tb->GetText()).ToString();
+    const TierInfo* Info = nullptr;
+    const StyleInfo* Si = nullptr;
+    if (const size_t Pos = ParseTags(Text, Info, Si)) SetName(Tb, Text.substr(Pos));
+}
+
+// The party list and hunt HUD show the raw tagged name in a fixed-width box, so the tags pushed the name out.
+// ponytail: runs on the plate scan, so a tagged name can show for up to kScanMs after the game re-sets it.
+static void StripHudNames(SDK::UWorld* World) {
+    static auto* s_Found = new SDK::TArray<SDK::UUserWidget*>();
+    auto Each = [&](SDK::UClass* Cls, auto Fn) {
+        SDK::UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World, s_Found, Cls, false);
+        for (int32_t i = 0; i < s_Found->Num(); ++i)
+            if (SDK::UUserWidget* U = (*s_Found)[i]) Fn(U);
+    };
+    Each(SDK::UPlayerHUDDisplayItem::StaticClass(), [](SDK::UUserWidget* U) { StripTags(static_cast<SDK::UPlayerHUDDisplayItem*>(U)->PlayerNameTextBox); });
+    Each(SDK::UPartyWidgetItem::StaticClass(), [](SDK::UUserWidget* U) { StripTags(static_cast<SDK::UPartyWidgetItem*>(U)->PlayerNameText); });
+    Each(SDK::UHuntingPartyPlayerWidget::StaticClass(), [](SDK::UUserWidget* U) { StripTags(static_cast<SDK::UHuntingPartyPlayerWidget*>(U)->MemberName); });
+}
+
 static void Update() {
     static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_STAFF_NAMEPLATES.flag");
     if (s_Disabled) return;
@@ -5798,17 +5848,10 @@ static void Update() {
             auto Old = std::find_if(s_Plates.begin(), s_Plates.end(), [&](const Plate& P) { return P.W.Get() == W; });
             // New plate, or the game re-set the name: staff tag, then style tag, both optional.
             const TierInfo* Info = nullptr;
-            Style S = Style::None;
-            size_t Pos = 0;
-            for (const TierInfo& Ti : kTiers) {
-                const size_t Len = std::strlen(Ti.Prefix);
-                if (Text.compare(0, Len, Ti.Prefix) == 0) { Info = &Ti; Pos = Len; break; }
-            }
-            const char* StyleLog = "-";
-            for (const StyleInfo& Si : kStyles) {
-                const size_t Len = std::strlen(Si.Prefix);
-                if (Text.compare(Pos, Len, Si.Prefix) == 0) { S = Si.S; StyleLog = Si.LogName; Pos += Len; break; }
-            }
+            const StyleInfo* Si = nullptr;
+            const size_t Pos = ParseTags(Text, Info, Si);
+            Style S = Si ? Si->S : Style::None;
+            const char* StyleLog = Si ? Si->LogName : "-";
             std::string Name;
             if (Pos > 0) {
                 Name = Text.substr(Pos);
@@ -5819,16 +5862,21 @@ static void Update() {
                 Name = Text;
             }
             if (!Info && S == Style::None) continue;
-            if (Old == s_Plates.end() || Old->Info != Info || Old->S != S) {
+            const bool Fresh = Old == s_Plates.end() || Old->Info != Info || Old->S != S;
+            if (Fresh) {
                 Decorate(W, Info, S);
                 Log(std::string(Info ? Info->LogName : "-") + "/" + StyleLog + " plate " + W->GetFullName());
+            } else if (!Old->FitLogged) {
+                LogFit(W);
             }
             Next.push_back(Plate{});
             Next.back().W.Set(W);
             Next.back().Info = Info;
             Next.back().S = S;
             Next.back().Name = Name;
+            Next.back().FitLogged = !Fresh;
         }
+        StripHudNames(World);
         static bool s_LoggedCount = false;
         if (!s_LoggedCount && s_Found->Num() > 0) {
             s_LoggedCount = true;
