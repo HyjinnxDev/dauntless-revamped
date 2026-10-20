@@ -56,7 +56,21 @@ function serverName(s) {
     if (s.kind === "dojo") return "Training Dojo";
     return prettyAsset(s.behemoth) || prettyAsset(s.map) || s.matchmakerHuntId || "Hunt";
 }
-const currencyName = (id) => titleCase(id.replace(/^CURRENCY_/, "").replace(/_/g, " "));
+// PJM = Player Journey Map, the client's id for Slayer's Path merit currencies.
+const CURRENCY_NAMES = {
+    CURRENCY_NOTES: "Rams", CURRENCY_PLATINUM_UNIV: "Platinum", CURRENCY_CELLDUST: "Aetherdust",
+    CURRENCY_PJM_WEAPON: "Combat Merits", CURRENCY_PJM_AIRSHIP: "Exploration Merits", CURRENCY_PJM_ALCHEMY: "Aethersparks",
+    CURRENCY_PJM_PRESTIGE_EMPTY: "Aether Shards", CURRENCY_SEASONAL_COIN: "Seasonal Coins", CURRENCY_TOKEN_TRANSMOG: "Transmog Stones"
+};
+const currencyName = (id) => CURRENCY_NAMES[id] || titleCase(id.replace(/^CURRENCY_/, "").replace(/^PJM_(.+)$/, "$1 Merits").replace(/_/g, " "));
+const spaced = (s) => s.replace(/([a-z])([A-Z])/g, "$1 $2");
+function trackName(id) {
+    let m;
+    if ((m = id.match(/^(Experience|Mastery)Track_(?:Weapon_)?(.+)$/))) return `${m[2] === "PlayerLevel" ? "Slayer" : spaced(m[2])} ${m[1] === "Experience" ? "level" : "mastery"}`;
+    if ((m = id.match(/^season(\d+)(?::(.+))?$/))) return `Hunt Pass season ${m[1]}${m[2] ? ` (${titleCase(m[2])})` : ""}`;
+    if ((m = id.match(/^Linked_Slayer_Slot_(\d+)$/))) return `Slayer Link slot ${m[1]}`;
+    return spaced(id).replace(/_/g, " ");
+}
 
 // ---------- API ----------
 async function api(method, path, body) {
@@ -467,8 +481,8 @@ async function openPlayer(a) {
 
     const wallet = Object.entries(d.wallet).filter(([, v]) => v).sort((x, y) => y[1] - x[1]);
     if (wallet.length) sections.push(h("h3", null, "Currencies"), h("div", { class: "kv" }, wallet.map(([k, v]) => h("div", { title: k }, h("span", null, currencyName(k)), h("b", null, v.toLocaleString())))));
-    if (d.progression.length) sections.push(h("h3", null, "Progression tracks"), h("div", { class: "kv" }, d.progression.map((p) =>
-        h("div", { title: `progress ${p.progress}` }, h("span", null, p.id), h("b", null, `Rank ${p.rank ?? 0}${p.premiumRank ? `, elite ${p.premiumRank}` : ""}`)))));
+    if (d.progression.length) sections.push(h("h3", null, "Progression tracks"), h("div", { class: "kv wide" }, d.progression.map((p) => ({ ...p, name: trackName(p.id) })).sort((x, y) => x.name.localeCompare(y.name)).map((p) =>
+        h("div", { title: `${p.id}, progress ${p.progress}` }, h("span", null, p.name), h("b", null, `Rank ${p.rank ?? 0}${p.premiumRank ? `, elite ${p.premiumRank}` : ""}`)))));
     if (d.entitlements.length) sections.push(h("h3", null, "Entitlements"), h("div", { class: "row" }, d.entitlements.map((n) => h("span", { class: "tag" }, n))));
     if (myRank >= 2) {
         sections.push(h("h3", null, "Other accounts seen on this IP"), d.sameIp.length

@@ -19,7 +19,7 @@
   h1, h2, h3 { font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; margin: 0; letter-spacing: -.01em; }
   h1 { font-size: 24px; font-weight: 600; }
   h2 { font-size: 16px; font-weight: 600; }
-  h3 { font-size: 13px; font-weight: 600; color: var(--dim); margin: 22px 0 8px; }
+  h3 { font-size: 13px; font-weight: 600; color: var(--text); margin: 22px 0 8px; }
   a { color: var(--aether); }
   :focus-visible { outline: 2px solid var(--aether); outline-offset: 2px; }
   .hidden { display: none !important; }
@@ -129,6 +129,9 @@
   .kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
   .kv div { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 10px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
   .kv span { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kv b { white-space: nowrap; }
+  .kv.wide { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .kv.wide span { white-space: normal; }
   .zone { border: 1px solid var(--line); border-radius: var(--r); padding: 14px; margin-top: 12px; }
   .zone.danger { border-color: #5a2c2a; }
   .zone h2 { font-size: 14px; margin-bottom: 4px; }
