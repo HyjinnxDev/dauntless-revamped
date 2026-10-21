@@ -20,6 +20,9 @@ import { GetPartyForPlayer } from "./party";
 import { GetMongoDb } from "../persistence/mongo/client";
 import { Collections } from "../persistence/mongo/collections";
 import { HuntedTogether, LINK_TRACK_PREFIX, SlayerLinkRow } from "../slayerLinks";
+import { AddCurrency } from "./wallet";
+
+const AETHERHEART_CATALOG_ID = "CURRENCY_PJM_PRESTIGE_FILLED";
 
 // [WP-1 stage 4 — security fix] Per-track rank curves, indexed once (on first use) from the
 // same file GET /progression/config serves. Used to validate confirm/public requests instead of
@@ -208,6 +211,12 @@ export async function GrantProgressionXp(
                 const StorageId = ProgressionStorageId(progressionId);
                 const Before = await repos.progressionTracks.get(userId, StorageId, session);
                 const After = await repos.progressionTracks.increment(userId, StorageId, amount, session);
+                // Reforge (ServerPrestigeExperience) grants +1 PrestigeTrack_Weapon_* XP per reforge; each pays one
+                // Aetherheart. The 1.14.7 prestige tables carry no rewards, so the trade is made here, once per grantId.
+                if (/^PrestigeTrack_Weapon_\w+$/.test(progressionId)) {
+                    const Hearts = await AddCurrency(userId, AETHERHEART_CATALOG_ID, amount, session);
+                    logger.info(`[Reforge] grant=${grantId} user=${userId} track=${progressionId} +${amount} Aetherheart -> ${Hearts}`);
+                }
                 // Slayer Link XP also feeds the player's hunt pass (a tenth, at least 1), in the same transaction.
                 if (progressionId.startsWith("Linked_Slayer_Slot_")) {
                     const PassSlot = await GetServedSlotForUser(userId, repos);
