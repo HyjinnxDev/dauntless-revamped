@@ -80,6 +80,10 @@ export const Collections = {
     GuildMembers: "guildMembers",
     GuildInvites: "guildInvites",
 
+    // Gauntlet best cleared level per season window (src/gauntlet.ts). _id = "<season index>:<accountId|guildId>".
+    GauntletClears: "gauntletClears",
+    GauntletGuildClears: "gauntletGuildClears",
+
     // Extra characters per launcher account (src/characterSlots.ts). _id = the character's game userId.
     CharacterSlots: "characterSlots"
 } as const;
