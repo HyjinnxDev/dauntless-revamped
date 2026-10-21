@@ -306,11 +306,13 @@ function OneTimeTransactionId(storeTag: string, userId: string, sku: StoreSku): 
     return crypto.createHash("sha256").update(`${Scope}:${userId}:${sku.ownershipKey ?? sku.id}`).digest("hex").slice(0, 32).toUpperCase();
 }
 
-// Today's fountain coin toss already completed for this character (same ledger row PurchaseStoreSku replays).
-export async function FountainClaimedToday(userId: string, characterId: string): Promise<boolean> {
-    const TransactionId = OneTimeTransactionId("fountain_daily_free_bundle", userId, FountainDailySku());
-    return GetRepositories().inventoryTransactions.isCompleted(TransactionId, userId, characterId);
+// A one-time SKU (its ownershipKey may carry the day) already bought by this character: the same ledger row
+// PurchaseStoreSku replays instead of charging again.
+export async function OneTimeSkuOwned(storeTag: string, userId: string, characterId: string, sku: StoreSku): Promise<boolean> {
+    return GetRepositories().inventoryTransactions.isCompleted(OneTimeTransactionId(storeTag, userId, sku), userId, characterId);
 }
+export const FountainClaimedToday = (userId: string, characterId: string) =>
+    OneTimeSkuOwned("fountain_daily_free_bundle", userId, characterId, FountainDailySku());
 
 // Applies a SKU's `skuProgression` payload. Rank-skip SKUs name `selected_huntpass` and a rank
 // count, which src/skuProgression.ts converts to an XP delta against the same rank curve

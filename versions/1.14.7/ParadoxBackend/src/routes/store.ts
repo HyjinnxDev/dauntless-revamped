@@ -12,7 +12,7 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
-import { GetNotesForUser, GetStoreSkus, PurchaseStoreSku, FindStoreSkuByIdOrCatalogId, FountainClaimedToday } from "../controllers/store";
+import { GetNotesForUser, GetStoreSkus, PurchaseStoreSku, FindStoreSkuByIdOrCatalogId, FountainClaimedToday, OneTimeSkuOwned } from "../controllers/store";
 import { GetWallet, BuildBalanceDict } from "../controllers/wallet";
 import { ProjectBalances } from "../platinumWallet";
 import { GetCharactersForUid } from "../controllers/character";
@@ -191,6 +191,15 @@ storeRouter.get("/product/skus/public", HasParadoxBackendAuth, async (req: any, 
     // of an already-owned one-time SKU is idempotently safe, not double-charged), this listing just
     // doesn't grey it out yet. See controllers/store.ts's header comment for the full provenance.
     const Skus = StoreSkus.map(PublicSku);
+
+    // Middleman Rams exchange: once bought today, send remaining 0 so the tile greys out (the client's bCanPurchase
+    // needs remaining > 0) instead of offering a buy that only replays the earlier purchase.
+    if (RequiredTags === "weekly_cell_offering") {
+        const CharacterId = (await GetCharactersForUid(req.AuthData.userId))[0]?.id;
+        for (const [Index, Sku] of StoreSkus.entries()) {
+            if (Sku.maxAllowed === 1 && CharacterId && await OneTimeSkuOwned(RequiredTags, req.AuthData.userId, CharacterId, Sku)) Skus[Index].remaining = 0;
+        }
+    }
 
     logger.info(`Store SKUs: ${RequiredTags} -> ${Skus.length} SKUs`);
     res.status(200);
