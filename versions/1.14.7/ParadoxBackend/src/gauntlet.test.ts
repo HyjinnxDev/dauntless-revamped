@@ -18,8 +18,8 @@ test("levels arrive plain or season-combined", () => {
 });
 
 test("party access is the weakest member; 3+ guildmates unlock for the guild", () => {
-    assert.equal(PartyLevelAccess([7, 3, 12]), 3);
-    assert.equal(PartyLevelAccess([]), 0);
+    assert.equal(PartyLevelAccess([7, 3, 12]), 4);
+    assert.equal(PartyLevelAccess([0, 0]), 1);
     const Guilds = new Map([["a", "G"], ["b", "G"], ["c", "G"], ["d", "H"]]);
     assert.deepEqual(GuildsUnlocking(Guilds, ["a", "b", "c", "d"]), ["G"]);
     assert.deepEqual(GuildsUnlocking(Guilds, ["a", "b", "d", "a"]), []);

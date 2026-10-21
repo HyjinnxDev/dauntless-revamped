@@ -40,10 +40,9 @@ export function NormalizeGauntletLevel(Level: unknown): number | undefined {
     return N >= COMBINED_LEVEL_BASE ? N % COMBINED_LEVEL_BASE || undefined : N;
 }
 
-// Highest cleared level a party may build on: every member must have the level unlocked, so the weakest member decides.
-// ponytail: replies "highest cleared" (0 = only level 1), which matches level 1 launching while the stub sent nothing.
-// If the level select turns out to read it as "highest unlocked", reply PartyLevelAccess(...) + 1.
-export const PartyLevelAccess = (MemberAccess: number[]) => (MemberAccess.length ? Math.min(...MemberAccess) : 0);
+// Highest level a party may queue: every member must have the level unlocked, so the weakest member decides.
+// The client reads this as "highest unlocked" (0 blocked level 1 in game, 2026-10-21), so it is highest cleared + 1.
+export const PartyLevelAccess = (MemberCleared: number[]) => (MemberCleared.length ? Math.min(...MemberCleared) : 0) + 1;
 
 // Guilds with enough members in one clear to unlock that level guild-wide.
 export function GuildsUnlocking(GuildOfPlayer: Map<string, string>, Players: string[]): string[] {
