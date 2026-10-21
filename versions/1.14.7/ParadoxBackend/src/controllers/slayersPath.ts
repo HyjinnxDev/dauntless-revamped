@@ -76,12 +76,11 @@ export function GetNodeRewardItemIds(nodeId: string): string[] {
 
 // Archon.EPlayerJourneyNodeStatus in the 1.12 SDK is:
 //   Locked=0, LockedButClaimable=1, Unlocked=2.
-// A purchased item-reward node can remain at LockedButClaimable while its reward delivery is
-// pending/failed. Reconciliation therefore accepts the two real claim states (1 and 2), but not
-// Locked or the enum sentinels. Callers that cause grants are restricted to game-server auth.
+// LockedButClaimable (1) is the purchasable frontier (parent unlocked, not bought), so only
+// Unlocked (2) grants. Accepting 1 handed out every frontier node's item for free (see
+// loadoutSlots.ts for the same rule). Callers that cause grants are restricted to game-server auth.
 export function IsNodeUnlocked(node: any): boolean {
-    const Status = node?.node_status;
-    return Status === 1 || Status === 2;
+    return node?.node_status === 2;
 }
 
 export function GetUnlockedNodeIds(nodes: any): string[] {

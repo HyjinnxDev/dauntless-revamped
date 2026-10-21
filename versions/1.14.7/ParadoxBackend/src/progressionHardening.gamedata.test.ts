@@ -15,6 +15,7 @@ import {
 } from "./controllers/progression";
 import { CaptureProgressionObjectiveEvent, ConfirmPublicProgressionRank, MasteryTrackForObjective } from "./controllers/progression";
 import { HuntPassMaxXp, HuntPassStorageId } from "./huntPassRotation";
+import { GetUnlockedNodeIds } from "./controllers/slayersPath";
 
 const Track = {
     userId: "user-1",
@@ -92,6 +93,15 @@ test("journey merge preserves concurrent unlocks and stale stored values", () =>
         Conflict: { node_status: 1 }
     });
     assert.equal(Merged.version, 3);
+});
+
+test("only Unlocked (2) journey nodes are reward-eligible, not the claimable frontier (1)", () => {
+    // [Revamped 2026-10-20] status 1 granted Ardent Cyclone etc. for free without a purchase.
+    assert.deepEqual(GetUnlockedNodeIds({
+        WeaponTypeEB_Mod_00: { node_id: "WeaponTypeEB_Mod_00", node_status: 2 },
+        WeaponTypeEB_Spc_00: { node_id: "WeaponTypeEB_Spc_00", node_status: 1 },
+        WeaponTypeEB_Mod_01: { node_id: "WeaponTypeEB_Mod_01", node_status: 0 }
+    }), ["WeaponTypeEB_Mod_00"]);
 });
 
 test("Mongo journey repository applies an expected-version CAS predicate", async () => {
