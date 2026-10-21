@@ -25,6 +25,7 @@ import { BountyGroupCounts, BountySaveValidationError, BountyStatePayload, IsAut
 import { DeleteBounties, GetBountyState, SaveBountyState } from "../controllers/bounty";
 import { BOUNTY_TOKENS_DAILY } from "../controllers/inventory";
 import { EscalationSeasonProgressUpdate, IsAuthorizedEscalationReader, IsAuthorizedEscalationWriter } from "../escalationProgress";
+import { GauntletSeason, GetGauntletProgress, GetPartyLevelAccess, RecordGauntletClear } from "../gauntlet";
 
 export const systemRouter = Router();
 
@@ -440,30 +441,11 @@ systemRouter.get("/config", HasParadoxBackendAuth, (req: any, res, next) => {
         next();
         return;
     }
-    logger.info(`Gauntlet config requested by ${originHost} (1.14.7 stub)`);
-    // [1.14.7 PROBE 2026-10-03] Ghidra has NO function defined anywhere in the Gauntlet module
-    // (0x140DD59AF / 0x140DF2649 are inside .text but unanalyzed), so its parser cannot be
-    // decompiled for a field list the way the character parser was. Probing instead with the
-    // sibling contract this backend already serves successfully - the Escalation payload fields
-    // (escalation_level, next_level_xp, talents_progress, unlock_progress, update_version) - plus
-    // the gauntlet_id field the client itself references (0x14512EEC0). The client's own parse log
-    // is the oracle: any change in its message tells us whether this endpoint is the one it wants.
-    const ProbePayload = (process.env.GAUNTLET_CONFIG_PROBE ?? "1") === "1"
-        ? {
-            gauntlet_id: "ESC_SEASON_1",
-            escalation_level: 0,
-            next_level_xp: 0,
-            talents_progress: [],
-            unlock_progress: [],
-            update_version: 0
-        }
-        : {};
-    res.status(200);
-    res.json({
-        code: null,
-        message: "OK",
-        payload: ProbePayload
-    });
+    // [2026-10-21] Fields from the exe's serializer (0x140E16737): gauntlet_id, start_at, end_at (date reader),
+    // each_level_rewards, milestone_rewards. The season is the hunt pass window (src/gauntlet.ts).
+    const Season = GauntletSeason();
+    logger.info(`Gauntlet config requested by ${originHost} -> ${Season.id} ${Season.start_at}..${Season.end_at}`);
+    res.status(200).json(GauntletEnvelope({ gauntlet_id: Season.id, start_at: Season.start_at, end_at: Season.end_at, each_level_rewards: [], milestone_rewards: [] }));
 });
 
 // [1.14.7 2026-10-03] Gauntlet (seasonal mode) endpoint family.
@@ -481,7 +463,7 @@ systemRouter.get("/config", HasParadoxBackendAuth, (req: any, res, next) => {
 // copy. These stubs return the same envelope every other Phoenix stub uses; the client's own
 // parser log is the oracle for refining the payloads. Every handler passes through with next()
 // for any other origin host, so no existing route is shadowed.
-const GauntletEnvelope = (payload: Record<string, unknown>) => ({
+const GauntletEnvelope = (payload: unknown) => ({
     code: null,
     message: "OK",
     payload
@@ -495,10 +477,21 @@ function IsGauntletOrigin(req: any): boolean {
 // named ":season" parameters never match (Express params are non-empty). Regex routes are used so
 // the empty segment is accepted - that is the whole reason the first attempt still 404'd. They are case-insensitive
 // ("i") like Express's string routes, so an upper-case path still meets HasParadoxBackendAuth here.
-systemRouter.get(/^\/progression\/([^/]*)\/([^/]+)$/i, HasParadoxBackendAuth, (req: any, res, next) => {
+// [2026-10-21] Party level access: the client lists every party member as ?account_id=; the payload is a bare int.
+// Must sit before the progression regex below, which used to swallow it as season='level_access'.
+systemRouter.get(/^\/progression\/level_access\/([^/]*)$/i, HasParadoxBackendAuth, async (req: any, res, next) => {
     if (!IsGauntletOrigin(req)) { next(); return; }
-    logger.info(`Gauntlet progression requested season='${req.params[0]}' user='${req.params[1]}' (1.14.7 stub)`);
-    res.status(200).json(GauntletEnvelope({}));
+    const Accounts = ([] as unknown[]).concat(req.query.account_id ?? []).filter((A): A is string => typeof A === "string" && A.length > 0).slice(0, 8);
+    const Access = await GetPartyLevelAccess(Accounts);
+    logger.info(`[Gauntlet] level_access season='${req.params[0]}' accounts=${Accounts.join(",")} -> ${Access}`);
+    res.status(200).json(GauntletEnvelope(Access));
+});
+
+systemRouter.get(/^\/progression\/([^/]*)\/([^/]+)$/i, HasParadoxBackendAuth, async (req: any, res, next) => {
+    if (!IsGauntletOrigin(req)) { next(); return; }
+    const Progress = (await GetGauntletProgress([req.params[1]])).get(req.params[1])!;
+    logger.info(`Gauntlet progression requested season='${req.params[0]}' user='${req.params[1]}' -> personal=${Progress.personal} guild=${Progress.guild}`);
+    res.status(200).json(GauntletEnvelope({ personal_progression: Progress.personal, guild_progression: Progress.guild }));
 });
 
 systemRouter.get(/^\/rewards\/personal\/([^/]*)\/([^/]+)$/i, HasParadoxBackendAuth, (req: any, res, next) => {
@@ -519,6 +512,19 @@ systemRouter.get(/^\/leaderboard\/get_leaderboard\//i, HasParadoxBackendAuth, (r
     if (!IsGauntletOrigin(req)) { next(); return; }
     logger.info(`Gauntlet leaderboard requested (1.14.7 stub)`);
     res.status(200).json(GauntletEnvelope({ entries: [] }));
+});
+
+// [2026-10-21] Level success (GauntletEndedLevelEndpoint) and guild reward claims. Their paths come from the ini and
+// have never been seen, so every Gauntlet-host write lands here; a success is recognised by its body
+// {gauntlet_id, players[], level, remaining_sec, data}. Only the game server may record a clear.
+// ponytail: the path is logged so a real route can replace this catch-all once seen.
+systemRouter.post(/^\//, (req: any, _res, next) => next(IsGauntletOrigin(req) ? undefined : "route"), HasParadoxBackendAuth, async (req: any, res) => {
+    const IsSuccess = Array.isArray(req.body?.players) && req.body?.level !== undefined;
+    const Result = !IsSuccess ? "not a level success"
+        : req.AuthData?.IsGameserver ? await RecordGauntletClear(req.body)
+        : "ignored: not from the game server";
+    logger.info(`[Gauntlet] POST ${req.path} body=${JSON.stringify(req.body ?? null).slice(0, 1000)} -> ${Result}`);
+    res.status(200).json(GauntletEnvelope({}));
 });
 
 systemRouter.get("/huntpass/:userId", HasParadoxBackendAuth, async (req: any, res) => {
