@@ -11381,6 +11381,7 @@ static bool ValidateClientPossessionChain(UObject* PC, UObject* ExpectedPawn, UO
 // This reads them OUTSIDE the guard's __try (no change to its logic, no std::string inside __try) and is
 // throttled, so a stuck client names the exact missing link instead of only the symptom.
 static void MpTracePossessionChainFailure(UObject* PC) {
+    if (!VerboseDiag()) return;   // [perf 2026-10-21] every 3 s whenever the chain is incomplete (menus too)
     static std::atomic<uint64_t> s_lastMs{ 0 };
     const uint64_t Now = GetTickCount64();
     const uint64_t Last = s_lastMs.load(std::memory_order_relaxed);
@@ -12815,6 +12816,30 @@ static void LogRejectedRelicClick(UObject* Screen, void* Parms) {
 static std::atomic<uint32_t> g_clientGameThreadId{ 0 };
 static std::atomic<uint64_t> g_clientProcessEventCount{ 0 };
 
+// [perf 2026-10-21] [ClientPerf], once a minute: client ProcessEvent calls per second and the time our hook spends
+// on its own work (the checks before and after the game's call, not the game's call itself), in ms per second of
+// wall time - i.e. the share of the game thread the hook costs. rdtsc keeps the measurement a few ns per call.
+static std::atomic<uint64_t> g_clientHookTsc{ 0 };
+static void MpClientPerfTick() {
+    static uint64_t s_startMs = 0, s_startTsc = 0, s_startPe = 0;
+    const uint64_t Pe = g_clientProcessEventCount.load(std::memory_order_relaxed);
+    if ((Pe & 0xFFF) != 0) return;   // look at the clock every 4096 calls
+    const uint64_t NowMs = GetTickCount64(), Tsc = __rdtsc();
+    if (s_startMs == 0 || NowMs - s_startMs >= 60000) {
+        const uint64_t HookTsc = g_clientHookTsc.exchange(0, std::memory_order_relaxed);
+        if (s_startMs != 0) {
+            const double Secs = (NowMs - s_startMs) / 1000.0;
+            const double TscPerMs = static_cast<double>(Tsc - s_startTsc) / (NowMs - s_startMs);
+            const double Calls = static_cast<double>(Pe - s_startPe);
+            const double HookMs = HookTsc / TscPerMs;
+            MpLog("[ClientPerf] ProcessEvent " + std::to_string(static_cast<int64_t>(Calls / Secs)) + "/s, hook self "
+                + std::to_string(HookMs / Secs) + " ms/s, " + std::to_string(Calls > 0 ? HookMs * 1e6 / Calls : 0.0)
+                + " ns/call over " + std::to_string(static_cast<int64_t>(Secs)) + " s");
+        }
+        s_startMs = NowMs; s_startTsc = Tsc; s_startPe = Pe;
+    }
+}
+
 static void MpHitchSampleOnce(HANDLE Thread, int Episode, int Sample, uint64_t StartMs, uint64_t& LastPeCount) {
     static uint8_t s_stack[0x3000];
     CONTEXT Ctx{};
@@ -12915,54 +12940,6 @@ static const std::string& CachedFunctionFullName(UFunction* Function) {
     Slot.NameNumber = Function->Name.Number;
     Slot.Name = Function->GetFullName();
     return Slot.Name;
-}
-
-// [1.14.7 2026-10-15 LOOT POPUP PROBE] Left-side pickup popups (pickup_notification_queue_bpw) show rewards the
-// backend never receives (e.g. ~1000 Rams after a normal kill, backend got CURRENCY_NOTES x130 from PlayerLoot).
-// Read-only: logs [LootPopup] for every popup entry point that reaches ProcessEvent and for the server's
-// ClientHandleLootGranted RPC, so popups can be matched against the backend's [GrantMon] lines by time.
-// BP-to-BP calls skip ProcessEvent, so the first 5 calls of every queue-widget function are also logged by name.
-// DISABLE_LOOT_POPUP_PROBE.flag (beside the exe) turns it off.
-std::string CoreCapFString(void* fstr);
-static void MpLootPopupProbe(const std::string& FunctionName, void* Parms) {
-    static const bool s_off = MpExeRelativeFlagPresent(L"DISABLE_LOOT_POPUP_PROBE.flag");
-    if (s_off) return;
-    const bool Queue = FunctionName.find("pickup_notification_queue_bpw_C:") != std::string::npos;
-    const bool LootRpc = !Queue && FunctionName.find("PlayerLootComponent.ClientHandleLootGranted") != std::string::npos;
-    if (!Queue && !LootRpc) return;
-    auto* P = static_cast<uint8_t*>(Parms);
-    if (LootRpc) {
-        if (!P || !IsReadablePointer(P, 0x10)) return;
-        uint8_t* Data = *reinterpret_cast<uint8_t**>(P);
-        const int32_t Num = *reinterpret_cast<int32_t*>(P + 0x08);
-        std::string Line = "[LootPopup] ClientHandleLootGranted n=" + std::to_string(Num);
-        for (int32_t i = 0; Data && i < Num && i < 32 && IsReadablePointer(Data + i * 0x60, 0x60); ++i) {
-            uint8_t* L = Data + i * 0x60;   // FArchonLoot: ItemId +0x00, Source +0x10, Count +0x58, AwardImmediately +0x5D
-            Line += " | " + CoreCapFString(L) + " x" + std::to_string(*reinterpret_cast<int32_t*>(L + 0x58))
-                + " src=" + CoreCapFString(L + 0x10) + " now=" + std::to_string(L[0x5D]);
-        }
-        MpLog(Line);
-        return;
-    }
-    const std::string Fn = FunctionName.substr(FunctionName.rfind(':') + 1);
-    if (Fn == "Tick") return;
-    // Add_Acquisition_For_Notification / Add_New_Notification / QueueNewNotification / AddCustomNotification all
-    // start with ItemId FString +0x00, Amount +0x10, Condition +0x14.
-    const bool ItemCall = Fn == "Add_Acquisition_For_Notification" || Fn == "Add_New_Notification"
-        || Fn == "QueueNewNotification" || Fn == "AddCustomNotification";
-    if (ItemCall && P && IsReadablePointer(P, 0x16)) {
-        MpLog("[LootPopup] " + Fn + " item=" + CoreCapFString(P)
-            + " amount=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x10))
-            + " cond=" + std::to_string(P[0x14]));
-        return;
-    }
-    if (Fn == "On_Progress_Granted" && P && IsReadablePointer(P, 0x1C)) {   // FProgressGrant: Track +0x00, Increase +0x18
-        MpLog("[LootPopup] On_Progress_Granted track=" + CoreCapFString(P)
-            + " increase=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x18)));
-        return;
-    }
-    static std::unordered_map<std::string, int> s_seen;
-    if (s_seen[Fn]++ < 5) MpLog("[LootPopup] fn=" + Fn);
 }
 
 // [1.14.7 2026-10-15 PROJECTILE TICK FIX] Player projectiles never damaged anything. On this headless server every
@@ -13074,61 +13051,6 @@ static void MpHuntCombatLog(UObject* Object, const std::string& FunctionName, vo
             + " amount=" + std::to_string(P->DamageEventData.MitigatedAttackDamage)
             + " tags=" + TempestDiagTags(P->DamageTags)
             + " targetAt=" + Vec(static_cast<SDK::AActor*>(static_cast<void*>(Object))->K2_GetActorLocation()));
-    }
-}
-
-// [1.14.7 2026-10-15 COIN TOSS PROBE] Ramsgate coin toss (coin_toss_interact_bp) does nothing: the backend has no
-// offer for UArchonActivitiesProgressionComponent::ClaimDailyBonus's store query. Read-only: logs [CoinToss] for
-// every coin toss / activities-progression UFunction reaching ProcessEvent, the store query and purchase results,
-// and (throttled, deduped) the query tags and DailyBonusItemId from every component/stinger, defaults included.
-// DISABLE_COIN_TOSS_PROBE.flag (beside the exe) turns it off.
-static void MpCoinTossProbe(const std::string& FunctionName, void* Parms) {
-    static const bool s_off = MpExeRelativeFlagPresent(L"DISABLE_COIN_TOSS_PROBE.flag");
-    if (s_off) return;
-    if (FunctionName.find("ActivitiesProgression") == std::string::npos && FunctionName.find("CoinToss") == std::string::npos
-        && FunctionName.find("cointoss") == std::string::npos && FunctionName.find("coin_toss") == std::string::npos) return;
-    const std::string Fn = FunctionName.substr(FunctionName.rfind('.') + 1);
-    if (Fn == "Tick" || Fn.find("Skyfish") != std::string::npos) return;
-    auto* P = static_cast<uint8_t*>(Parms);
-    if (Fn == "OnStoreQueryCompleted" && P && IsReadablePointer(P, 0x28)) {
-        uint8_t* Data = *reinterpret_cast<uint8_t**>(P + 0x18);
-        const int32_t Num = *reinterpret_cast<int32_t*>(P + 0x20);
-        std::string Line = "[CoinToss] OnStoreQueryCompleted ok=" + std::to_string(P[0]) + " msg='" + CoreCapFString(P + 0x08)
-            + "' offers=" + std::to_string(Num);
-        for (int32_t i = 0; Data && i < Num && i < 8 && IsReadablePointer(Data + i * 0x230, 0x60); ++i) {
-            uint8_t* O = Data + i * 0x230;   // FOnlineStorePhoenixOffer: SkuId +0x00, CatalogId +0x38, PlatPrice +0x58
-            Line += " | sku=" + CoreCapFString(O) + " catalog=" + CoreCapFString(O + 0x38)
-                + " plat=" + std::to_string(*reinterpret_cast<int32_t*>(O + 0x58));
-        }
-        MpLog(Line);
-    } else if (Fn == "OnStorePurchaseResult" && P && IsReadablePointer(P, 0x18)) {
-        MpLog("[CoinToss] OnStorePurchaseResult ok=" + std::to_string(P[0]) + " purchased=" + std::to_string(P[1])
-            + " msg='" + CoreCapFString(P + 0x08) + "'");
-    } else if (Fn == "ClaimDailyBonus" && P && IsReadablePointer(P, 1)) {
-        MpLog("[CoinToss] ClaimDailyBonus debug=" + std::to_string(P[0]));
-    } else {
-        static std::unordered_map<std::string, int> s_seen;
-        if (s_seen[FunctionName]++ < 5) MpLog("[CoinToss] fn=" + FunctionName);
-    }
-    static ULONGLONG s_last = 0;
-    const ULONGLONG Now = GetTickCount64();
-    if (Now - s_last < 10000u) return;
-    s_last = Now;
-    static std::unordered_set<std::string> s_logged;
-    for (int i = 0, N = SDK::UObject::GObjects->Num(); i < N; i++) {
-        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
-        if (!Obj) continue;
-        std::string Line;
-        if (Obj->IsA(SDK::UArchonActivitiesProgressionComponent::StaticClass())) {
-            auto* C = static_cast<SDK::UArchonActivitiesProgressionComponent*>(Obj);
-            Line = "component " + Obj->GetFullName() + " queryTag='" + C->DailyBundleStoreQueryTag.ToString()
-                + "' debugQueryTag='" + C->DebugDailyBundleStoreQueryTag.ToString() + "'";
-        } else if (Obj->IsA(SDK::UCoinTossStinger::StaticClass())) {
-            auto* S = static_cast<SDK::UCoinTossStinger*>(Obj);
-            Line = "stinger " + Obj->GetFullName() + " dailyBonusItemId='" + S->DailyBonusItemId.ToString()
-                + "' duration=" + std::to_string(S->StingerDuration);
-        } else continue;
-        if (s_logged.insert(Line).second) MpLog("[CoinToss] " + Line);
     }
 }
 
@@ -14372,6 +14294,7 @@ static void TickGuarded() {
 }  // namespace JoinPopup
 
 void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
+    const uint64_t HookTscIn = __rdtsc();
     g_clientProcessEventCount.fetch_add(1, std::memory_order_relaxed);
     if (g_clientGameThreadId.load(std::memory_order_relaxed) == 0) {
         g_clientGameThreadId.store(GetCurrentThreadId(), std::memory_order_relaxed);   // ProcessEvent runs on the game thread
@@ -14432,8 +14355,6 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
 
     const std::string& FunctionName = CachedFunctionFullName(Function);
     MpHuntPassProbe(Object, FunctionName);
-    MpLootPopupProbe(FunctionName, Parms);
-    MpCoinTossProbe(FunctionName, Parms);
 
     // Party drop-in during hunt intro (adventure_island_arrival_trigger_bp, one per player, owned by the pawn).
     // Retail: the trigger is owner-relevant only (server side now clears that, see ProcessEventHook), a
@@ -14880,7 +14801,9 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
     // (setup + budgeted trace + the client-only g_postLoginTimeMs seed, which only fed removed diagnostics).
 
 
+    const uint64_t HookTscPre = __rdtsc() - HookTscIn;
     reinterpret_cast<void(*)(UObject*, UFunction*, void*)>(OrigProcessEventClient)(Object, Function, Parms);
+    const uint64_t HookTscPost = __rdtsc();
     TraceArtificerDroneEvent("Client", "EXIT", Object, FunctionName, Parms);
 
     // After the screen's own handler, so SetSplashImage / HandleGetPatchNotesPayloadSuccess cannot undo it.
@@ -15206,10 +15129,10 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
         }
         char buf[128];
         _snprintf_s(buf, sizeof(buf), _TRUNCATE, "%.2f,%.2f,%.2f scale=%.2f", dx, dy, dz, scale);
-        MpLog(std::string("[AddMovementInput] obj=") + (Object ? Object->GetFullName() : "null")
+        if (VerboseDiag()) MpLog(std::string("[AddMovementInput] obj=") + (Object ? Object->GetFullName() : "null")
             + " dir=(" + buf + ")");
     }
-    if (Function && FunctionName.contains("SetMovementMode") && Parms) {
+    if (VerboseDiag() && Function && FunctionName.contains("SetMovementMode") && Parms) {
         uint8_t newMode = SafeReadByte(reinterpret_cast<uintptr_t>(Parms), 0, 0xEE);
         MpLog(std::string("[SetMovementMode] obj=") + (Object ? Object->GetFullName() : "null")
             + " newMode=" + std::to_string(newMode));
@@ -15218,7 +15141,7 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
         // struct { EMovementMode PrevMode; EMovementMode NewMode; uint8 PrevCustom; uint8 NewCustom; }
         uint8_t prev = SafeReadByte(reinterpret_cast<uintptr_t>(Parms), 0, 0xEE);
         uint8_t next = SafeReadByte(reinterpret_cast<uintptr_t>(Parms), 1, 0xEE);
-        MpLog(std::string("[K2_OnMovementModeChanged] obj=") + (Object ? Object->GetFullName() : "null")
+        if (VerboseDiag()) MpLog(std::string("[K2_OnMovementModeChanged] obj=") + (Object ? Object->GetFullName() : "null")
             + " prev=" + std::to_string(prev) + " new=" + std::to_string(next));
         // Arrival beam over for the local pawn: run the cinematic clear deferred by TriggerArchonInputActivation.
         UObject* DeferredPC = s_CinematicClearAfterArrivalPC;
@@ -15376,6 +15299,8 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
             + " clientRolePumpSettleMs=" + std::to_string(kClientRolePumpTravelSettleMs)
             + " progressionHudRefreshRearmed=0(disabled)");
     }
+    g_clientHookTsc.fetch_add(HookTscPre + (__rdtsc() - HookTscPost), std::memory_order_relaxed);
+    MpClientPerfTick();
 }
 
 static int NumTimesOnAirshipUpdated = 0;
@@ -17026,7 +16951,6 @@ void ProcessEventHook(UObject* Object, UFunction* Function, void* Parms) {
     else if (FunctionName.find(".ClientAdjust") != std::string::npos || FunctionName.find(".ClientVeryShortAdjust") != std::string::npos)
         g_mpClientAdjusts.fetch_add(1, std::memory_order_relaxed);
     MpHuntPassProbe(Object, FunctionName);
-    MpCoinTossProbe(FunctionName, Parms);
     MpServerProjectileTickFix(Object, FunctionName);
     MpHuntCombatLog(Object, FunctionName, Parms);
 
