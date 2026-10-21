@@ -18393,6 +18393,47 @@ static void InstallHuntPassClaimGuard() {
     MpLog(std::string("[HuntPassClaimGuard] (+0x1F69E20) create=") + MH_StatusToString(C) + " enable=" + MH_StatusToString(E));
 }
 
+// [1.14.7 2026-10-20 CELL OFFER PROBE] Middleman tiles show -1 Aetherdust with the backend sending either
+// "id_currency_celldust" or "CURRENCY_CELLDUST". +0x1EBF620 builds FCellOfferViewModel (Out) from one 0x230-byte
+// store offer (In): it walks the offer's price map (TSet at In+0x1E0, 0x20-byte entries, shared price object at +8
+// with CurrencyCode FString +0xA0, price +0x98) and matches each currency FName against "id_currency_platinum"
+// (-> PlatPrice +0x20) and "CURRENCY_CELLDUST" (-> DustPrice +0x2C). Read-only: logs what the client actually holds.
+// DISABLE_CELL_OFFER_PROBE.flag skips it. Remove once the dust price shows.
+using CellOfferBuildFn = void*(__fastcall*)(void*, void*);
+static CellOfferBuildFn OrigCellOfferBuild = nullptr;
+static void* __fastcall CellOfferBuildProbe(void* Out, void* In) {
+    void* R = OrigCellOfferBuild(Out, In);
+    auto* O = static_cast<uint8_t*>(In);
+    auto* V = static_cast<uint8_t*>(Out);
+    if (!O || !V || !IsReadablePointer(O, 0x230) || !IsReadablePointer(V, 0x48)) return R;
+    std::string Line = "[CellOffer] sku=" + CoreCapFString(O) + " offerPlat=" + std::to_string(*reinterpret_cast<int32_t*>(O + 0x58))
+        + " offerDust=" + std::to_string(*reinterpret_cast<int32_t*>(O + 0x60))
+        + " -> vmPlat=" + std::to_string(*reinterpret_cast<int32_t*>(V + 0x20)) + "/" + reinterpret_cast<SDK::FName*>(V + 0x24)->ToString()
+        + " vmDust=" + std::to_string(*reinterpret_cast<int32_t*>(V + 0x2C)) + "/" + reinterpret_cast<SDK::FName*>(V + 0x30)->ToString()
+        + " canBuy=" + std::to_string(V[0x40]);
+    uint8_t* Data = *reinterpret_cast<uint8_t**>(O + 0x1E0);
+    const int32_t Num = *reinterpret_cast<int32_t*>(O + 0x1E8);
+    Line += " prices=" + std::to_string(Num);
+    for (int32_t i = 0; Data && i < Num && i < 8 && IsReadablePointer(Data + i * 0x20, 0x20); ++i) {
+        uint8_t* E = Data + i * 0x20;
+        uint8_t* P = *reinterpret_cast<uint8_t**>(E + 8);
+        Line += " | key=" + reinterpret_cast<SDK::FName*>(E)->ToString();
+        if (P && IsReadablePointer(P, 0xB0))
+            Line += " code='" + CoreCapFString(P + 0xA0) + "' price=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x98))
+                + " regular=" + std::to_string(*reinterpret_cast<int32_t*>(P + 0x78));
+    }
+    MpLog(Line);
+    return R;
+}
+
+static void InstallCellOfferProbe() {
+    if (MpExeRelativeFlagPresent(L"DISABLE_CELL_OFFER_PROBE.flag")) return;
+    void* Target = reinterpret_cast<void*>(Globals::BaseAddress + 0x01EBF620);
+    const MH_STATUS C = MH_CreateHook(Target, reinterpret_cast<LPVOID>(&CellOfferBuildProbe), reinterpret_cast<LPVOID*>(&OrigCellOfferBuild));
+    const MH_STATUS E = C == MH_OK ? MH_EnableHook(Target) : C;
+    MpLog(std::string("[CellOffer] probe (+0x1EBF620) create=") + MH_StatusToString(C) + " enable=" + MH_StatusToString(E));
+}
+
 // [1.14.7 FORCED FEATURE FLAGS 2026-10-14] Seasonal Ramsgate dressing (city_01_event_frostfall etc.) is a
 // sublevel gated by a blueprint feature flag (enable_city_event_frostfall_bpff_C), and Features.json is never
 // read by the exe. Every flag query funnels through two natives (located from the FeatureFlagBlueprintLibrary
@@ -18473,6 +18514,7 @@ void InitClientHooks() {
         + MH_StatusToString(ClientCloseCreate) + " enable=" + MH_StatusToString(ClientCloseEnable));
     InstallLoadMapDiagHooks();
     InstallHuntPassClaimGuard();
+    InstallCellOfferProbe();
     InstallFeatureFlagForce();
 
     // [1.12.0 FIX 2026-07-10] Client-side HasFinishedLoading hook re-enabled.
