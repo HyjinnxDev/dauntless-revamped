@@ -1,155 +1,130 @@
-# Dauntless Revived Launcher
+# Dauntless Revamped Launcher
 
 *[In English](README.md)*
 
-Windows- ja Linux-sovellus, jonka kaverit asentavat pelatakseen Dauntless Revived -palvelimella. Se liittyy
-palvelimelle kutsulla, luo tilin, lataa ja tarkistaa Dauntless 1.4.4:n pelitiedostot ylläpitäjän
-omalta palvelimelta, laittaa kaiken valmiiksi ja käynnistää pelin. Kielinä englanti ja suomi.
+Windows-sovellus, jonka pelaajat asentavat pelatakseen Dauntless 1.14.7 -palvelimella, jossa pyörii
+Mystic Paradox. Se liittyy palvelimelle kutsulla, luo tilin (tai kirjautuu), lataa ja tarkistaa
+lukitun Dauntless 1.14.7 -asiakkaan ja palvelimen ajonaikaisen osan ja käynnistää pelin paikallisen
+välityspalvelimen kautta. Kielinä englanti, suomi ja espanja.
 
-**Linux:** x86_64-Linuxille julkaistaan AppImage-, deb-, rpm- ja siirrettävät paketit. Windowsin 1.4.4-peliasiakas käynnistyy Protonin tai Winen kautta. Katso [jakelukohtainen Linux-ohje](https://mixutin.github.io/dauntless-revived/fi/setup/linux.html) tai [LINUX.md](LINUX.md).
+**Tässä sovelluksessa tai repossa ei ole pelitiedostoja.** Ne tulevat ylläpitäjän palvelimelta (tai
+palvelimen ilmoittamasta latauspaikasta), ja jokainen tiedosto tarkistetaan käynnistimeen käännettyä
+tiedostojen, kokojen ja SHA-256-tiivisteiden listaa vasten (`data/dauntless-1.14.7.json`). Tiedosto,
+joka ei täsmää, hylätään.
 
-**Sovelluksessa tai tässä repositoriossa ei ole pelitiedostoja.** Ne tulevat ylläpitäjän
-sisältöpalvelimelta, ja jokainen tiedosto tarkistetaan käynnistimeen käännettyä listaa vasten
-(410 tiedostoa, koot ja SHA-256-tiivisteet, `UndauntedContent/data/dauntless-1.4.4.json`).
-Palvelin, joka tarjoaa jotain muuta, hylätään.
+**Yhteisö:** [Liity Dauntless Revamped -Discordiin](https://discord.gg/HpgNEmVbBb), josta saat apua,
+pelikavereita ja projektin uutiset. Käynnistimestä on myös linkki sinne.
 
-**Yhteisö:** [Liity Dauntless Revived Discordiin](https://discord.gg/ZJRprHzsgu) saadaksesi apua, pelikavereita ja projektin päivityksiä. Discord-painike näkyy myös aina käynnistimen sivupalkissa.
+## Pelaajille
 
-## Kavereille
-
-1. Asenna käynnistin projektin julkaisusta. Windowsissa käytä
-   `DauntlessRevivedLauncher-Setup.exe`-asennusohjelmaa. Linuxissa valitse jakelullesi sopiva
-   AppImage-, `.deb`-, `.rpm`- tai siirrettävä paketti [Linux-käynnistimen ohjeesta](https://mixutin.github.io/dauntless-revived/fi/setup/linux.html). Tarkista lataus saman julkaisun
-   `SHA256SUMS.txt`-tiedostoa vasten. Windows-asennusohjelmaa ei ole vielä allekirjoitettu, joten
-   SmartScreen voi pyytää vahvistusta; jos se estää ohjelman kokonaan, tarkista tiiviste, poista
-   tiedoston esto (Ominaisuudet > Poista esto tai `Unblock-File`) ja käynnistä se uudelleen.
-   Allekirjoitus on tiekartan kohta 4.16.
+1. Asenna `DauntlessRevampedLauncher-Setup.exe`
+   [uusimmasta julkaisusta](https://github.com/HyjinnxDev/dauntless-revamped-releases/releases/latest) ja
+   tarkista se saman julkaisun `SHA256SUMS.txt`-tiedostoa vasten. Asenninta ei ole allekirjoitettu,
+   joten SmartScreen voi pyytää vahvistusta (Lisätietoja, sitten Suorita silti). Asennettu käynnistin
+   päivittää itsensä.
 2. Avaa ylläpitäjän lähettämä kutsulinkki tai liitä se Pelaa-sivulle ja paina **LIITY**.
-3. Valitse käyttäjänimi ja paina **REKISTERÖIDY**. Tallenna avaimesta varmuuskopio, kun käynnistin
-   tarjoaa sitä.
-4. Paina **ASENNA** (noin 11 Gt). Voit pitää tauon, sulkea käynnistimen ja jatkaa myöhemmin. Jos
-   sinulla on jo Dauntless 1.4.4, valitse sen sijaan **Minulla on jo pelitiedostot** ja liitä
-   `BaseGame144`-kansiosi (tai sen sisällä olevan `Dauntless`-kansion) polku, tai selaa siihen.
-   Käynnistin käyttää peliä siinä kansiossa, jossa se on: se tarkistaa jokaisen tiedoston
-   kiinnitettyä luetteloa vasten, korvaa tiedostot, jotka eroavat 1.4.4:stä, ja laittaa omat
-   `dxgi.dll`- ja `UndauntedInternalServer.dll`-tiedostonsa kansioon `Archon\Binaries\Win64`.
-   Puuttuvat ja poikkeavat tiedostot ladataan ylläpitäjän palvelimelta, joten se onnistuu vain, jos
-   ylläpitäjä on avannut pelin latauksen. Kopioi kansio ensin, jos jokin toinen asennus käyttää sitä
-   yhä.
+3. Luo tili (käyttäjänimi ja salasana) tai kirjaudu, jos sinulla on jo tili sillä palvelimella.
+4. Paina **ASENNA**. Voit keskeyttää, sulkea käynnistimen ja jatkaa myöhemmin. Jos sinulla on jo
+   Dauntless 1.14.7, valitse **Minulla on jo pelitiedostot** ja osoita käynnistimelle se kansio: se
+   tarkistaa jokaisen tiedoston ja lataa vain puuttuvat tai erilaiset. Kopioi kansio ensin, jos jokin
+   muu asennus käyttää sitä vielä.
 5. Paina **PELAA**.
 
-Vasemman reunan palkin alaosassa, joka sivulla (myös ennen kuin liityt palvelimelle), GitHub-painike
-avaa tämän repositorion selaimeen, ja **Tekijät** kertoo, ketkä tekivät käynnistimen ja palvelimen,
-mitä avoimen lähdekoodin ohjelmistoja ne käyttävät ja millä lisenssillä.
+Ikkunan yläreunan GitHub-painike avaa tämän projektin lähdekoodin, ja **Tekijät** kertoo, ketkä
+tekivät käynnistimen ja palvelimen, mitä avoimen lähdekoodin ohjelmia ne käyttävät ja millä
+lisenssillä.
 
-## Kaksi palvelintyyppiä
+## Palvelimet ja kutsut
 
-| | Yksityinen (kutsu v1) | Julkinen (kutsu v2) |
-|---|---|---|
-| Missä | ylläpitäjän koneella | palvelimella, jolla on julkinen IP |
-| Miten kaverit yhdistävät | Tailscale | suoraan, TLS-yhteydellä palvelimen yhdyskäytävään |
-| Kutsu | `dauntless-revived://join?v=1&host=…&port=61000&code=…&name=…[&share=…]` | `dauntless-revived://join?v=2&mode=public&host=…&port=443&fp=…&code=…&name=…` |
+```text
+dauntless-revamped://join?v=1&host=<IPv4 tai DNS-nimi>&port=<HTTPS-portti, oletus 443>&fp=<palvelimen varmenteen SHA-256>&code=<kutsukoodi>&name=<palvelimen nimi>
+```
 
-Julkisessa tilassa kutsussa on `fp`, palvelimen TLS-varmenteen SHA-256. Jokainen yhteys (tila,
-rekisteröinti, lataukset ja itse peli) tarkistetaan sitä vasten ennen kuin mitään lähetetään.
-Palvelin, jolla on eri varmenne, ei saa mitään, ja käynnistin kertoo, ettei tämä ole kaverisi palvelin.
+Palvelimeen yhdistetään sen julkisella (tai lähiverkon) osoitteella. Kutsussa on `fp`, palvelimen
+TLS-varmenteen SHA-256, ja jokainen yhteys (tila, tili, lataukset sekä pelin oma HTTP- ja
+chat-liikenne) tarkistetaan sitä vasten ennen kuin mitään lähetetään. Palvelin, jolla on eri varmenne,
+ei saa mitään, ja käynnistin kertoo, että "tämä ei ole kaverisi palvelin". Itse allekirjoitettu
+varmenne kelpaa.
 
-Julkisen palvelimen tiliavain on sidottu tähän sormenjälkeen. Kutsu samaan osoitteeseen eri
-varmenteella ei koskaan saa avainta: käynnistin näyttää molemmat sormenjäljet ja kysyy ensin, ja avain
-siirtyy uudelle varmenteelle vain, jos vahvistat sen (tee niin vain, kun ylläpitäjä kertoo
-asentaneensa palvelimen uudelleen). Yksityiset (v1) kutsut toimivat vain Tailscale-osoitteilla
-(100.64.0.0/10) ja `*.ts.net`-nimillä, koska se yhteys on salaamatonta HTTP:tä tailnetin sisällä.
-(Myös koneen omat loopback-osoitteet, kuten `127.0.0.1`, hyväksytään, jotta käynnistintä voi kokeilla
-samalla koneella olevaa palvelinta vasten.)
+Kirjautuminen on sidottu tähän sormenjälkeen. Saman osoitteen kutsu eri varmenteella ei saa sitä:
+käynnistin näyttää molemmat sormenjäljet ja kysyy ensin, ja siirtää kirjautumisen vain, jos vahvistat
+(tee niin vain, kun ylläpitäjä kertoo asentaneensa palvelimen uudelleen).
 
-Dauntless 1.4.4 osaa vain salaamatonta HTTP:tä, joten julkisessa tilassa käynnistin pitää pelin ajan
-käynnissä **paikallista välitintä**: peli puhuu omalla koneellasi osoitteeseen
-`http://127.0.0.1:61000`, ja välitin kuljettaa jokaisen pyynnön (ja chatin WebSocketin) lukitulla
-TLS-yhteydellä palvelimelle. Pidä käynnistin auki pelatessasi; se kysyy ennen sulkemista, jos peli on
-käynnissä. Välitin kuuntelee vain osoitteessa 127.0.0.1 ja hylkää verkkosivuilta tulevat pyynnöt.
+Peli puhuu taustapalvelulleen pelkkää HTTP:tä, joten pelin ajan käynnistin pitää osoitteessa
+`127.0.0.1:61000` **paikallista välityspalvelinta**, joka kuljettaa pyynnöt lukitun TLS-yhteyden yli
+palvelimelle. Pidä käynnistin auki pelatessasi. Välityspalvelin kuuntelee vain osoitetta 127.0.0.1 ja
+hylkää verkkosivulta tulevat pyynnöt. Pelin UDP-liikenne kulkee suoraan palvelimen peliportteihin.
+
+Ylläpitäjä tekee kutsun komennolla
+`node scripts/make-invite.mjs --host <osoite> --cert <fullchain.pem> --code <kutsukoodi> --name "<palvelimen nimi>"`.
+Vanhan `dauntless-forever-1147://`-muodon linkit toimivat edelleen.
 
 ## Tietoturva
 
-- Sivu on eristetty (sandbox, context isolation, ei Node-oikeuksia). Se ei pääse verkkoon lainkaan:
-  pääprosessi tekee jokaisen pyynnön, ja vain kutsun palvelimelle. Sivu puhuu pääprosessille pienen
-  tyypitetyn rajapinnan kautta (`src/preload.ts`), ja jokainen argumentti tarkistetaan uudelleen.
+- Sivu on hiekkalaatikossa, kontekstit on eristetty, eikä sillä ole Node-pääsyä. Se ei pääse
+  verkkoon lainkaan; pääprosessi tekee jokaisen pyynnön, ja vain kutsun palvelimelle. Sivu puhuu
+  pääprosessille pienen tyypitetyn rajapinnan kautta (`src/preload.ts`), ja jokainen argumentti
+  tarkistetaan uudelleen.
 - Tiukka Content-Security-Policy. Kuvat tulevat vain sovelluksesta itsestään tai ylläpitäjän
-  kuvapaketista, jonka pääprosessi hakee lukitulla yhteydellä.
+  kuvapaketista, jonka pääprosessi hakee lukitun yhteyden yli ja tarjoaa sisäisen skeeman kautta.
 - Siirtymät ja uudet ikkunat on estetty. Linkit avautuvat selaimeen vain kiinteältä sallittujen
-  listalta: sivu nimeää linkin (esimerkiksi `project_source`), ei koskaan anna osoitetta, ja
-  pääprosessi avaa linkin kiinteän osoitteen (`src/main/links.ts`).
-- Tiliavain tallennetaan Electronin `safeStorage`-rajapinnalla käyttöjärjestelmän suojattuun
-  tallennustilaan. Sitä ei näytetä, sitä ei kirjoiteta tavalliseen tiedostoon (paitsi itse
-  tallentamaasi varmuuskopioon), ja se peitetään lokissa.
-- Avain lähetetään vain kutsun palvelimelle (julkisessa tilassa vain lukitun yhteyden kautta): tilin
-  tarkistuksen, latausten ja palvelimen tilan mukana. Palvelin näyttää paikalla olijat vain
-  rekisteröityneille pelaajille, joten ennen rekisteröitymistä palvelinpaneeli pyytää kirjautumaan
-  eikä listaa ketään. Ennen tätä muutosta julkaistut käynnistimet eivät lähetä avainta eivätkä tunne
-  tätä vastausta: muutoksen sisältävää palvelinta vasten ne näyttävät 0 pelaajaa paikalla eikä yhtään
-  maailmaa, kunnes ne päivittävät itsensä. Päivitä vanhempi palvelin vasta, kun muutoksen sisältävä
-  käynnistin on julkaistu.
-- Electron-fuset: ei `ELECTRON_RUN_AS_NODE`-, `NODE_OPTIONS`- eikä debug-lippuja, ja sovelluskoodi
-  ladataan vain eheystarkistetusta asar-paketista.
-- Pelin tarvitsemat kaksi DLL:ää tulevat käynnistimen mukana, ja ne tarkistetaan lukittuja tiivisteitä
-  vasten ennen kopiointia ja ennen jokaista käynnistystä, kuten `friend-kit/play.ps1` tekee.
+  listalta: sivu nimeää linkin (kuten `project_source`), ei koskaan URL-osoitetta, ja pääprosessi
+  avaa linkin kiinteän osoitteen (`src/main/links.ts`).
+- Salasanaa ei tallenneta koskaan. Palvelimen uusintatunniste säilytetään Electronin `safeStorage`n
+  (DPAPI) kautta, yksi palvelinta kohden, eikä se koskaan päädy sivulle.
+- Palvelimen ajonaikainen osa (`MysticParadox.dll` ja `winmm.dll`) asennetaan täsmälleen palvelimen
+  julkaisun mukaisena SHA-256:lla tarkistettuna.
+- Electron-fuset: ei `ELECTRON_RUN_AS_NODE`:a, ei `NODE_OPTIONS`ia, ei tarkastinlippuja,
+  sovelluskoodi vain eheystarkistetusta asarista.
 
 ## Kehitys
 
-Vaatimukset: Windows tai x86_64 Linux ja Node.js 24. Linux-pakettien tekeminen tarvitsee lisäksi
-`rpmbuild`-, `fakeroot`- ja `mksquashfs`-työkalut.
+Vaatimukset: Windows ja Node.js 20.19 tai uudempi.
 
 ```text
 npm ci
 npm run typecheck
-npm test            # yksikkötestit (node:test), paikalliset testipalvelimet vain porteissa 62012-62013 ja 624xx
-npm run make        # Windows: Squirrel-asennusohjelma + siirrettävä zip
-npm run make:linux  # Linux: AppImage + deb + rpm + siirrettävä zip
-npm run collect:linux
+npm test            # yksikkötestit (node:test), paikalliset testipalvelimet osoitteessa 127.0.0.1
+npm start           # käynnistin lähdekoodista
+npm run make        # Squirrel-asennin + siirrettävä zip kansioon out/
 ```
 
-`DAUNTLESS_REVIVED_RELAY_PORT` siirtää välittimen pois portista 61000 harjoituksia varten koneella,
-jolla portti 61000 on varattu. Palvelimen `QOS_TARGET_URL` pitää silloin osoittaa samaan porttiin.
+`npm test -- relay` ajaa vain testitiedostot, joiden nimessä on "relay". Testit kattavat kutsujen
+jäsentämisen, välityspalvelimen, lataukset (jatko, tarkistus, korjaus) lukitun TLS:n yli,
+käynnistysasetukset, linkit, jotka käynnistin saa avata, Tekijät-sivun tiedot, koko kulun
+ohjaimen läpi sekä ulkoasun: brändin värit ja kuvat. Ne tekevät kertakäyttöisiä itse
+allekirjoitettuja varmenteita väliaikaiskansioon.
 
-Ulkoasu noudattaa projektin brändiä (`brand/`, katso sen README): tiedoston `brand/palette.json`
-kahdeksan väriä `--dr-*`-muuttujina tiedostossa `src/renderer/styles.css`, logo ja tunnuskuva sekä
-tiedoston `src/renderer/scene.ts` piirtämä oma tausta (vuoret, havumetsä, usva, himmeät revontulet ja
-lumi), jonka palvelimen kuvapaketti korvaa. Se liikuttaa vain kokonaisia kerroksia hitaasti; se pysyy
-paikallaan pelin ollessa käynnissä eikä liiku lainkaan, kun käyttöjärjestelmä pyytää
-vähennettyä liikettä. `npm run icon` kopioi kuvakkeet ja ikkunan kuvat kansiosta `brand/`,
-jossa `python3 brand/build.py` tekee ne. `npm test` epäonnistuu, jos jokin kopio on vanhentunut, jos
-tyylitiedostossa on väri, joka ei ole muuttuja, tai jos jokin sen käyttämä väripari ei läpäise WCAG
-AA -vaatimusta.
+`DAUNTLESS_REVAMPED_RELAY_PORT` siirtää välityspalvelimen pois portista 61000 koneella, jossa se on
+varattu.
+
+`npx tsx scripts/live-check.ts "<kutsu>" <käyttäjänimi> <salasana>` tarkistaa toimivan palvelimen
+alusta loppuun käynnistämättä peliä. `scripts/make-game-manifest.mjs` rakentaa lukitun
+pelitiedostolistan asennuksesta uudelleen.
+
+Värit ovat `src/renderer/styles.css`:n `--dr-*`-tokeneita (`brand/palette.json`ista). Ikkunan ja
+asentimen kuvakkeet sekä otsikkopalkin tunnus ovat kopioita `brand/`-kansion tiedostoista, ja ne
+tekee `npm run icon`. `npm test` epäonnistuu, jos kopio on vanhentunut, jos tyylitiedostossa on väri,
+joka ei ole token, tai jos sen käyttämä väripari ei läpäise WCAG AA:ta.
 
 ## Julkaisut ja päivitykset
 
-CI (`.github/workflows/ci.yml`) kääntää ja testaa käynnistimen Windowsissa ja Linuxissa jokaisen
-pushin yhteydessä. Windows-asennusohjelma/ZIP sekä Linuxin AppImage/DEB/RPM/ZIP säilytetään viikon
-ajan. `.github/workflows/launcher-release.yml` julkaisee nämä samat testatut tiedostot
-`dauntless-revived`-haarasta GitHub-julkaisuna `launcher-v<versio>`, yhdellä
-`SHA256SUMS.txt`-tiedostolla ja käännöstodistuksella (build provenance attestation), ja luo tagin
-käännettyyn committiin. Uusi julkaisu syntyy siis nostamalla versiota:
+Nosta `package.json`in `version` ja aja `npm run release`: se rakentaa asentimen ja zipin, kerää ne
+`SHA256SUMS.txt`:n kanssa (`scripts/collect-release.ps1`) ja julkaisee ne
+[HyjinnxDev/dauntless-revamped-releases](https://github.com/HyjinnxDev/dauntless-revamped-releases)
+-repon julkaisuna. Asennetut käynnistimet lukevat sen repon uusimman julkaisun Squirrel-päivityssyötteenään.
+Siirrettävästä zipistä tehdyt asennukset eivät päivitä itseään.
 
-- oletuksena `dauntless-revived`-haaran push, joka läpäisee kaikki tarkistukset ja jonka versiolla ei
-  ole vielä `launcher-v<versio>`-julkaisua, julkaisee CI:n kääntämän asennusohjelman. Tauon saat
-  asettamalla repositorion muuttujan `LAUNCHER_AUTO_RELEASE` arvoon `false` (Settings > Secrets and
-  variables > Actions > Variables);
-- tai aja Actions > **Launcher release** > **Run workflow** `dauntless-revived`-haaralle.
-
-Julkaisun jälkeen työnkulku siirtää jatkuvan `launcher-updates`-julkaisun uuden Windowsin
-Squirrel-paketin kohdalle; asennetut Windows-käynnistimet tarkistavat sen tunnin välein. Linuxissa
-päivitetään pakettimuodon kautta tai lataamalla uudempi julkaisu. Versio julkaistaan vain, jos se on
-uudempi kuin kaikki aiemmat, eikä julkaistua versiota koskaan korvata. Esiversio (kuten
-`0.2.0-beta.1`) julkaistaan GitHubin esijulkaisuna, eikä se koskaan päädy `launcher-updates`-julkaisuun.
-Jos ajo epäonnistuu kesken, aja sen epäonnistuneet työt uudelleen: se viimeistelee aloittamansa. Jo
-julkaistulle versiolle ajettu työnkulku vain päivittää Windowsin päivityssyötteen siihen. Pidä
-GitHubin muuttumattomat julkaisut (immutable releases) pois päältä, koska `launcher-updates`-julkaisua
-päivitetään paikallaan.
+Ensimmäisellä käynnistyksellä käynnistin siirtää vanhemman Dauntless Forever 1.14.7 -käynnistimen
+asetukset ja kirjautumiset ja poistaa sen asennuksen (`src/main/migrate.ts`).
 
 ## Lisenssi
 
-AGPL-3.0-only. Perustuu gwogin (Gregory Morford) ja muiden tekijöiden Undaunted-käynnistimeen.
-Epävirallinen faniprojekti, jolla ei ole yhteyttä Phoenix Labsiin tai Epic Gamesiin.
+AGPL-3.0-only. Muokattu versio [Dauntless Revived](https://github.com/mixutin/dauntless-revived)
+-käynnistimestä, joka puolestaan on muokattu versio gwogin (Gregory Morford) ja muiden tekemästä
+[Undaunted](https://github.com/SyST3MDeV/Undaunted)-käynnistimestä. Se pelaa
+[Mystic Paradoxin](https://github.com/pranav158/Mystic-Paradox) päällä. Epävirallinen fanien projekti,
+jolla ei ole yhteyttä Phoenix Labsiin tai Epic Gamesiin eikä niiden hyväksyntää.
 
-Käynnistimen ja sen kahden DLL:n sisältämien kolmansien osapuolten ohjelmistojen (muun muassa
-MinHook, Electron ja GitHub Octicons -logo) lisenssitekstit tulevat sen mukana tiedostossa
-`THIRD-PARTY-NOTICES.txt`. Tekijät-sivu lukee luettelonsa tiedostosta `src/shared/credits.ts`.
+Käynnistimen kolmannen osapuolen ohjelmien lisenssitekstit toimitetaan sen mukana tiedostossa
+`THIRD-PARTY-NOTICES.txt`. Tekijät-sivu lukee listansa tiedostosta `src/shared/credits.ts`.

@@ -22,7 +22,6 @@ export type Phase =
   | "running"; // the game is running
 
 export type ConnectProblem =
-  | "tailscale_missing" // the invite points into a tailnet and Tailscale is not installed
   | "unreachable" // no answer within 5 s
   | "bad_answer" // something answered but it is not a Dauntless 1.14.7 server
   | "cert_mismatch" // the certificate is not the one from the invite
@@ -110,7 +109,6 @@ export interface ServerInfo {
   port: number;
   name: string;
   hasPendingInvite: boolean; // an invite code is stored and not used yet
-  tailnet: boolean; // the host is a Tailscale address or name
   loopback: boolean;
   fingerprint: string; // the pinned certificate fingerprint (not secret)
 }
@@ -163,7 +161,6 @@ export interface Snapshot {
   connect: {
     checking: boolean;
     problem: ConnectProblem;
-    tailscaleInstalled: boolean;
     lastCheckedAt: string | null;
   };
   account: {
@@ -211,7 +208,6 @@ export interface Branding {
 // The links the page can ask the main process to open. The page names one of these; it never passes
 // a URL. The main process maps each to its URL (src/main/links.ts).
 export type ExternalTarget =
-  | "tailscale_download"
   | "server_source"
   | "project_source"
   | "project_license"

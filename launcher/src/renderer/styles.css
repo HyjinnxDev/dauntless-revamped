@@ -1,4 +1,4 @@
-/* Dauntless Revived Launcher. The colours are the eight of the brand palette (brand/palette.json,
+/* Dauntless Revamped launcher. The colours are the eight of the brand palette (brand/palette.json,
    measured from the logo), defined once below as --dr-* tokens and used by role everywhere else, the
    same way as the docs site: ink page, navy and deep surfaces, ice for links and primary buttons
    (ink text), glow for highlights and focus rings, azure for pressed fills, steel for muted text,
@@ -1848,37 +1848,6 @@ img {
 .link-btn:disabled {
   color: var(--dr-steel);
   text-decoration-color: transparent;
-}
-
-.steps-list {
-  margin: 8px 0 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: step;
-  display: grid;
-  gap: 10px;
-}
-
-.steps-list li {
-  counter-increment: step;
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 10px;
-  align-items: start;
-}
-
-.steps-list li::before {
-  content: counter(step);
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 13px;
-  background: var(--dr-deep);
-  color: var(--dr-glow);
-  border: 1px solid var(--dr-azure);
 }
 
 .check-list {

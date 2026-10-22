@@ -10,7 +10,6 @@ import {
   PROJECT_URL,
   REVIVED_CONTRIBUTORS_URL,
   REVIVED_URL,
-  TAILSCALE_DOWNLOAD_URL,
   UPSTREAM_CONTRIBUTORS_URL,
   UPSTREAM_URL,
 } from "./constants";
@@ -18,11 +17,9 @@ import {
 // Every target opens one fixed URL ("server_source" is the project's own source).
 export type FixedTarget = Exclude<ExternalTarget, "server_source">;
 
-// TODO(owner): this is still the Dauntless Revived community invite. Put the Dauntless Revamped one here.
-const DISCORD_URL = "https://discord.gg/dauntlessrevived";
+const DISCORD_URL = "https://discord.gg/HpgNEmVbBb";
 
 export const FIXED_LINKS: Readonly<Record<FixedTarget, string>> = Object.freeze({
-  tailscale_download: TAILSCALE_DOWNLOAD_URL,
   project_source: PROJECT_URL,
   project_license: PROJECT_LICENSE_URL,
   project_contributors: PROJECT_CONTRIBUTORS_URL,
@@ -68,8 +65,6 @@ export function isAllowedStaticUrl(url: string): boolean {
   const u = parse(url);
   if (!u) return false;
   switch (u.hostname) {
-    case "tailscale.com":
-      return true;
     case "github.com":
       return GITHUB_PAGES.has(url);
     case "discord.gg":

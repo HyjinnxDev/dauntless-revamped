@@ -15,21 +15,19 @@ import type { ExternalTarget } from "../src/shared/types";
 
 // Every fixed link and the one URL it opens, written out here on purpose (not taken from constants.ts).
 const EXPECTED: Record<FixedTarget, string> = {
-  tailscale_download: "https://tailscale.com/download",
-  project_source: "https://github.com/HyjinnxDev/dauntless-revived",
-  project_license: "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt",
-  project_contributors: "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors",
+  project_source: "https://github.com/HyjinnxDev/dauntless-revamped",
+  project_license: "https://github.com/HyjinnxDev/dauntless-revamped/blob/main/versions/1.14.7/LICENSE",
+  project_contributors: "https://github.com/HyjinnxDev/dauntless-revamped/graphs/contributors",
   revived_source: "https://github.com/mixutin/dauntless-revived",
   revived_contributors: "https://github.com/mixutin/dauntless-revived/graphs/contributors",
   upstream_source: "https://github.com/SyST3MDeV/Undaunted",
   upstream_contributors: "https://github.com/SyST3MDeV/Undaunted/graphs/contributors",
   mystic_source: "https://github.com/pranav158/Mystic-Paradox",
-  discord: "https://discord.gg/dauntlessrevived",
+  discord: "https://discord.gg/HpgNEmVbBb",
 };
 
 // A Record, so the compiler fails this file when a link name is added without a test here.
 const ALL_TARGETS: Record<ExternalTarget, true> = {
-  tailscale_download: true,
   server_source: true,
   project_source: true,
   project_license: true,
@@ -83,14 +81,12 @@ const BAD_URLS = [
   " https://github.com/mixutin/dauntless-revived",
   "https://github.com/mixutin/dauntless-revived ",
   "https://github.com/mixutin/dauntless-revived\n",
-  "https://tailscale.com.evil.example/download/windows",
-  "https://login.tailscale.com@evil.example/",
   "https://aka.ms/evil",
   "https://www.eugamehost.com.evil.example/",
   "https://www.eugamehost.com/clients/cart.php?a=add&pid=999",
   "https://eugamehost.com/",
   "https://discord.gg.evil.example/ZJRprHzsgu",
-  "https://discord.gg/dauntlessrevived/extra",
+  "https://discord.gg/HpgNEmVbBb/extra",
   "https://discord.com/invite/ZJRprHzsgu",
   "https://evil.example/",
   "",
@@ -122,7 +118,6 @@ function controller(): { c: Controller; opened: string[] } {
     openPath: async () => undefined,
     emitSnapshot: () => undefined,
     emitProgress: () => undefined,
-    findTailscale: () => null,
     findRunningClients: async () => [],
   };
   return { c: new Controller(p), opened };
@@ -149,7 +144,7 @@ test("each link name opens exactly its URL, once; the server's source is the pro
 });
 
 test("unknown names and raw URLs sent as a link name open nothing", async () => {
-  const names = [...BAD_URLS, ...Object.values(EXPECTED), "tailscale_share", "vc_redist", "__proto__", "constructor", "toString", "hasOwnProperty", "valueOf", "PROJECT_SOURCE", "project-source", "project_source ", "repo", "github"];
+  const names = [...BAD_URLS, ...Object.values(EXPECTED), "vc_redist", "__proto__", "constructor", "toString", "hasOwnProperty", "valueOf", "PROJECT_SOURCE", "project-source", "project_source ", "repo", "github"];
   for (const name of names) {
     const { c, opened } = controller();
     const r = await c.openExternal(name as ExternalTarget);

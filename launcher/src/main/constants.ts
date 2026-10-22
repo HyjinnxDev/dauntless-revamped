@@ -2,9 +2,9 @@
 
 export const APP_ID = "io.github.hyjinnxdev.dauntlessrevamped";
 export const SQUIRREL_NAME = "DauntlessRevampedLauncher";
-export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revived";
-export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt";
-export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors";
+export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revamped";
+export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revamped/blob/main/versions/1.14.7/LICENSE";
+export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revamped/graphs/contributors";
 // Dauntless Revived, the project the Dauntless Revamped launcher is a modified version of (AGPL-3.0).
 export const REVIVED_URL = "https://github.com/mixutin/dauntless-revived";
 export const REVIVED_CONTRIBUTORS_URL = "https://github.com/mixutin/dauntless-revived/graphs/contributors";
@@ -13,7 +13,6 @@ export const UPSTREAM_URL = "https://github.com/SyST3MDeV/Undaunted";
 export const UPSTREAM_CONTRIBUTORS_URL = "https://github.com/SyST3MDeV/Undaunted/graphs/contributors";
 // Mystic Paradox, the 1.14.7 server and runtime this launcher plays on.
 export const MYSTIC_PARADOX_URL = "https://github.com/pranav158/Mystic-Paradox";
-export const TAILSCALE_DOWNLOAD_URL = "https://tailscale.com/download";
 export const VC_REDIST_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe";
 // Self-update feed: the latest release of the releases repo (RELEASES and the full .nupkg, published by
 // `npm run release`). Squirrel checks it hourly; installs from the portable zip do not update.

@@ -4,8 +4,8 @@
 //     &fp=<SHA-256 of the backend's TLS certificate (DER), 64 lower-case hex>&code=<invite code>
 //     &name=<url-encoded server name>
 //
-// The host may be a Tailscale address or a public one: every connection is TLS pinned to fp either
-// way, so a self-signed certificate is fine and nothing is ever sent to a server with another one.
+// The host is a public or LAN address: every connection is TLS pinned to fp, so a self-signed
+// certificate is fine and nothing is ever sent to a server with another one.
 // The same string arrives pasted or through the dauntless-revamped: protocol handler. It is parsed
 // strictly, because the host, port and fingerprint decide where the account password is sent later.
 
@@ -134,18 +134,6 @@ export function parseInvite(input: unknown): InviteResult {
 
 export function isLoopbackHost(host: string): boolean {
   return host === "localhost" || /^127\.[0-9]+\.[0-9]+\.[0-9]+$/.test(host);
-}
-
-// Tailscale hands out addresses from 100.64.0.0/10.
-export function isTailscaleIPv4(host: string): boolean {
-  if (!isValidIPv4(host)) return false;
-  const [a, b] = host.split(".").map(Number);
-  return a === 100 && b >= 64 && b <= 127;
-}
-
-// A MagicDNS name: <machine>.<tailnet>.ts.net.
-export function isTailnetHost(host: string): boolean {
-  return isTailscaleIPv4(host) || (isValidHost(host) && host.endsWith(".ts.net") && host.split(".").length >= 3);
 }
 
 // Builds an invite string (used by tests and by scripts/make-invite.mjs).

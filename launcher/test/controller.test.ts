@@ -118,7 +118,6 @@ function harness(userDataDir?: string, relayPort: number | undefined = RELAY_POR
       snap = s;
     },
     emitProgress: () => undefined,
-    findTailscale: () => null,
     findRunningClients: async () => [],
     spawn: fakeSpawn,
     ...extra,

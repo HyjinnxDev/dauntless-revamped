@@ -113,7 +113,6 @@ test("the credits hold no links and no e-mail addresses", () => {
 
 test("the page opens links by name only, and community/source controls are in the rail", () => {
   const TARGETS: Record<ExternalTarget, true> = {
-    tailscale_download: true,
     server_source: true,
     project_source: true,
     project_license: true,

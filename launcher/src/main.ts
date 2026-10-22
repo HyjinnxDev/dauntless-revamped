@@ -13,7 +13,6 @@ import { updateElectronApp, UpdateSourceType } from "update-electron-app";
 import { Controller, type Platform } from "./main/controller";
 import { GAME_MANIFEST, GAME_MANIFEST_FINGERPRINT, GAME_MANIFEST_PROBLEM } from "./main/game-manifest";
 import { findRunningClients } from "./main/launch";
-import { findTailscale } from "./main/system";
 import { describeError, log, logToFile } from "./main/log";
 import { boundedString, externalTarget, isTrustedPageUrl, relayPortOverride, settingsPatch } from "./main/ipc-validate";
 import { INVITE_SCHEME, LEGACY_INVITE_SCHEME, parseInvite } from "./shared/invite";
@@ -423,7 +422,6 @@ function makePlatform(): Platform {
       send(IPC.snapshot, s);
     },
     emitProgress: (p) => send(IPC.progress, p),
-    findTailscale: () => findTailscale(process.env, existsSync, process.platform),
     findRunningClients: () => findRunningClients(process.platform),
     installUpdate: () => {
       if (app.isPackaged) {

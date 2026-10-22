@@ -2,8 +2,8 @@
 // sends intents. Nothing in here imports Electron: main.ts passes the platform pieces in, which
 // keeps this testable with plain Node.
 //
-// One kind of server: a Mystic Paradox backend for Dauntless 1.14.7, reached over TLS pinned to the
-// invite's certificate fingerprint (over Tailscale or a public address). While the game runs, a local
+// One kind of server: a Mystic Paradox backend for Dauntless 1.14.7 at a public or LAN address, reached
+// over TLS pinned to the invite's certificate fingerprint. While the game runs, a local
 // relay on 127.0.0.1 carries the game's own HTTP and chat traffic to it (relay.ts); the runtime finds
 // the relay through MYSTICPARADOX_API_BASE. The game's UDP traffic goes straight to the server's
 // game ports.
@@ -13,7 +13,7 @@ import { promises as fsp, existsSync } from "node:fs";
 import path from "node:path";
 import { gameExitDetail } from "./windows-runtime";
 
-import { parseInvite, isLoopbackHost, isTailnetHost, type Invite } from "../shared/invite";
+import { parseInvite, isLoopbackHost, type Invite } from "../shared/invite";
 import { checkUsername, isValidPassword } from "../shared/username";
 import type {
   ActionResult,
@@ -101,7 +101,6 @@ export interface Platform {
   openPath(dir: string): Promise<void>;
   emitSnapshot(s: Snapshot): void;
   emitProgress(p: TaskProgress): void;
-  findTailscale(): string | null;
   findRunningClients(): Promise<number[]>;
   // Ends a process (default process.kill); tests pass a fake.
   killProcess?(pid: number): void;
@@ -145,7 +144,6 @@ export class Controller {
   private reachable: boolean | null = null;
   private checking = false;
   private connectProblem: ConnectProblem = null;
-  private tailscaleInstalled = false;
   private lastCheckedAt: string | null = null;
   private failedPolls = 0;
   private contentProbe: boolean | null = null;
@@ -292,12 +290,11 @@ export class Controller {
             port: sv.port,
             name: (sid ? this.cards.get(sid)?.title : null) || sv.name,
             hasPendingInvite: sv.code !== null,
-            tailnet: isTailnetHost(sv.host),
             loopback: isLoopbackHost(sv.host),
             fingerprint: sv.fp,
           }
         : null,
-      connect: { checking: this.checking, problem: this.connectProblem, tailscaleInstalled: this.tailscaleInstalled, lastCheckedAt: this.lastCheckedAt },
+      connect: { checking: this.checking, problem: this.connectProblem, lastCheckedAt: this.lastCheckedAt },
       account: {
         username: this.account?.username ?? (sid ? this.s.usernames[sid] ?? null : null),
         signedIn: this.account !== null,
@@ -540,7 +537,6 @@ export class Controller {
     this.checking = true;
     this.publish();
     try {
-      this.tailscaleInstalled = isTailnetHost(sv.host) ? this.p.findTailscale() !== null : false;
       const res = await fetchServerStatus(ep);
       this.lastCheckedAt = new Date().toISOString();
       if (res.kind === "ok") {
@@ -555,7 +551,6 @@ export class Controller {
         this.reachable = false;
         if (res.kind === "bad_answer") this.connectProblem = "bad_answer";
         else if (res.kind === "cert_mismatch") this.connectProblem = "cert_mismatch";
-        else if (isTailnetHost(sv.host) && !this.tailscaleInstalled) this.connectProblem = "tailscale_missing";
         else this.connectProblem = "unreachable";
         if (this.connectProblem === "cert_mismatch") log.error(`server ${ep.host}:${ep.port} presented a certificate that does not match the invite`);
         else log.warn(`server ${ep.host}:${ep.port} not reachable (${this.connectProblem})`);
