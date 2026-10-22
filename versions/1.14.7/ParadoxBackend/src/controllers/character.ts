@@ -559,6 +559,18 @@ export async function UpdateCharacterForUid(CharacterId: string, UserId: string,
         logger.info(`[dojo-reconcile] Persisting SERIE_dojo for userId ${UserId} characterId ${CharacterId} from unlocked Player Journey state`);
     }
 
+    // [QuestDiff] Quest progress (SERIE_*) only reaches us inside these whole-blob writes, from both the
+    // client and the game server. Log every series that changes, so a write that drops progress shows up.
+    // ponytail: diagnostic only; remove once the Aether Winds (ISLAND_CONUNDRUM) loss is explained.
+    try {
+        const Before = JSON.parse(CurrentData!.data || "{}");
+        const After = JSON.parse(CharacterDataToUpdateWith || "{}");
+        for (const Key of new Set([...Object.keys(Before), ...Object.keys(After)])) {
+            if (!Key.startsWith("SERIE_") || Before[Key] === After[Key]) continue;
+            logger.info(`[QuestDiff] user=${UserId} src=${IsGameserver ? "gs" : "client"} v=${UpdateVersion}->${EffectiveVersion} ${Key}: ${String(Before[Key] ?? "-").slice(0, 600)} => ${String(After[Key] ?? "-").slice(0, 600)}`);
+        }
+    } catch { /* diagnostics never block a save */ }
+
     await GetRepositories().characters.updateDataConditional(CharacterId, UserId, CharacterDataToUpdateWith, EffectiveVersion);
 
     return true;

@@ -21933,6 +21933,20 @@ static bool EnsureSyntheticNetId(void* PlayerState) {
 // Same route as MpCaptureGenuineNetIdType: NetDriver ClientConnections -> PC +0x98 -> PlayerState +0x228 ->
 // net id +0x258; the id string is the genuine object's vtable slot +0x18 (const TCHAR*, measured). The phantom's
 // synthetic id is skipped. An id the relay has no ticket for never matches anyone (fails closed).
+// Backend account id of a client's PlayerState ("" for the phantom or anything unreadable).
+static std::string MpPlayerStateAccountId(uintptr_t PS) {
+    void* Id = PS ? reinterpret_cast<void*>(SafeReadPtr(PS, 0x258)) : nullptr;
+    if (!Id || Id == reinterpret_cast<void*>(&g_MpSynthNetIdObject)) return "";
+    const uintptr_t Vt = SafeReadPtr(reinterpret_cast<uintptr_t>(Id), 0x00);
+    const uintptr_t Fn = Vt ? SafeReadPtr(Vt, 0x18) : 0;
+    if (!Fn) return "";
+    uint8_t Scratch[0x10] = {};
+    const uint64_t Rax = MpNetIdCallSlotRaw(reinterpret_cast<void*>(Fn), Id, Scratch);
+    if (Rax == 0xEEEEEEEEEEEEEEEEull) return "";
+    const std::string AccountId = MpTryWideString(static_cast<uintptr_t>(Rax));
+    return AccountId.size() > 64 ? "" : AccountId;
+}
+
 static void MpVoiceProximityTick() {
     if (g_wdIsHub.load(std::memory_order_relaxed) != 1 || !Networking::NetDriver || !Globals::ServerAPIKey) return;
     static bool s_started = false;
@@ -21957,23 +21971,91 @@ static void MpVoiceProximityTick() {
         void* C = Clients->Data[i];
         if (!C || !IsReadablePointer(C, 0x420)) continue;
         const uintptr_t PC = SafeReadPtr(reinterpret_cast<uintptr_t>(C), 0x98);
-        const uintptr_t PS = PC ? SafeReadPtr(PC, 0x228) : 0;
-        void* Id = PS ? reinterpret_cast<void*>(SafeReadPtr(PS, 0x258)) : nullptr;
-        if (!Id || Id == reinterpret_cast<void*>(&g_MpSynthNetIdObject)) continue;
-        const uintptr_t Vt = SafeReadPtr(reinterpret_cast<uintptr_t>(Id), 0x00);
-        const uintptr_t Fn = Vt ? SafeReadPtr(Vt, 0x18) : 0;
-        if (!Fn) continue;
-        uint8_t Scratch[0x10] = {};
-        const uint64_t Rax = MpNetIdCallSlotRaw(reinterpret_cast<void*>(Fn), Id, Scratch);
-        if (Rax == 0xEEEEEEEEEEEEEEEEull) continue;
-        const std::string AccountId = MpTryWideString(static_cast<uintptr_t>(Rax));
+        const std::string AccountId = MpPlayerStateAccountId(PC ? SafeReadPtr(PC, 0x228) : 0);
         float X, Y, Z;
-        if (AccountId.empty() || AccountId.size() > 64
+        if (AccountId.empty()
             || !GetActorWorldLocation(reinterpret_cast<void*>(SafeReadPtr(PC, 0x250)), X, Y, Z)) continue;
         if (s_logged.insert(AccountId).second) MpLog("[ProxVoice] reporting player id=" + AccountId);
         Players.push_back({ AccountId, X, Y, Z });
     }
     MpVoiceReportPositions(Players);
+}
+
+// [2026-10-22 hunt stats] Per-player hunt damage for the Slayer's Ledger. The game already keeps it, server-side
+// only (not replicated): AArchonPlayerState::DamagesDealt (damage per behemoth) and MonsterPartDamagesDealt
+// (part/wound damage per part). Once a second (from MpHuntJoinTick) each player's highest value per behemoth/part
+// is kept, so a cleared array or a player who left still counts. When the target behemoth dies (hpPct falls to 0)
+// every player's totals go to the backend (HuntStats.cpp -> POST /mystic/hunt-stats). An escalation posts once per
+// kill; the backend keys rows by hunt + player, so the last post wins. DISABLE_HUNT_STATS.flag turns it off.
+// ponytail: failed or abandoned hunts are never posted; also post at hunt end if those should count.
+struct MpHuntStatsPlayer {
+    std::unordered_map<void*, float> Damage;                    // per behemoth
+    std::unordered_map<void*, std::pair<float, float>> Parts;   // per part: part, wound
+    std::unordered_map<void*, std::string> Names;               // behemoth object names
+};
+
+// Only [A-Za-z0-9_.:-], so every value can go into the JSON unescaped.
+static std::string MpHuntStatsSafe(const std::string& S) {
+    std::string Out;
+    for (char c : S)
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.' || c == ':') Out += c;
+    return Out.substr(0, 128);
+}
+
+static std::string MpHuntStatsNum(float V) {
+    return std::to_string(std::isfinite(V) && V > 0.f ? std::llround(V) : 0LL);
+}
+
+static void MpHuntStatsTick(SDK::AArchonGameState* GS, int HpPct) {
+    static std::unordered_map<std::string, MpHuntStatsPlayer> s_players;
+    static int s_lastHpPct = -1;
+    if (!GS || !Globals::ServerAPIKey || MpExeRelativeFlagPresent(L"DISABLE_HUNT_STATS.flag")) return;
+
+    for (int32_t i = 0; i < GS->PlayerArray.Num(); ++i) {
+        SDK::APlayerState* P = GS->PlayerArray[i];
+        if (!P || !P->IsA(SDK::AArchonPlayerState::StaticClass())) continue;
+        const std::string Id = MpHuntStatsSafe(MpPlayerStateAccountId(reinterpret_cast<uintptr_t>(P)));
+        if (Id.empty()) continue;
+        auto* PS = static_cast<SDK::AArchonPlayerState*>(P);
+        MpHuntStatsPlayer& S = s_players[Id];
+        for (int32_t j = 0; j < PS->DamagesDealt.Num(); ++j) {
+            const SDK::FDamagesDealt& D = PS->DamagesDealt[j];
+            if (!D.Behemoth) continue;
+            float& Best = S.Damage[D.Behemoth];
+            Best = (std::max)(Best, D.Damage);
+            if (!S.Names.count(D.Behemoth)) S.Names[D.Behemoth] = MpHuntStatsSafe(SafeObjectNameForDiagnostic(D.Behemoth));
+        }
+        for (int32_t j = 0; j < PS->MonsterPartDamagesDealt.Num(); ++j) {
+            const SDK::FMonsterPartDamagesDealt& D = PS->MonsterPartDamagesDealt[j];
+            if (!D.MonsterPart) continue;
+            auto& Best = S.Parts[D.MonsterPart];
+            Best.first = (std::max)(Best.first, D.PartDamage);
+            Best.second = (std::max)(Best.second, D.WoundDamage);
+        }
+    }
+
+    const bool Killed = HpPct == 0 && s_lastHpPct > 0;
+    s_lastHpPct = HpPct;
+    if (!Killed || s_players.empty()) return;
+
+    static const std::string s_hunt = std::to_string(Globals::Port) + "-" + std::to_string(std::time(nullptr));
+    std::string Json = "{\"hunt\":\"" + s_hunt + "\",\"playerHuntId\":\""
+        + MpHuntStatsSafe(MpNarrow(ServerSharedPlayerHuntId())) + "\",\"players\":[";
+    bool First = true;
+    for (const auto& [Id, S] : s_players) {
+        float Damage = 0.f, Part = 0.f, Wound = 0.f;
+        for (const auto& [B, V] : S.Damage) Damage += V;
+        for (const auto& [M, V] : S.Parts) { Part += V.first; Wound += V.second; }
+        std::string Names;
+        for (const auto& [B, N] : S.Names) Names += (Names.empty() ? "\"" : ",\"") + N + "\"";
+        Json += (First ? "{" : ",{") + std::string("\"userId\":\"") + Id + "\",\"damage\":" + MpHuntStatsNum(Damage)
+            + ",\"partDamage\":" + MpHuntStatsNum(Part) + ",\"woundDamage\":" + MpHuntStatsNum(Wound)
+            + ",\"behemoths\":[" + Names + "]}";
+        First = false;
+    }
+    Json += "]}";
+    MpLog("[HuntStats] post " + Json);
+    MpHuntStatsPost(Json, Globals::ServerAPIKey);
 }
 
 // [2026-10-17 join-in-progress] Hunt servers (g_wdIsHub == 0), once a second:
@@ -22050,6 +22132,7 @@ static void MpHuntJoinTick() {
         s_lastLine = Line;
         s_reportMs = Now;
     }
+    MpHuntStatsTick(GS, HpPct);
 }
 
 // ============================================================================
