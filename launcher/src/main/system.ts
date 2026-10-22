@@ -1,41 +1,7 @@
-// Checks on the friend's PC: Tailscale and free disk space.
+// Checks on the friend's PC: free disk space.
 
-import { existsSync, promises as fsp } from "node:fs";
+import { promises as fsp } from "node:fs";
 import path from "node:path";
-
-export function tailscaleCandidates(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string[] {
-  if (platform === "linux") {
-    const out = ["/usr/bin/tailscale", "/usr/local/bin/tailscale", "/snap/bin/tailscale"];
-    for (const d of (env.PATH ?? "").split(path.delimiter)) if (d.trim()) out.push(path.join(d.trim(), "tailscale"));
-    return [...new Set(out)];
-  }
-  if (platform !== "win32") return [];
-  const dirs = new Set<string>();
-  for (const base of [env.ProgramW6432, env.ProgramFiles, env["ProgramFiles(x86)"], "C:\\Program Files"]) {
-    if (base) dirs.add(path.join(base, "Tailscale"));
-  }
-  if (env.LOCALAPPDATA) dirs.add(path.join(env.LOCALAPPDATA, "Tailscale"));
-  const candidates = [...dirs].map((d) => path.join(d, "tailscale.exe"));
-  for (const d of (env.PATH ?? env.Path ?? "").split(path.delimiter)) {
-    if (d.trim()) candidates.push(path.join(d.trim().replace(/^"|"$/g, ""), "tailscale.exe"));
-  }
-  return candidates;
-}
-
-export function findTailscale(
-  env: NodeJS.ProcessEnv = process.env,
-  exists: (p: string) => boolean = existsSync,
-  platform: NodeJS.Platform = process.platform,
-): string | null {
-  for (const c of tailscaleCandidates(env, platform)) {
-    try {
-      if (exists(c)) return c;
-    } catch {
-      /* unreadable PATH entry */
-    }
-  }
-  return null;
-}
 
 // Free space on the drive that holds `dir` (or its nearest existing parent).
 export async function freeBytes(dir: string): Promise<number | null> {

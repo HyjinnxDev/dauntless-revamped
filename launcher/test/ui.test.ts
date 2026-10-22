@@ -157,8 +157,8 @@ function snap(over: Partial<Snapshot>): Snapshot {
     phase: "ready",
     busy: false,
     savedServers: [],
-    server: { host: "203.0.113.10", port: 443, name: "S", hasPendingInvite: false, tailnet: false, loopback: false, fingerprint: "a".repeat(64) },
-    connect: { checking: false, problem: null, tailscaleInstalled: false, lastCheckedAt: null },
+    server: { host: "203.0.113.10", port: 443, name: "S", hasPendingInvite: false, loopback: false, fingerprint: "a".repeat(64) },
+    connect: { checking: false, problem: null, lastCheckedAt: null },
     account: { username: "U", signedIn: true, characters: [{ slot: 1, label: "Character 1", level: 1, lastPlayedAt: null, online: false, nameStyle: null }], maxCharacters: 1, character: 1, nameStyles: [] },
     install: { dir: "C:\\g", defaultDir: "C:\\g", installed: true, missingFiles: 0, verified: true, runtimeOk: true, freeBytes: 5e10, requiredBytes: 1e9, totalBytes: 1e10, contentAvailable: true },
     task: null,
@@ -177,9 +177,9 @@ test("the big button in every phase", () => {
   const form = { inviteValid: false, usernameValid: false, passwordValid: false, signIn: false };
   assert.deepEqual(primaryButton(snap({ phase: "join", server: null }), form), { labelKey: "btn_join", action: "join", disabled: true });
   assert.equal(primaryButton(snap({ phase: "join", server: null }), { ...form, inviteValid: true }).disabled, false);
-  assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: true, problem: null, tailscaleInstalled: false, lastCheckedAt: null } }), form).action, "none");
-  assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: false, problem: "cert_mismatch", tailscaleInstalled: false, lastCheckedAt: null } }), form).action, "new_invite");
-  assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: false, problem: "unreachable", tailscaleInstalled: false, lastCheckedAt: null } }), form).action, "retry");
+  assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: true, problem: null, lastCheckedAt: null } }), form).action, "none");
+  assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: false, problem: "cert_mismatch", lastCheckedAt: null } }), form).action, "new_invite");
+  assert.equal(primaryButton(snap({ phase: "connect", connect: { checking: false, problem: "unreachable", lastCheckedAt: null } }), form).action, "retry");
   assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true }).disabled, true, "a password is needed too");
   assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true, passwordValid: true }).disabled, false);
   assert.equal(primaryButton(snap({ phase: "register" }), { ...form, usernameValid: true, passwordValid: true, signIn: true }).labelKey, "btn_sign_in");

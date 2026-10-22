@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatInvite, isTailnetHost, isTailscaleIPv4, isValidFingerprint, isValidHost, parseInvite, type Invite } from "../src/shared/invite";
+import { formatInvite, isValidFingerprint, isValidHost, parseInvite, type Invite } from "../src/shared/invite";
 import { RLO } from "../src/shared/text";
 
 const FP = "3f".repeat(32);
@@ -32,7 +32,7 @@ test("links of the Dauntless Forever releases (dauntless-forever-1147:) still pa
 });
 
 test("round-trips through formatInvite", () => {
-  const inv: Invite = { host: "hostpc.tail1234.ts.net", port: 8443, code: "Code-42", name: "Ember & Aether", fp: FP };
+  const inv: Invite = { host: "play.example.net", port: 8443, code: "Code-42", name: "Ember & Aether", fp: FP };
   const r = parseInvite(formatInvite(inv));
   assert.equal(r.ok, true);
   if (r.ok) assert.deepEqual(r.invite, inv);
@@ -91,15 +91,10 @@ test("rejects non-strings", () => {
   for (const v of [undefined, null, 42, {}, [build({})]]) assert.equal(parseInvite(v).ok, false);
 });
 
-test("host, tailnet and fingerprint rules", () => {
+test("host and fingerprint rules", () => {
   assert.equal(isValidHost("100.64.0.1"), true);
-  assert.equal(isValidHost("my-pc.tail-scale.ts.net"), true);
+  assert.equal(isValidHost("my-pc.play-host.example.net"), true);
   assert.equal(isValidHost("MyPC"), false); // upper case is lowered by the parser, not here
-  assert.equal(isTailscaleIPv4("100.127.255.255"), true);
-  assert.equal(isTailscaleIPv4("100.128.0.1"), false);
-  assert.equal(isTailnetHost("hostpc.tail1234.ts.net"), true);
-  assert.equal(isTailnetHost("ts.net"), false);
-  assert.equal(isTailnetHost("203.0.113.9"), false);
   assert.equal(isValidFingerprint(FP), true);
   assert.equal(isValidFingerprint(FP.toUpperCase()), false);
   assert.equal(isValidFingerprint(null), false);

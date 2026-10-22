@@ -13,7 +13,7 @@ import shot5 from "./brand/bg/shot5.jpg";
 import shot6 from "./brand/bg/shot6.jpg";
 import { isStringKey, translate, type StringKey } from "../shared/i18n";
 import { localized, MYSTIC_PEOPLE, PROJECT_PEOPLE, REVIVED_PEOPLE, SOFTWARE, UPSTREAM_PEOPLE, type CreditPerson, type CreditRole } from "../shared/credits";
-import { isTailnetHost, parseInvite } from "../shared/invite";
+import { parseInvite } from "../shared/invite";
 import { checkUsername, isValidPassword } from "../shared/username";
 import { primaryButton, shortFile, stepIndex, taskView, updateReason, whereKey } from "../shared/ui-model";
 import { formatBytes, formatDate, formatRunningTime } from "../shared/format";
@@ -211,7 +211,7 @@ function updateInviteFeedback(): void {
       ),
     );
     inviteHint.className = "hint hint-ok";
-    inviteHint.replaceChildren(t(isTailnetHost(r.invite.host) ? "join_ok_private" : "join_ok_public"));
+    inviteHint.replaceChildren(t("join_ok"));
   } else {
     invitePreview.hidden = true;
     inviteInput.setAttribute("aria-invalid", "true");
@@ -345,8 +345,6 @@ function errorText(e: LauncherError): string {
       return e.detail && /^\d+$/.test(e.detail) ? t("err_disk_space_need", { size: formatBytes(Number(e.detail), state.lang) }) : t("err_disk_space");
     case "relay_port_busy":
       return t("err_relay_port_busy", { port: e.detail && /^\d+$/.test(e.detail) ? e.detail : "61000" });
-    case "server_unreachable":
-      return t(state.snap?.server?.tailnet ? "err_server_unreachable" : "err_server_unreachable_public");
     case "launch_failed":
     case "runtime_failed":
     case "manifest_mismatch":
@@ -486,29 +484,12 @@ function playJoin(snap: Snapshot): HTMLElement[] {
 function playConnect(snap: Snapshot): HTMLElement[] {
   const sv = snap.server!;
   const name = serverName();
-  const pub = !sv.tailnet;
   const lastChecked = snap.connect.lastCheckedAt ? t("connect_last_checked", { time: new Date(snap.connect.lastCheckedAt).toLocaleTimeString(TIME_LOCALES[state.lang]) }) : null;
   const foot = h("div", { class: "card-row" }, lastChecked ? h("span", { class: "hint" }, lastChecked) : null, leaveLink(snap));
   if (snap.connect.checking || (snap.connect.problem === null && snap.connect.lastCheckedAt === null)) {
-    return [eyebrow(snap), ...heading(t("connect_checking_title", { name }), t(pub ? "connect_checking_text_public" : "connect_checking_text")), card("", h("div", { class: "card-row" }, h("div", { class: "spinner", role: "presentation" }), t("connect_checking_wait")))];
+    return [eyebrow(snap), ...heading(t("connect_checking_title", { name }), t("connect_checking_text")), card("", h("div", { class: "card-row" }, h("div", { class: "spinner", role: "presentation" }), t("connect_checking_wait")))];
   }
   switch (snap.connect.problem) {
-    case "tailscale_missing":
-      return [
-        eyebrow(snap),
-        ...heading(t("connect_ts_title"), t("connect_ts_text", { name })),
-        card(
-          "",
-          h(
-            "ol",
-            { class: "steps-list" },
-            h("li", {}, h("div", {}, h("div", {}, t("connect_step_install")), linkButton(t("connect_btn_install_ts"), () => open("tailscale_download"), { icon: "external", fk: "ts-dl" }))),
-            h("li", {}, h("div", {}, h("div", {}, t("connect_step_accept_nolink")))),
-            h("li", {}, t("connect_step_retry")),
-          ),
-        ),
-        foot,
-      ];
     case "cert_mismatch":
       return [
         eyebrow(snap),
@@ -526,16 +507,10 @@ function playConnect(snap: Snapshot): HTMLElement[] {
     default:
       return [
         eyebrow(snap),
-        ...heading(t("connect_unreach_title", { name }), t(pub ? "connect_unreach_text_public" : "connect_unreach_text", { host: hideText(sv.host) })),
+        ...heading(t("connect_unreach_title", { name }), t("connect_unreach_text", { host: hideText(sv.host) })),
         card(
           "",
-          h(
-            "ul",
-            { class: "check-list" },
-            ...(pub
-              ? [h("li", {}, t("connect_check_internet")), h("li", {}, t("connect_check_server")), h("li", {}, t("connect_check_firewall"))]
-              : [h("li", {}, t("connect_check_ts_on")), h("li", {}, t("connect_check_share")), h("li", {}, t("connect_check_server"))]),
-          ),
+          h("ul", { class: "check-list" }, h("li", {}, t("connect_check_internet")), h("li", {}, t("connect_check_server")), h("li", {}, t("connect_check_firewall"))),
         ),
         foot,
       ];
@@ -647,9 +622,8 @@ function playRegister(snap: Snapshot): HTMLElement[] {
 
 function playInstall(snap: Snapshot): HTMLElement[] {
   const name = serverName();
-  const pub = snap.server?.tailnet !== true;
   const low = snap.install.freeBytes !== null && snap.install.freeBytes < snap.install.requiredBytes;
-  const out: HTMLElement[] = [eyebrow(snap), ...heading(t("install_title"), t(pub ? "install_text_public" : "install_text", { name }))];
+  const out: HTMLElement[] = [eyebrow(snap), ...heading(t("install_title"), t("install_text", { name }))];
   out.push(
     card(
       "",

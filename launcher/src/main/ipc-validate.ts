@@ -23,7 +23,6 @@ export function settingsPatch(v: unknown): Partial<Settings> | null {
 // Every link name the page may send (a Record, so the compiler catches a name missing here). Only
 // these exact strings pass: never a URL.
 const TARGETS: Readonly<Record<ExternalTarget, true>> = {
-  tailscale_download: true,
   server_source: true,
   project_source: true,
   project_license: true,
