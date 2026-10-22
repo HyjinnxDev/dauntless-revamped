@@ -16,15 +16,15 @@ import type { ExternalTarget } from "../src/shared/types";
 // Every fixed link and the one URL it opens, written out here on purpose (not taken from constants.ts).
 const EXPECTED: Record<FixedTarget, string> = {
   tailscale_download: "https://tailscale.com/download",
-  project_source: "https://github.com/HyjinnxDev/dauntless-revived",
-  project_license: "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt",
-  project_contributors: "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors",
+  project_source: "https://github.com/HyjinnxDev/dauntless-revamped",
+  project_license: "https://github.com/HyjinnxDev/dauntless-revamped/blob/main/versions/1.14.7/LICENSE",
+  project_contributors: "https://github.com/HyjinnxDev/dauntless-revamped/graphs/contributors",
   revived_source: "https://github.com/mixutin/dauntless-revived",
   revived_contributors: "https://github.com/mixutin/dauntless-revived/graphs/contributors",
   upstream_source: "https://github.com/SyST3MDeV/Undaunted",
   upstream_contributors: "https://github.com/SyST3MDeV/Undaunted/graphs/contributors",
   mystic_source: "https://github.com/pranav158/Mystic-Paradox",
-  discord: "https://discord.gg/dauntlessrevived",
+  discord: "https://discord.gg/HpgNEmVbBb",
 };
 
 // A Record, so the compiler fails this file when a link name is added without a test here.
@@ -90,7 +90,7 @@ const BAD_URLS = [
   "https://www.eugamehost.com/clients/cart.php?a=add&pid=999",
   "https://eugamehost.com/",
   "https://discord.gg.evil.example/ZJRprHzsgu",
-  "https://discord.gg/dauntlessrevived/extra",
+  "https://discord.gg/HpgNEmVbBb/extra",
   "https://discord.com/invite/ZJRprHzsgu",
   "https://evil.example/",
   "",

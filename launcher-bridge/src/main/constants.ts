@@ -2,9 +2,9 @@
 
 export const APP_ID = "io.github.hyjinnxdev.dauntlessforever1147";
 export const SQUIRREL_NAME = "DauntlessForever1147Launcher";
-export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revived";
-export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revived/blob/dauntless-revived/LICENSE.txt";
-export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revived/graphs/contributors";
+export const PROJECT_URL = "https://github.com/HyjinnxDev/dauntless-revamped";
+export const PROJECT_LICENSE_URL = "https://github.com/HyjinnxDev/dauntless-revamped/blob/main/versions/1.14.7/LICENSE";
+export const PROJECT_CONTRIBUTORS_URL = "https://github.com/HyjinnxDev/dauntless-revamped/graphs/contributors";
 // Dauntless Revived, the project the Dauntless Forever launcher is a modified version of (AGPL-3.0).
 export const REVIVED_URL = "https://github.com/mixutin/dauntless-revived";
 export const REVIVED_CONTRIBUTORS_URL = "https://github.com/mixutin/dauntless-revived/graphs/contributors";

@@ -1,36 +1,33 @@
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import test from "node:test";
-import { DiscordNews, PlainText, PostImage } from "./news";
+import express from "express";
+import { newsRouter } from "./news";
 
-test("Discord posts become launcher news: first line title, markup stripped, system messages skipped", () => {
-    const Items = DiscordNews([
-        { type: 0, timestamp: "2026-10-15T10:00:00Z", content: "# **Runtime 0.2.36** <:goat:123>\n@everyone Projectiles hit again <@456>.\nSee <https://example.com>" },
-        { type: 6, content: "pinned a message" },
-        { type: 0, content: "Server restart at 8pm" },
-        { type: 0, content: "", embeds: [{ title: "Patch", description: "Hunts fixed" }] },
-        { type: 0, content: "" },
-    ]);
-    assert.deepEqual(Items, [
-        { date: "2026-10-15T10:00:00Z", title: "Runtime 0.2.36 :goat:", body: "Projectiles hit again .\nSee https://example.com" },
-        { date: null, title: "Announcement", body: "Server restart at 8pm" },
-        { date: null, title: "Patch", body: "Hunts fixed" },
-    ]);
-    assert.equal(PlainText("||spoiler|| `code` ~~old~~"), "spoiler code old");
-});
+const Listen = (S: Server) => new Promise<string>((resolve) => S.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${(S.address() as AddressInfo).port}`)));
 
-test("a post's first Discord-hosted image is proxied; outside hosts and non-images are not", () => {
-    const Images = new Map<string, string>();
-    const Items = DiscordNews([
-        { id: "111111", type: 0, content: "Patch\nNotes", attachments: [
-            { url: "https://cdn.discordapp.com/a/notes.txt", content_type: "text/plain" },
-            { url: "https://cdn.discordapp.com/a/shot.png?ex=1", proxy_url: "https://media.discordapp.net/a/shot.png?ex=1", content_type: "image/png" },
-        ] },
-        { id: "222222", type: 0, content: "", attachments: [{ url: "https://cdn.discordapp.com/a/only.webp" }] },
-        { id: "333333", type: 0, content: "Link", embeds: [{ image: { url: "https://evil.example/x.png" } }] },
-    ], Images);
-    assert.equal(Items[0].image, "/content/v1/news/image/111111");
-    assert.equal(Images.get("111111"), "https://media.discordapp.net/a/shot.png?ex=1");
-    assert.deepEqual(Items[1], { date: null, title: "Announcement", body: "", image: "/content/v1/news/image/222222" });
-    assert.equal(Items[2].image, undefined);
-    assert.equal(PostImage({ embeds: [{ thumbnail: { url: "https://cdn.discordapp.com/t.jpg" } }] }), "https://cdn.discordapp.com/t.jpg");
+test("news passes the bot's list and images on, keeps the last list while the bot is down", async (t) => {
+    let BotUp = true;
+    const Bot = createServer((req, res) => {
+        if (!BotUp) { res.writeHead(503).end(); return; }
+        if (req.url === "/news") { res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ items: [{ title: "Patch" }] })); return; }
+        if (req.url === "/news/image/123456") { res.writeHead(200, { "content-type": "image/png" }).end(Buffer.from([1, 2, 3])); return; }
+        res.writeHead(404).end();
+    });
+    const App = createServer(express().use(newsRouter));
+    t.after(() => { Bot.close(); App.close(); delete process.env.DISCORD_BOT_URL; });
+    const [BotBase, AppBase] = await Promise.all([Listen(Bot), Listen(App)]);
+
+    assert.equal((await fetch(`${AppBase}/content/v1/news`)).status, 404); // DISCORD_BOT_URL unset
+    process.env.DISCORD_BOT_URL = `${BotBase}/`;
+    assert.deepEqual(await (await fetch(`${AppBase}/content/v1/news`)).json(), { items: [{ title: "Patch" }] });
+    const Img = await fetch(`${AppBase}/content/v1/news/image/123456`);
+    assert.equal(Img.headers.get("content-type"), "image/png");
+    assert.deepEqual([...new Uint8Array(await Img.arrayBuffer())], [1, 2, 3]);
+    assert.equal((await fetch(`${AppBase}/content/v1/news/image/999999`)).status, 404);
+    assert.equal((await fetch(`${AppBase}/content/v1/news/image/abc`)).status, 404);
+
+    BotUp = false;
+    assert.deepEqual(await (await fetch(`${AppBase}/content/v1/news`)).json(), { items: [{ title: "Patch" }] });
 });

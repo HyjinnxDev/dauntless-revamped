@@ -13,7 +13,7 @@ sisältöpalvelimelta, ja jokainen tiedosto tarkistetaan käynnistimeen käänne
 (410 tiedostoa, koot ja SHA-256-tiivisteet, `UndauntedContent/data/dauntless-1.4.4.json`).
 Palvelin, joka tarjoaa jotain muuta, hylätään.
 
-**Yhteisö:** [Liity Dauntless Revived Discordiin](https://discord.gg/ZJRprHzsgu) saadaksesi apua, pelikavereita ja projektin päivityksiä. Discord-painike näkyy myös aina käynnistimen sivupalkissa.
+**Yhteisö:** [Liity Dauntless Revamped Discordiin](https://discord.gg/HpgNEmVbBb) saadaksesi apua, pelikavereita ja projektin päivityksiä. Discord-painike näkyy myös aina käynnistimen sivupalkissa.
 
 ## Kavereille
 

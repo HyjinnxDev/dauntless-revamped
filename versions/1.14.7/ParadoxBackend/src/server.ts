@@ -27,9 +27,11 @@ import { ReadMetagameServiceRole } from "./config/serviceRole";
 import { SetServiceReadiness } from "./observability/serviceReadiness";
 import { GetP2PExtension } from "./extensions/p2p";
 import { DefaultRelayDeps, StartVoiceRelay, VoicePort } from "./voiceRelay";
-import { StartDiscordIssues, StopDiscordIssues } from "./discordIssues";
 
 const PORT = process.env.PORT?.trim() || "3000";
+// Plain-HTTP API: same machine only by default (the Discord bot, local tools). Players use the HTTPS port.
+// HTTP_HOST=0.0.0.0 (or a private address) only when something on another machine must reach it.
+const HTTP_HOST = process.env.HTTP_HOST?.trim() || "127.0.0.1";
 
 // HTTPS listener for the game client. The injected DLL rewrites the official backend
 // hosts (*.steelyard.ca, *.steelyard.online, ...) to https://paradox.mysticfox.dev/__origin/...
@@ -109,8 +111,8 @@ async function Main(): Promise<void> {
     partyOutboxDispatcher.start();
     GetP2PExtension().server.start(serviceRole);
 
-    HttpServer = app.listen(PORT, () => {
-        logger.info(`Mystic Paradox Metagame (HTTP) on port ${PORT}`);
+    HttpServer = app.listen(Number(PORT), HTTP_HOST, () => {
+        logger.info(`Mystic Paradox Metagame (HTTP) on ${HTTP_HOST}:${PORT}`);
         logger.info(`Clear Skies, Slayer.`);
     });
     HttpServer.on("error", (error) => {
@@ -191,9 +193,6 @@ async function Main(): Promise<void> {
     } catch (e) {
         logger.warn(`[Voice] relay could not start: ${e}`);
     }
-
-    // Discord /issue tickets (discordIssues.ts). Same rule: a Discord failure never takes the API down.
-    StartDiscordIssues();
 }
 
 // [hardening] Graceful shutdown: on SIGINT/SIGTERM, stop accepting new connections first, THEN
@@ -235,7 +234,6 @@ async function GracefulShutdown(Signal: string, ExitCode = 0): Promise<void> {
         // listeners go away (plan §8.4). No-op when realtime is disabled.
         await shutdownRealtime();
         partyOutboxDispatcher.stop();
-        await StopDiscordIssues();
         await GetP2PExtension().server.stop();
         logger.info("Realtime (XMPP) gateway stopped");
 

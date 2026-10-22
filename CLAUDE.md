@@ -11,6 +11,8 @@ Private monorepo (`HyjinnxDev/dauntless-revamped`): the Revamped launcher plus t
 | `versions/1.14.7/` | Live game: `ParadoxBackend` (metagame/XMPP/store, Mongo), `ParadoxDirector` (spawns game servers), `ParadoxRuntime` (MysticParadox.dll, C++), `ParadoxLauncher` (runtime update publishing + signing key) |
 | `versions/1.14.7/host/` | `restart-server.ps1` (`-Stop`, `-DirectorOnly`), `host-firewall.ps1`, `server-sizing-log.ps1` |
 | `versions/1.4.4/` | Older Dauntless Revived stack (InternalServer DLL, Metagame, Gateway, old launcher) |
+| `discord-bot/` | Standalone Discord bot (status channel, `/issue` tickets, launcher news); own process/token/`data/issues.json`; backend reads news via `DISCORD_BOT_URL` |
+| `deploy/` | `make-bundle.ps1` (live PC, read-only) + `install.ps1` (other machine) for a second server, e.g. the mini PC test server; see `deploy/README.md` |
 
 Outside the repo (never commit, never move):
 - Game install used by servers: `D:\Dev\dauntless 1.14.7\Dauntless_1.14.7`; test client: `D:\Dev\dauntless 1.14.7\Client`.

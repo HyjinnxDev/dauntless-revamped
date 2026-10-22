@@ -6,11 +6,11 @@
  */
 
 // [forever-discord] Server status in a Discord channel name, e.g. "🟢 Online · 12 slayers" / "🔴 Offline".
-// Its own process (npm run start:status-watch) so it can still report the backend being down.
-// Polls /health/ready every minute; offline after 2 failed polls in a row (a quick restart doesn't flap).
+// Runs in the bot, outside the backend, so it can still report the backend being down.
+// Polls the backend's /health/ready every minute; offline after 2 failed polls in a row (a quick restart doesn't flap).
 // Discord allows 2 channel renames per 10 minutes, so the name changes at most every 5 minutes.
-// Env: DISCORD_NEWS_BOT_TOKEN (same bot), DISCORD_STATUS_CHANNEL_ID (use a voice channel: text channel names
-// can't hold spaces or capitals), optional STATUS_HEALTH_URL. The bot needs Manage Channels on that channel.
+// Env: DISCORD_STATUS_CHANNEL_ID (use a voice channel: text channel names can't hold spaces or capitals),
+// BACKEND_HEALTH_URL. The bot needs Manage Channels on that channel.
 
 const POLL_MS = 60 * 1000;
 const RENAME_GAP_MS = 5 * 60 * 1000;
@@ -41,27 +41,26 @@ async function Players(url: string): Promise<number | null> {
     }
 }
 
-async function Main(): Promise<void> {
-    const Token = process.env.DISCORD_NEWS_BOT_TOKEN?.trim();
-    const Channel = process.env.DISCORD_STATUS_CHANNEL_ID?.trim();
-    const Url = process.env.STATUS_HEALTH_URL?.trim() || `http://127.0.0.1:${process.env.PORT?.trim() || "3000"}/health/ready`;
-    if (!Token || !Channel) throw new Error("Set DISCORD_NEWS_BOT_TOKEN and DISCORD_STATUS_CHANNEL_ID in .env");
-
-    let Current: string = (await Discord(Token, `/channels/${Channel}`)).name;
+export async function RunStatus(token: string, channel: string, url: string): Promise<never> {
+    // Name unknown (Discord unreachable at start) = the first poll renames.
+    let Current: string = await Discord(token, `/channels/${channel}`).then((C) => C.name, (error) => {
+        console.warn(`[Status] channel not read: ${error}`);
+        return "";
+    });
     let LastRename = 0;
     let Fails = 0;
     let LastPlayers: number | null = 0;
-    console.log(`[Status] watching ${Url}, channel is "${Current}"`);
+    console.log(`[Status] watching ${url}, channel is "${Current}"`);
 
     for (;;) {
-        const Count = await Players(Url);
+        const Count = await Players(url);
         Fails = Count === null ? Fails + 1 : 0;
         if (Count !== null) LastPlayers = Count;
         else if (Fails >= FAILS_FOR_OFFLINE) LastPlayers = null;
         const Wanted = StatusName(LastPlayers);
         if (Wanted !== Current && Date.now() - LastRename >= RENAME_GAP_MS) {
             try {
-                await Discord(Token, `/channels/${Channel}`, { method: "PATCH", body: JSON.stringify({ name: Wanted }) });
+                await Discord(token, `/channels/${channel}`, { method: "PATCH", body: JSON.stringify({ name: Wanted }) });
                 console.log(`[Status] "${Current}" -> "${Wanted}"`);
                 Current = Wanted;
                 LastRename = Date.now();
@@ -71,8 +70,4 @@ async function Main(): Promise<void> {
         }
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
-}
-
-if (require.main === module) {
-    Main().catch((error) => { console.error(`[Status] ${error}`); process.exitCode = 1; });
 }

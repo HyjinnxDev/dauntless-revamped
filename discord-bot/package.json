@@ -1,0 +1,20 @@
+{
+  "name": "revamped-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dauntless Revamped Discord bot: status channel, /issue tickets, launcher news",
+  "license": "AGPL-3.0-only",
+  "scripts": {
+    "build": "tsc",
+    "start": "npm run build && node --env-file=.env dist/bot.js",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "discord.js": "14.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.0.0",
+    "tsx": "4.22.4",
+    "typescript": "6.0.3"
+  }
+}

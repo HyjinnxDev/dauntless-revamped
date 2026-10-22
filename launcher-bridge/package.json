@@ -5,14 +5,14 @@
   "description": "Windows launcher for Dauntless 1.14.7 servers running Mystic Paradox: join from an invite, create an account, download and verify the pinned 1.14.7 client and the server runtime, and play through a pinned-TLS relay.",
   "main": ".vite/build/main.js",
   "private": true,
-  "homepage": "https://github.com/HyjinnxDev/dauntless-revived",
+  "homepage": "https://github.com/HyjinnxDev/dauntless-revamped",
   "repository": {
     "type": "git",
-    "url": "https://github.com/HyjinnxDev/dauntless-revived.git",
+    "url": "https://github.com/HyjinnxDev/dauntless-revamped.git",
     "directory": "UndauntedLauncher"
   },
   "bugs": {
-    "url": "https://github.com/HyjinnxDev/dauntless-revived/issues"
+    "url": "https://github.com/HyjinnxDev/dauntless-revamped/issues"
   },
   "scripts": {
     "start": "electron-forge start",

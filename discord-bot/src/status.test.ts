@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { StatusName } from "./statusWatch";
+import { StatusName } from "./status";
 
 test("status channel name", () => {
     assert.equal(StatusName(null), "🔴 Offline");

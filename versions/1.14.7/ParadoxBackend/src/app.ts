@@ -208,7 +208,7 @@ app.get("/health/ready", async (_req, res) => {
         role: state.role,
         reason: ready ? "READY" : state.reason,
         persistence: persistenceHealthy ? "ready" : "unavailable",
-        // [forever-discord] count only (no ids) for the Discord status channel (statusWatch.ts).
+        // [forever-discord] count only (no ids) for the Discord status channel (discord-bot/src/status.ts).
         players: sessionRegistry.onlineAccountCount()
     });
 });

@@ -1,3 +1,8 @@
+> [!NOTE]
+> This folder is Dauntless Revamped's modified copy of [Mystic Paradox](https://github.com/pranav158/Mystic-Paradox);
+> the text below is upstream's. For Dauntless Revamped itself (downloads, Discord, support) see the
+> [main README](../../README.md).
+
 <p align="center">
   <img src="docs/assets/banner.webp" alt="Mystic Paradox — open-source Dauntless server project" width="100%">
 </p>
