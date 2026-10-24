@@ -10,6 +10,9 @@ import {
 import { Collections } from "../collections";
 import { GetMongoDb } from "../client";
 
+// A published outbox event is never read again; keep it a day for debugging, then the ttlAt index drops it.
+const OUTBOX_PUBLISHED_TTL_MS = 24 * 60 * 60 * 1000;
+
 type PartyDocument = Omit<PartyRecord, "partyId"> & { _id: string };
 type InviteDocument = Omit<PartyInviteRecord, "inviteId"> & { _id: string };
 type OutboxDocument = Omit<PartyOutboxRecord, "eventId"> & { _id: string };
@@ -300,7 +303,7 @@ export class MongoPartyRepository implements PartyRepository {
         const db = await GetMongoDb();
         const result = await db.collection(Collections.PartyOutbox).updateOne(
             { _id: eventId as never, state: "PROCESSING", claimOwner: owner },
-            { $set: { state: "PUBLISHED", publishedAt }, $unset: { claimOwner: "", claimedAt: "" } }
+            { $set: { state: "PUBLISHED", publishedAt, ttlAt: new Date(Date.now() + OUTBOX_PUBLISHED_TTL_MS) }, $unset: { claimOwner: "", claimedAt: "" } }
         );
         return result.modifiedCount === 1;
     }

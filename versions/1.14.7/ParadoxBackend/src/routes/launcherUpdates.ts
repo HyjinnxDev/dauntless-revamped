@@ -17,9 +17,13 @@ const UPDATE_PUBLIC_BASE_URL = (process.env.UPDATE_PUBLIC_BASE_URL ?? "https://p
 // The server process must explicitly select the supported game build. Missing or malformed
 // values become NaN and make manifest acceptance/publication fail closed.
 const TARGET_CHANGELIST = Number(process.env.TARGET_CHANGELIST ?? Number.NaN);
-const RUNTIME_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA3ZMtA7qUgs1F+1NQs2kmSG2zbOvXfjsh6+axI6eC/tc=\n-----END PUBLIC KEY-----`;
+// [Revamped 2026-10-24] Runtime uploads are signed with the self-host key
+// (ParadoxLauncher/.secrets/selfhost-runtime-update.private.pem); this is its public half.
+const RUNTIME_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAGiARrtultkODd4LxMx2YxOOa3C83PO0lUW4TKU4e184=\n-----END PUBLIC KEY-----`;
+// Guard manifests keep the upstream Mystic Paradox key they were published with.
+const UPSTREAM_RUNTIME_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA3ZMtA7qUgs1F+1NQs2kmSG2zbOvXfjsh6+axI6eC/tc=\n-----END PUBLIC KEY-----`;
 const GUARD_MANIFEST_KEYS: Readonly<Record<string, string>> = Object.freeze({
-    "runtime-2026-01": RUNTIME_PUBLIC_KEY,
+    "runtime-2026-01": UPSTREAM_RUNTIME_PUBLIC_KEY,
 });
 const MAX_GUARD_MANIFEST_BYTES = 256 * 1024;
 const GUARD_MANIFEST_MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;

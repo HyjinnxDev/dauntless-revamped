@@ -67,7 +67,15 @@ export async function HasParadoxBackendAuth(req: Request, res: Response, next: N
             if(AuthHeader != undefined){ // Why this double-auth amalgam? Sometimes the client sends it's Bearer auth to the server, and the server makes reqs where the only userId identifying factor is that auth token. This fixes that up, so we have that context.
                 const Token = AuthHeader.slice("bearer ".length);
 
-                const Payload = ValidateMetagameJWTAndGetPayload(Token);
+                let Payload;
+                try {
+                    Payload = ValidateMetagameJWTAndGetPayload(Token);
+                } catch {
+                    // An expired/bad player bearer on a gameserver request is a 401, not an unhandled 500.
+                    res.status(401).send();
+                    logger.warn("Gameserver request with bad player bearer auth!");
+                    return;
+                }
                 if (!(await IsCurrentLauncherAccountEligible(Payload as JwtPayload))) {
                     res.status(403).send();
                     return;

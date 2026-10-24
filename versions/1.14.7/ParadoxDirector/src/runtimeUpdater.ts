@@ -10,10 +10,11 @@ const execFileAsync = promisify(execFile);
 // [1.14.7] Served runtime manifests and the Launcher now both use CL 647472.
 const TARGET_CHANGELIST = 647472;
 const MAX_RUNTIME_BYTES = 200 * 1024 * 1024;
-const DEFAULT_MANIFEST_URL =
-  "https://paradox.mysticfox.dev/launcher/v1/runtime/server/stable/windows-x86_64";
+// [Revamped 2026-10-24] Public half of the self-host signing key
+// (ParadoxLauncher/.secrets/selfhost-runtime-update.private.pem), which publish-runtime-update.mjs signs with.
+// There is no default manifest URL: the upstream one served Mystic Paradox builds, not ours.
 const RUNTIME_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEA3ZMtA7qUgs1F+1NQs2kmSG2zbOvXfjsh6+axI6eC/tc=
+MCowBQYDK2VwAyEAGiARrtultkODd4LxMx2YxOOa3C83PO0lUW4TKU4e184=
 -----END PUBLIC KEY-----`;
 
 type RuntimeManifest = {
@@ -134,7 +135,9 @@ export async function EnsureServerRuntimeUpdated(): Promise<void> {
     process.env.GAMESERVER_RUNTIME_DLL_PATH?.trim() ||
       path.join(path.dirname(path.resolve(binaryPath)), "MysticParadox.dll"),
   );
-  const manifestUrl = new URL(process.env.SERVER_RUNTIME_MANIFEST_URL?.trim() || DEFAULT_MANIFEST_URL);
+  const manifestUrlText = process.env.SERVER_RUNTIME_MANIFEST_URL?.trim();
+  if (!manifestUrlText) throw new Error("SERVER_RUNTIME_MANIFEST_URL is required for server runtime updates");
+  const manifestUrl = new URL(manifestUrlText);
   validateTransport(manifestUrl);
 
   const manifestResponse = await request(manifestUrl);

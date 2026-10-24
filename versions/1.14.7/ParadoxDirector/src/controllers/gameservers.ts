@@ -244,7 +244,8 @@ function GetCurrentTrialsWeek(NowMs: number = Date.now()): string {
 // NOTE: empty/abandoned hunts are reclaimed by the gameserver DLL self-terminating when it has had no
 // client connections for a grace period (accurate: never kills a hunt while anyone is still fighting).
 // We deliberately do NOT reap by wall-clock lifetime — big maps + long hunts must not be cut short.
-export const MAX_CONCURRENT_HUNT_SERVERS = Number(process.env.MAX_CONCURRENT_HUNT_SERVERS ?? "3");
+// A blank value ("MAX_CONCURRENT_HUNT_SERVERS=") must mean the default, not Number("") = 0 (no hunts at all).
+export const MAX_CONCURRENT_HUNT_SERVERS = Number(process.env.MAX_CONCURRENT_HUNT_SERVERS?.trim() || "3");
 
 // [2026-07-19] Public Hunt Server Reuse (Part B). When enabled, a SHARED (public Hunting Grounds) request
 // for a player hunt id that already has a live, ready, non-full server JOINS that server instead of
@@ -256,8 +257,8 @@ export const MAX_CONCURRENT_HUNT_SERVERS = Number(process.env.MAX_CONCURRENT_HUN
 const ENABLE_PUBLIC_HUNT_REUSE = (process.env.ENABLE_PUBLIC_HUNT_REUSE ?? "0") === "1";
 const PUBLIC_HUNT_MAX_PLAYERS = Number(process.env.PUBLIC_HUNT_MAX_PLAYERS ?? "4");
 
-// Thrown when the hunt-server cap is reached; the matchmaker route catches it and falls back to
-// Ramsgate rather than piling on another process (or leaking an unhandled rejection).
+// Thrown when the hunt-server cap is reached; the matchmaker route catches it and answers 500
+// matchmaking_failed (no Ramsgate fallback: that would make the UI claim a hunt was found).
 export class NoHuntCapacityError extends Error {
     constructor(current: number, cap: number) {
         super(`Hunt server capacity reached (${current}/${cap})`);

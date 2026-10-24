@@ -19,6 +19,7 @@ import { sessionRegistry } from "../realtime/SessionRegistry";
 import { ASSIGNABLE_ROLES, TESTER_ROLE } from "../security/testerFeatures";
 import { CanActOn, HasStaffPermission, MODERATOR_MAX_BAN_HOURS, StaffRank } from "../security/staffRoles";
 import { SetVoiceBlocked } from "../voiceRelay";
+import { ListSlots, OwnerOf } from "../characterSlots";
 
 const ADMIN_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -198,18 +199,23 @@ export async function UpdatePlayerAccess(req: Request, res: Response): Promise<v
         return;
     }
 
+    // Every character slot is its own game userId (characterSlots.ts); access is the owner's, so apply
+    // the side effects to all of them, not just the id the console passed.
+    const GameUserIds = (await ListSlots(await OwnerOf(TargetUserId))).map((Slot) => Slot._id);
     if (!IsAccountEligible(After)) {
-        await Promise.all([
-            Repos.refreshSessions.revokeAllForUser(TargetUserId),
-            Repos.gameExchangeCodes.revokeUnusedForUser(TargetUserId)
-        ]);
+        await Promise.all(GameUserIds.flatMap((Id) => [
+            Repos.refreshSessions.revokeAllForUser(Id),
+            Repos.gameExchangeCodes.revokeUnusedForUser(Id)
+        ]));
         // Game API calls already 403 per request (HasParadoxBackendAuth). Also drop live chat
         // (XMPPAuth refuses the reconnect) and party voice. The game server itself has no kick
         // path yet: the player stays in their current map until they travel.
-        for (const Conn of sessionRegistry.connectionsFor(TargetUserId)) Conn.close(1008, "account suspended");
-        SetVoiceBlocked(TargetUserId, After.bannedUntil ? Date.parse(After.bannedUntil) : Infinity);
+        for (const Id of GameUserIds) {
+            for (const Conn of sessionRegistry.connectionsFor(Id)) Conn.close(1008, "account suspended");
+            SetVoiceBlocked(Id, After.bannedUntil ? Date.parse(After.bannedUntil) : Infinity);
+        }
     } else {
-        SetVoiceBlocked(TargetUserId, undefined);
+        for (const Id of GameUserIds) SetVoiceBlocked(Id, undefined);
     }
 
     const RequestId = crypto.randomUUID();

@@ -157,6 +157,13 @@ export async function EnsureMongoIndexes(Db: Db): Promise<void> {
     await Db.collection(Collections.PartyInvites).createIndex({ recipientPlayerId: 1, status: 1, expiresAt: 1 });
     await Db.collection(Collections.PartyOutbox).createIndex({ state: 1, createdAt: 1 });
     await Db.collection(Collections.PartyOutbox).createIndex({ partyId: 1, partyRevision: 1 });
+    // Published events are never read again; markOutboxPublished sets ttlAt (BSON Date) one day out so
+    // they expire. Idempotent backfill: rows published before ttlAt existed expire at the next TTL pass.
+    await Db.collection(Collections.PartyOutbox).createIndex({ ttlAt: 1 }, { expireAfterSeconds: 0 });
+    await Db.collection(Collections.PartyOutbox).updateMany(
+        { state: "PUBLISHED", ttlAt: { $exists: false } },
+        { $set: { ttlAt: new Date() } }
+    );
 
     // TTL cleanup for the three short-lived launcher-auth collections. Every business-logic
     // expiry check above compares the ISO-string expiresAt/completionExpiresAt fields directly

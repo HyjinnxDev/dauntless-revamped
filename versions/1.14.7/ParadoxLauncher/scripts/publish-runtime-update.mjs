@@ -46,44 +46,24 @@ if (bytes.length === 0 || bytes.length > 200 * 1024 * 1024) throw new Error("DLL
 const sha256 = createHash("sha256").update(bytes).digest("hex");
 const artifactName = `MysticParadox-${version}-${target}-${targetChangelist}.dll`;
 const artifactDir = resolve(outputRoot, "runtime", target, channel, "windows-x86_64", version);
+if (existsSync(artifactDir) && !process.argv.includes("--force")) {
+  throw new Error(`Version ${version} is already published at ${artifactDir}; bump --version (or pass --force to overwrite it)`);
+}
 mkdirSync(artifactDir, { recursive: true });
 
-// ── Load previous manifest ──
+// Every file is signed fresh with --key: Ed25519 is deterministic, so an unchanged file under the same key
+// gets the identical signature, and after a key rotation nothing keeps an old-key signature. Manifest
+// entries are rebuilt every time so a changed --base-url applies to unchanged extras too.
 const latestPath = resolve(outputRoot, "runtime", target, channel, "windows-x86_64", "latest.json");
 let prevManifest = null;
-let prevArtifactDir = null;
-if (existsSync(latestPath)) {
-  try {
-    prevManifest = JSON.parse(readFileSync(latestPath, "utf-8"));
-    prevArtifactDir = resolve(outputRoot, "runtime", target, channel, "windows-x86_64", prevManifest.version);
-  } catch { /* first publish */ }
-}
+try { prevManifest = JSON.parse(readFileSync(latestPath, "utf-8")); } catch { /* first publish */ }
+const prevExtras = Object.fromEntries((prevManifest?.extraFiles ?? []).map((e) => [e.name, e]));
 
-// ── Main DLL: reuse signature if unchanged ──
-let signatureBase64;
-if (prevManifest && prevManifest.sha256 === sha256) {
-  signatureBase64 = prevManifest.signature;
-  // Copy the previous artifact so the versioned filename is present.
-  const prevArtifactPath = resolve(prevArtifactDir, prevManifest.file);
-  if (existsSync(prevArtifactPath)) {
-    copyFileSync(prevArtifactPath, resolve(artifactDir, artifactName));
-  } else {
-    copyFileSync(dllPath, resolve(artifactDir, artifactName));
-  }
-  console.log(`  DLL unchanged (preserving signature from v${prevManifest.version})`);
-} else {
-  signatureBase64 = sign(null, bytes, signingKey).toString("base64");
-  copyFileSync(dllPath, resolve(artifactDir, artifactName));
-}
+const signatureBase64 = sign(null, bytes, signingKey).toString("base64");
+copyFileSync(dllPath, resolve(artifactDir, artifactName));
+if (prevManifest?.sha256 === sha256) console.log(`  DLL unchanged since v${prevManifest.version}`);
 
 const extraFiles = [];
-const prevExtras = {};
-if (prevManifest && prevManifest.extraFiles) {
-  for (const e of prevManifest.extraFiles) {
-    prevExtras[e.name] = e;
-  }
-}
-
 for (const extraPath of extraPaths) {
   const extraName = basename(extraPath);
   if (!allowedExtraNames.has(extraName)) {
@@ -94,27 +74,16 @@ for (const extraPath of extraPaths) {
   const extraSha256 = createHash("sha256").update(extraBytes).digest("hex");
   const prevExtra = prevExtras[extraName];
 
-  if (prevExtra && prevExtra.sha256 === extraSha256) {
-    // Unchanged — reuse the previous signature and file. Copy from the
-    // previous artifact dir if available, otherwise from the local file.
-    const prevSrc = resolve(prevArtifactDir, extraName);
-    const src = existsSync(prevSrc) ? prevSrc : extraPath;
-    copyFileSync(src, resolve(artifactDir, extraName));
-    extraFiles.push(prevExtra);
-    console.log(`  extra: ${extraName} (unchanged, preserving signature from v${prevManifest.version})`);
-  } else {
-    const extraSig = sign(null, extraBytes, signingKey).toString("base64");
-    copyFileSync(extraPath, resolve(artifactDir, extraName));
-    extraFiles.push({
-      name: extraName,
-      size: extraBytes.length,
-      sha256: extraSha256,
-      signature: extraSig,
-      url: `${baseUrl}/launcher/v1/runtime/${encodeURIComponent(target)}/${encodeURIComponent(channel)}/windows-x86_64/extra/${encodeURIComponent(extraName)}`,
-    });
-    const tag = prevExtra ? "changed" : "new";
-    console.log(`  extra: ${extraName} (${tag}, ${extraBytes.length} bytes, sha256: ${extraSha256})`);
-  }
+  copyFileSync(extraPath, resolve(artifactDir, extraName));
+  extraFiles.push({
+    name: extraName,
+    size: extraBytes.length,
+    sha256: extraSha256,
+    signature: sign(null, extraBytes, signingKey).toString("base64"),
+    url: `${baseUrl}/launcher/v1/runtime/${encodeURIComponent(target)}/${encodeURIComponent(channel)}/windows-x86_64/extra/${encodeURIComponent(extraName)}`,
+  });
+  const tag = !prevExtra ? "new" : prevExtra.sha256 === extraSha256 ? "unchanged" : "changed";
+  console.log(`  extra: ${extraName} (${tag}, ${extraBytes.length} bytes, sha256: ${extraSha256})`);
 }
 
 const manifest = {

@@ -7,6 +7,7 @@
   "type": "module",
   "scripts": {
     "test:workflow": "node --test scripts/launch-workflow.test.cjs",
+    "test:publish": "node --test scripts/publish-runtime-update.test.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

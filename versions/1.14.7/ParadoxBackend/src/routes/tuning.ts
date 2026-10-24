@@ -26,9 +26,11 @@ export const tuningRouter = Router();
 // and the captured dates are all in the past (2020-2024). With an empty list - or only expired
 // windows - the component finds no active season and fails. These windows deliberately cover the
 // present so the season dates resolve. Shape taken verbatim from the captured response.
-function BountyGrantWindows(){
+// The end rolls: 1 January two years ahead, so it is always at least a year away (a fixed end date
+// would silently break bounties the day it passed).
+export function BountyGrantWindows(Now = new Date()){
     const Start = new Date(Date.UTC(2026, 0, 1)).toISOString();
-    const End = new Date(Date.UTC(2027, 11, 31)).toISOString();
+    const End = new Date(Date.UTC(Now.getUTCFullYear() + 2, 0, 1)).toISOString();
     return [
         {
             on_claim_grant_item_amount: 1,

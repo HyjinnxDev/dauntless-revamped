@@ -7,11 +7,16 @@
  *
  * Run with every player offline (a connected game server holds objective state in memory).
  *   node --env-file=.env scripts/reset_mastery.cjs           # dry run, prints counts
- *   node --env-file=.env scripts/reset_mastery.cjs --apply   # deletes
+ *   node --env-file=.env scripts/reset_mastery.cjs --apply --confirm=RESET_ALL_MASTERY   # deletes
  */
 const { MongoClient } = require("mongodb");
 
 const APPLY = process.argv.includes("--apply");
+const CONFIRMATION = "RESET_ALL_MASTERY";
+if (APPLY && !process.argv.includes(`--confirm=${CONFIRMATION}`)) {
+    console.error(`Refusing to delete every account's mastery: --apply requires --confirm=${CONFIRMATION}`);
+    process.exit(2);
+}
 
 (async () => {
     const Client = await MongoClient.connect(process.env.MONGODB_URI);
