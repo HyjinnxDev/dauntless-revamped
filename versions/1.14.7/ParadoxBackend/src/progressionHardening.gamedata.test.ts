@@ -175,7 +175,9 @@ test("same authoritative grant replays its recorded result and never increments 
     assert.equal(Sessions.every((CurrentSession) => CurrentSession === Session), true);
 });
 
-test("hunt pass XP is stored per pass, and Slayer Link XP feeds the pass the player is on", async () => {
+// [Revamped 2026-10-24] One pass per two-week season: progress is stored per season ("huntpass:<r>:<pass>"), and once
+// the season pass is done everything sent to season43 feeds the season's Commission pass (internal slot season50).
+test("hunt pass XP is stored per season pass, and Slayer Link XP feeds the pass the player is on", async () => {
     const Stored = new Map<string, number>();
     const Row = (Id: string) => ({ ...Track, progressionId: Id, progress: Stored.get(Id) ?? 0 });
     const Repositories: any = {
@@ -188,7 +190,7 @@ test("hunt pass XP is stored per pass, and Slayer Link XP feeds the pass the pla
     };
     const UnitOfWork: any = { withTransaction: async (Action: any) => Action(Repositories, {}) };
     const Frost = HuntPassStorageId("season43");
-    assert.match(Frost, /^season43:/);
+    assert.match(Frost, /^huntpass:\d+:/);
 
     await GrantProgressionXp("user-1", "season43", 300, "hp-1", UnitOfWork);
     assert.equal(Stored.get(Frost), 300);
@@ -197,9 +199,12 @@ test("hunt pass XP is stored per pass, and Slayer Link XP feeds the pass the pla
     await GrantProgressionXp("user-1", "Linked_Slayer_Slot_1", 500, "link-1", UnitOfWork);
     assert.equal(Stored.get(Frost), 350);                              // a tenth of 500 reached the pass
 
-    Stored.set(Frost, HuntPassMaxXp("season43"));                      // season43's pass completed ...
+    Stored.set(Frost, HuntPassMaxXp("season43"));                      // the season pass completed ...
     await GrantProgressionXp("user-1", "Linked_Slayer_Slot_1", 500, "link-2", UnitOfWork);
-    assert.equal(Stored.get(HuntPassStorageId("season44")), 50);       // ... so the link feeds the next one
+    const Commission = HuntPassStorageId("season50");
+    assert.equal(Stored.get(Commission), 50);                          // ... so the link feeds the Commission pass
+    await GrantProgressionXp("user-1", "season43", 200, "hp-2", UnitOfWork);
+    assert.equal(Stored.get(Commission), 250);                         // and so does a "season43" hunt pass grant
     assert.equal(Stored.get(Frost), HuntPassMaxXp("season43"));
 });
 

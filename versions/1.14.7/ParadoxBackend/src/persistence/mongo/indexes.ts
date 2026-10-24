@@ -13,6 +13,7 @@ import { Db } from "mongodb";
 import { Collections } from "./collections";
 import { MongoWalletRepository } from "./repositories/MongoWalletRepository";
 import { GetP2PExtension } from "../../extensions/p2p";
+import { LegacyHuntPassStorageMoves } from "../../huntPassRotation";
 import {
     AssertMongoSchemaVersionSupported,
     CURRENT_MONGO_SCHEMA_VERSION,
@@ -20,6 +21,25 @@ import {
     MONGO_SCHEMA_MIGRATION_ID,
     RecordMongoSchemaMigration
 } from "./schemaMigrations";
+
+// [Revamped 2026-10-24] Two-week seasons (huntPassRotation.ts) store hunt pass progress per season,
+// "huntpass:<season>:<pass>". The old 60-day rotation's rows ("season44:saint_s_bond") move to the season their pass
+// now falls in (LegacyHuntPassStorageMoves). Idempotent: an already-moved row is never overwritten, and an old row is
+// deleted only after its copy exists.
+export async function MoveLegacyHuntPassProgress(Db: Pick<Db, "collection">, Moves = LegacyHuntPassStorageMoves()): Promise<void> {
+    const Tracks = Db.collection(Collections.ProgressionTracks);
+    for (const [From, To] of Moves) {
+        for (const Doc of await Tracks.find({ progressionId: From }).toArray()) {
+            const { _id, ...Rest } = Doc;
+            await Tracks.updateOne(
+                { _id: `${Doc.userId}::${To}` as never },
+                { $setOnInsert: { ...Rest, progressionId: To } },
+                { upsert: true }
+            );
+            await Tracks.deleteOne({ _id });
+        }
+    }
+}
 
 // Index plan for the WP-MONGO-1 scope, mirroring Mongo migration plan section 9's
 // table for the entities this phase actually migrates. Progression-collection
@@ -75,6 +95,7 @@ export async function EnsureMongoIndexes(Db: Db): Promise<void> {
     // (see MongoProgressionTrackRepository), so this secondary index exists purely to make
     // getAllForUser(userId) an index-scan instead of a full collection scan.
     await Db.collection(Collections.ProgressionTracks).createIndex({ userId: 1 });
+    await MoveLegacyHuntPassProgress(Db);
     // Backfill the server-owned Player Journey CAS token for rows created before revisioned
     // writes existed. This is idempotent and leaves the client-facing updateVersion untouched.
     await Db.collection(Collections.PlayerJourney).updateMany(

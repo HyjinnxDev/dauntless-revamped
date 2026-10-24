@@ -12,7 +12,8 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
-import { GetNotesForUser, GetStoreSkus, PurchaseStoreSku, FindStoreSkuByIdOrCatalogId, FountainClaimedToday, OneTimeSkuOwned } from "../controllers/store";
+import { GetNotesForUser, GetStoreSkus, PurchaseStoreSku, FindStoreSkuByIdOrCatalogId, FountainClaimedToday, OneTimeSkuOwned, IsHuntPassSkuTag } from "../controllers/store";
+import { GetServedSlotForUser } from "../controllers/progression";
 import { GetWallet, BuildBalanceDict } from "../controllers/wallet";
 import { ProjectBalances } from "../platinumWallet";
 import { GetCharactersForUid } from "../controllers/character";
@@ -171,7 +172,9 @@ storeRouter.get("/product/skus/public", HasParadoxBackendAuth, async (req: any, 
         return;
     }
 
-    let StoreSkus = GetStoreSkus(RequiredTags);
+    // The hunt pass Elite is the one of the pass this player is on (season pass, or the Commission pass once done).
+    const ServedSlot = IsHuntPassSkuTag(RequiredTags) && typeof req.AuthData?.userId === "string" ? await GetServedSlotForUser(req.AuthData.userId) : undefined;
+    let StoreSkus = GetStoreSkus(RequiredTags, ServedSlot);
 
     // Coin toss: no offer once today's claim is done, so the client doesn't offer the toss again until the UTC day rolls.
     if (RequiredTags === "fountain_daily_free_bundle") {

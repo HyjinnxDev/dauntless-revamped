@@ -3,9 +3,10 @@ import test from "node:test";
 import { GauntletSeason, GuildsUnlocking, NormalizeGauntletLevel, PartyLevelAccess } from "./gauntlet";
 
 test("season follows the hunt pass window and cycles Season 01-05", () => {
-    assert.deepEqual(GauntletSeason(Date.parse("2026-10-21T00:00:00Z")), { index: 0, id: "ESC_SEASON_1", start_at: "2026-10-01T00:00:00+00:00", end_at: "2026-11-30T00:00:00+00:00" });
-    assert.equal(GauntletSeason(Date.parse("2026-12-01T00:00:00Z")).id, "ESC_SEASON_2");
-    assert.equal(GauntletSeason(Date.parse("2027-08-01T00:00:00Z")).id, "ESC_SEASON_1"); // window 5 (from 2027-07-28)
+    // [Revamped 2026-10-24] two-week seasons from Thursday 2026-10-22 17:00 UTC
+    assert.deepEqual(GauntletSeason(Date.parse("2026-10-24T00:00:00Z")), { index: 0, id: "ESC_SEASON_1", start_at: "2026-10-22T17:00:00+00:00", end_at: "2026-11-05T17:00:00+00:00" });
+    assert.equal(GauntletSeason(Date.parse("2026-11-06T00:00:00Z")).id, "ESC_SEASON_2");
+    assert.equal(GauntletSeason(Date.parse("2027-01-01T00:00:00Z")).id, "ESC_SEASON_1"); // window 5 (from 2026-12-31)
 });
 
 test("levels arrive plain or season-combined", () => {

@@ -18,7 +18,7 @@ import { GrantEntitlementsInTransaction } from "./entitlements";
 import { GetServedSlotForUser, GetTrackCurve, ProgressionStorageId, ResolveProgressionTrackId } from "./progression";
 import { ResolveProgressionGrant } from "../skuProgression";
 import { logger } from "../logger";
-import { HUNT_PASS_SLOT_IDS, HuntPassPassSkuTag, HuntPassSkus } from "../huntPassRotation";
+import { HuntPassPassSkuTag, HuntPassSkus, SEASON_PASS_SLOT } from "../huntPassRotation";
 import { loadGameData } from "../gameData/loader";
 
 // [2026-07-24] Lady Luck's Store (the Trials/Arena reward shop). Confirmed real endpoint contract:
@@ -199,7 +199,9 @@ export function RamsExchangeSku(NowMs = Date.now()): StoreSku {
         duplicateInstancedItems: [],
     };
 }
-const HUNT_PASS_SKUS =Object.fromEntries(HUNT_PASS_SLOT_IDS.map((Slot) => [HuntPassPassSkuTag(Slot), HuntPassSkus(Slot)]));
+// The client only shows season43's Elite; which pass it unlocks depends on the player (GetStoreSkus' servedSlot).
+const HUNT_PASS_SKU_TAG = HuntPassPassSkuTag(SEASON_PASS_SLOT);
+const HUNT_PASS_SKUS = { [HUNT_PASS_SKU_TAG]: HuntPassSkus(SEASON_PASS_SLOT) };
 const EXCHANGE_SLOT_SKUS = { slot2: [ExchangeSlotSku(2)], slot3: [ExchangeSlotSku(3)] };
 
 const STORE_SKUS: Record<string, StoreSku[]> = {
@@ -241,9 +243,13 @@ export function GetLadyLuckSkus(): StoreSku[] {
     return LADYLUCK_SKUS;
 }
 
-export function GetStoreSkus(storeTag: string): StoreSku[] {
+// servedSlot: the player's internal hunt pass slot, so the hunt pass Elite SKU is the one of the pass they are on.
+export function GetStoreSkus(storeTag: string, servedSlot?: string): StoreSku[] {
+    if (storeTag === HUNT_PASS_SKU_TAG && servedSlot) return HuntPassSkus(servedSlot);
     return STORE_SKUS[storeTag] ?? [];
 }
+
+export const IsHuntPassSkuTag = (storeTag: string) => storeTag === HUNT_PASS_SKU_TAG;
 
 // [2026-07-24] GET /token/platinum/{id} ("Generate purchase token for any catalogId from shop") is
 // captured taking a single path segment with no other context about which id-space it lives in. Our
@@ -368,7 +374,8 @@ export const PricesForCurrency = (Sku: StoreSku, Currency?: string) => Sku.price
 // (userId, characterId, skuId) claims are decoded - built on the same atomic machinery as before
 // (RunInventoryTransaction's idempotency ledger + the wallet's overspend guard).
 export async function PurchaseStoreSku(userId: string, characterId: string, storeTag: string, skuId: string, characterBindingValidated = false, currency?: string): Promise<PurchaseResult> {
-    const Sku = GetStoreSkus(storeTag).find((s) => s.id === skuId);
+    const ServedSlot = IsHuntPassSkuTag(storeTag) ? await GetServedSlotForUser(userId) : undefined;
+    const Sku = GetStoreSkus(storeTag, ServedSlot).find((s) => s.id === skuId);
     if (!Sku) {
         return { ok: false, reason: "unknown_sku" };
     }
