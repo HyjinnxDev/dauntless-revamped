@@ -14,7 +14,7 @@ import { logger } from "../logger";
 import { loadGameData } from "../gameData/loader";
 import { ComputeNewlyUnlockedNodeIds } from "./slayersPath";
 import crypto from "node:crypto";
-import { HUNT_PASS_SLOT_IDS, HuntPassCurve, HuntPassEntitlement, HuntPassStorageId, IsHuntPassSlot, ServedSlotFor } from "../huntPassRotation";
+import { HUNT_PASS_SLOT_IDS, HuntPassCurve, HuntPassEntitlement, HuntPassStorageId, IsHuntPassSlot, IsHuntPassStorageId, SEASON_PASS_SLOT, ServedSlotFor } from "../huntPassRotation";
 import { DoesUserHoldEntitlement } from "./entitlements";
 import { GetPartyForPlayer } from "./party";
 import { GetMongoDb } from "../persistence/mongo/client";
@@ -68,11 +68,11 @@ export function GetTrackCurve(progressionId: string) {
     return IsHuntPassSlot(progressionId) ? HuntPassCurve(progressionId) : TrackCurves().get(progressionId);
 }
 
-// Hunt pass progress is stored per PASS ("season43:frostfall"), not per slot, so a slot changing hands at a rotation
-// never mixes progress. Everything else is stored under its own id.
+// Hunt pass progress is stored per season and pass ("huntpass:0:frostfall"), so a new season never mixes progress.
+// Pass an INTERNAL slot (the player's served slot, see ResolveProgressionTrackId). Everything else is stored under its own id.
 export const ProgressionStorageId = (progressionId: string) => IsHuntPassSlot(progressionId) ? HuntPassStorageId(progressionId) : progressionId;
 
-// The hunt pass slot this player is on (first cosmetic pass not yet completed, else the currency slot).
+// The internal hunt pass slot this player is on (the season pass until completed, then the Commission pass).
 export async function GetServedSlotForUser(userId: string, repos: Pick<RepositoryProvider, "progressionTracks"> = GetRepositories()): Promise<string> {
     return ServedSlotFor(await repos.progressionTracks.getAllForUser(userId));
 }
@@ -81,11 +81,12 @@ export async function GetServedSlotForUser(userId: string, repos: Pick<Repositor
 // Pass the player is on", i.e. the slot GET /huntpass/:userId (routes/system.ts) answers for them - the caller
 // resolves that (GetServedSlotForUser) and passes it in.
 // [1.14.7] The client only enables hunt_pass_season_table rows season43..50, so those are the hunt pass slots
-// (src/huntPassRotation.ts); what a slot carries rotates.
+// (src/huntPassRotation.ts). Players and game servers only see season43, so ANY hunt pass slot id also means the
+// player's served slot.
 export const SELECTED_HUNTPASS_TRACK_ALIAS = "selected_huntpass";
 
 export function ResolveProgressionTrackId(progressionId: string, servedSlot?: string): string | undefined {
-    if (progressionId === SELECTED_HUNTPASS_TRACK_ALIAS) return servedSlot;
+    if (progressionId === SELECTED_HUNTPASS_TRACK_ALIAS || IsHuntPassSlot(progressionId)) return servedSlot;
     return IsHuntPassSlot(progressionId) || TrackCurves().has(progressionId) ? progressionId : undefined;
 }
 
@@ -208,7 +209,9 @@ export async function GrantProgressionXp(
                     return { record: Existing.result, replayed: true };
                 }
 
-                const StorageId = ProgressionStorageId(progressionId);
+                // A hunt pass grant (always "season43" from the game server) lands on the pass this player is on.
+                const Track = IsHuntPassSlot(progressionId) ? await GetServedSlotForUser(userId, repos) : progressionId;
+                const StorageId = ProgressionStorageId(Track);
                 const Before = await repos.progressionTracks.get(userId, StorageId, session);
                 const After = await repos.progressionTracks.increment(userId, StorageId, amount, session);
                 // Reforge (ServerPrestigeExperience) grants +1 PrestigeTrack_Weapon_* XP per reforge; each pays one
@@ -259,13 +262,12 @@ export async function GrantProgressionXp(
 export async function GetPersistedProgressionForUser(userId: string, knownTrackIds: string[]){
     const Persisted = await GetRepositories().progressionTracks.getAllForUser(userId);
     const PersistedById = new Map(Persisted.map((Row) => [Row.progressionId, Row]));
-    // Hunt pass rows are stored per pass ("season43:frostfall"); each slot is answered with the row of the pass it
-    // carries now, and the other passes' rows (not the client's business) are left out.
-    for (const Slot of HUNT_PASS_SLOT_IDS) {
-        const Row = PersistedById.get(HuntPassStorageId(Slot));
-        if (Row) PersistedById.set(Slot, Row); else PersistedById.delete(Slot);
-    }
-    for (const Id of [...PersistedById.keys()]) if (/^seasond+:/.test(Id)) PersistedById.delete(Id);
+    // Hunt pass rows are stored per season and pass ("huntpass:0:frostfall"); the client only knows season43, which is
+    // answered with the row of the pass this player is on. Stored pass rows themselves are not the client's business.
+    const ServedRow = PersistedById.get(HuntPassStorageId(ServedSlotFor(Persisted)));
+    for (const Slot of HUNT_PASS_SLOT_IDS) PersistedById.delete(Slot);
+    if (ServedRow) PersistedById.set(SEASON_PASS_SLOT, ServedRow);
+    for (const Id of [...PersistedById.keys()]) if (IsHuntPassStorageId(Id)) PersistedById.delete(Id);
 
     const Rows: any[] = [];
 
@@ -460,6 +462,8 @@ export type ConfirmRankResult =
 
 // Elite (premium) ranks: same checks, plus the player must own the served pass's Elite entitlement.
 export async function ConfirmPublicProgressionRank(userId: string, progressionId: string, rank: number, premium = false): Promise<ConfirmRankResult> {
+    // The client confirms "season43"; the ranks belong to the pass this player is on.
+    if (IsHuntPassSlot(progressionId)) progressionId = await GetServedSlotForUser(userId);
     if (premium && !(IsHuntPassSlot(progressionId) && await DoesUserHoldEntitlement(userId, HuntPassEntitlement(progressionId)))) {
         logger.warn(`Rejected premium rank confirm: user=${userId} lacks Elite entitlement for track ${progressionId}`);
         return { ok: false, reason: "not_entitled" };

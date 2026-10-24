@@ -19,7 +19,7 @@ import { ActiveSeasonWindow, HuntPassRotationIndex } from "./huntPassRotation";
 //   POST GauntletEndedLevelEndpoint (path unseen)  <- {gauntlet_id, players[], level, remaining_sec, data{}}
 // Retail rules (fandom wiki "Gauntlet"): clearing a level unlocks the next; a party may only queue a level every member
 // has unlocked; 3+ guildmates clearing a level unlock it for the whole guild.
-// A season is the hunt pass window (huntPassRotation.ts, 60 days); progress is keyed by that window, so it resets with it.
+// A season is the hunt pass window (huntPassRotation.ts, two weeks); progress is keyed by that window, so it resets with it.
 // ponytail: the client carries Season 01-05 content (wiki); only season 1 is verified in game. GAUNTLET_SEASON pins one.
 const GAUNTLET_SEASONS = 5;
 const GUILD_UNLOCK_MEMBERS = 3;

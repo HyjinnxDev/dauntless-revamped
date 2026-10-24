@@ -16,7 +16,7 @@ import { loadGameData } from "../gameData/loader";
 const progressionconfig = loadGameData<any>("progression_config.json");
 import { GetEscalationProgress, SaveEscalationProgress } from "../controllers/escalationProgress";
 import { GetEntitlementsForUser } from "../controllers/entitlements";
-import { BuildHuntPassPath, HUNT_PASS_SLOT_IDS, IsHuntPassSlot } from "../huntPassRotation";
+import { ActiveSeasonWindow, BuildHuntPassPath, COMMISSION_PASS_SLOT, HUNT_PASS_SLOT_IDS, IsHuntPassSlot, SEASON_PASS_SLOT } from "../huntPassRotation";
 import { GetServedSlotForUser } from "../controllers/progression";
 import { MonitorBountyLoad, MonitorBountySave, MonitorCooldownLoad, MonitorCooldownSave, MonitorSourceOf } from "../diagnostics/economyMonitor";
 import { CooldownSaveValidationError, IsAuthorizedCooldownReader, IsAuthorizedCooldownWriter } from "../cooldownState";
@@ -371,18 +371,23 @@ export function WidenHuntPassWindows(Config: any, ServedSlot?: string): any {
             Ended++;
         }
     }
-    // Rotation: every slot gets the real pass it carries (rank curve + free/Elite rewards).
+    // [Revamped 2026-10-24] One pass per two-week season (huntPassRotation.ts). A player's season43 carries the pass
+    // they are on (the season pass, or the Commission pass once it is done) with the real season window: the client's
+    // Challenges weeks are built from season43's window, so it must be current for everyone. The game server's config
+    // has the season pass (season43) and the Commission pass (season50) current. Every other slot is a placeholder
+    // with a future window, so its lookups succeed without competing with the current pass.
     const Carried: string[] = [];
     for (const SlotId of HUNT_PASS_SLOT_IDS) {
-        const { pass_name, ...Built } = BuildHuntPassPath(SlotId, Now);
-        Carried.push(`${SlotId}=${pass_name}`);
-        const Slot = ServedSlot === undefined || SlotId === ServedSlot
-            ? Built
-            : { ...Built, start_date: FUTURE_PASS_WINDOW_START, end_date: FUTURE_PASS_WINDOW_END };
+        const Source = ServedSlot !== undefined && SlotId === SEASON_PASS_SLOT ? ServedSlot : SlotId;
+        const { pass_name, ...Built } = BuildHuntPassPath(Source, Now, SlotId);
+        const Current = ServedSlot === undefined ? SlotId === SEASON_PASS_SLOT || SlotId === COMMISSION_PASS_SLOT : SlotId === SEASON_PASS_SLOT;
+        if (Current) Carried.push(`${SlotId}=${pass_name}`);
+        const Slot = Current ? Built : { ...Built, start_date: FUTURE_PASS_WINDOW_START, end_date: FUTURE_PASS_WINDOW_END };
         const At = Paths.findIndex((P: any) => P?.progression_id === SlotId);
         if (At >= 0) Paths[At] = Slot; else Paths.push(Slot);
     }
-    logger.info(`Hunt pass slots (${ServedSlot === undefined ? "all current, gameserver" : `only ${ServedSlot} current, player`}): ${Carried.join(", ")}; ${Ended} other pass windows clamped to have ended`);
+    const Window = ActiveSeasonWindow(Now);
+    logger.info(`Hunt pass season ${Window.start}..${Window.end} (${ServedSlot === undefined ? "gameserver" : `player on ${ServedSlot}`}): ${Carried.join(", ")} current; ${Ended} other pass windows clamped to have ended`);
 
     // Add the newest seasons the game's table exposes (see the block comment) so the window lookup for an
     // ENABLED row can succeed. They copy the active track's shape and get a future window, so they resolve
@@ -548,8 +553,9 @@ systemRouter.get("/huntpass/:userId", HasParadoxBackendAuth, async (req: any, re
 	// enabled). The row name in the warning is the oracle for whether this id is accepted.
 	// [1.14.7 2026-10-08] Defaults to the active pass (season43) so the client, the XP grants and the
 	// prestige earn gate all name the same track; GAMESERVER_HUNTPASS_ID still overrides.
-	// The slot THIS player is on: the first cosmetic pass they have not completed, else the currency pass.
-	const HuntPassId = await GetServedSlotForUser(String(req.params.userId));
+	// [Revamped 2026-10-24] Always season43: the client shows (and its Challenges follow) season43, which carries the
+	// pass this player is on; grants to it resolve to that pass (controllers/progression.ts ResolveProgressionTrackId).
+	const HuntPassId = SEASON_PASS_SLOT;
 
 	logger.info(`Huntpass (stubbed) -> huntpass_id=${HuntPassId}`);
 
