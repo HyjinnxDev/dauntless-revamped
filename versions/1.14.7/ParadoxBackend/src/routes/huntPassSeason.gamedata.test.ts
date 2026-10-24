@@ -20,8 +20,13 @@ test("a player's season43 carries the pass they are on, in the current season wi
     for (const Served of ["season43", "season50"]) {
         const All = Paths(Served);
         const Season43 = All.find((Path) => Path.progression_id === "season43");
-        const Window = ActiveSeasonWindow(Date.now());
-        assert.deepEqual({ start: Season43.start_date, end: Season43.end_date }, Window, Served);
+        const Season = ActiveSeasonWindow(Date.now());
+        assert.equal(Season43.end_date, Season.end, Served);
+        // every Challenges week (week N opens at start + 7 * (N - 1) days) is open on the season's first day, and the
+        // window stays 84 days (12 week entries, a retail season)
+        const Start = Date.parse(Season43.start_date);
+        assert.ok(Start + 10 * 7 * 86_400_000 <= Date.parse(Season.start), Served);
+        assert.equal(Date.parse(Season43.end_date) - Start, 84 * 86_400_000, Served);
         assert.equal(Season43.premium_gating_entitlement, HuntPassEntitlement(Served), Served);
         assert.deepEqual(All.filter(Current).map((Path) => Path.progression_id), ["season43"], Served);
     }

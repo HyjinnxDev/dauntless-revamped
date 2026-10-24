@@ -53,6 +53,17 @@ export function ActiveSeasonWindow(NowMs: number): { start: string; end: string 
     return { start: IsoUtc(Start), end: IsoUtc(Start + ROTATION_MS) };
 }
 
+// The window published on the hunt pass path. The client's Challenges (UBountyComponent_Weekly) open week N at
+// start + 7 days * (N - 1), so the start sits CHALLENGE_WEEKS_OPEN - 1 weeks before the season: every challenge week
+// is open from the season's first day. The end stays the season's end (the pass countdown). 1.14.7 carries 11 weeks
+// ("43_<week>_<n>_Challenge_Season_*", weeks 1-11 seen in bountyStates 2026-10-24), so the window is 84 days, a retail
+// season's length: the client builds one week entry per 7 days, and an 80-year window once froze it (routes/system.ts).
+const CHALLENGE_WEEKS_OPEN = 11;
+export function HuntPassPathWindow(NowMs: number): { start: string; end: string } {
+    const Season = ActiveSeasonWindow(NowMs);
+    return { start: IsoUtc(Date.parse(Season.start) - (CHALLENGE_WEEKS_OPEN - 1) * 7 * 24 * 60 * 60 * 1000), end: Season.end };
+}
+
 // The pass a slot carries this season: season50 the Commission pass, any other slot the season pass.
 export function PassForSlot(SlotId: string, NowMs = Date.now()): PassData {
     if (!IsHuntPassSlot(SlotId)) throw new Error(`'${SlotId}' is not a hunt pass slot`);
@@ -123,7 +134,7 @@ function Level(Rank: number, Rewards: Reward[]) {
 // under ClientSlot (a player's served pass always goes out as season43).
 export function BuildHuntPassPath(SlotId: string, NowMs = Date.now(), ClientSlot = SlotId) {
     const Pass = PassForSlot(SlotId, NowMs);
-    const Window = ActiveSeasonWindow(NowMs);
+    const Window = HuntPassPathWindow(NowMs);
     // Platinum can't be bought here, so it is earned: the wiki's 100-300 of free-track platinum is replaced by one
     // Elite price, paid evenly over the first PLATINUM_LEVELS levels so the next Elite track is reachable early.
     // Passes with no free platinum stay as-is.
