@@ -3570,10 +3570,18 @@ FString* GetGameDefaultMap(FString* a1) {
     if (GauntletLevel >= 0) {
         FinalURL += std::wstring(L"?GauntletLevel=");
         FinalURL += std::to_wstring(GauntletLevel);
-        // The hunt row's GameModeOverride is never applied, so adventure_destroyed_ramsgate_00 ran its default
-        // BPGM_ArchonExploration ([GauntletProbe] gm=). ?game= is UE's own per-URL game mode switch.
-        // ponytail: Gauntlet-only path; pass GameModeOverride from the Director if other rows need it.
-        FinalURL += std::wstring(L"?game=/Game/Blueprints/GameMode/BPGM_ArchonGauntlet.BPGM_ArchonGauntlet_C");
+    }
+
+    // [2026-10-26] The hunt row's GameModeOverride is never applied by the server, so a map ran its default mode
+    // (Gauntlet got BPGM_ArchonExploration, story missions BPGM_ArchonEscalation). The Director passes the row's
+    // override as MYSTICPARADOX_GAME_MODE; ?game= is UE's own per-URL game mode switch.
+    {
+        wchar_t GameMode[256] = {};
+        DWORD n = GetEnvironmentVariableW(L"MYSTICPARADOX_GAME_MODE", GameMode, 256);
+        if (n > 0 && n < 256) {
+            FinalURL += std::wstring(L"?game=");
+            FinalURL += GameMode;
+        }
     }
 
     // [1.14.7 2026-10-03] With MAP_URL_LISTEN.flag present, advertise the map as a LISTEN server so the
