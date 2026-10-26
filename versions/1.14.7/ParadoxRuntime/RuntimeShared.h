@@ -53,6 +53,8 @@ void MpJoinPromptStart();
 bool MpJoinPromptTakeOffer(std::string& Text);
 bool MpJoinPromptTakeNotice(std::string& Text);
 void MpJoinPromptAnswer(bool Join);
+// HuntStats.cpp: hunt server -> backend POST /mystic/hunt-stats of one kill's per-player damage JSON (background thread).
+void MpHuntStatsPost(std::string Json, std::wstring ApiKey);
 // WindowLock.cpp: keeps the player's window size/position/border across map loads (client).
 void MpWindowLockStart();
 // Game thread -> voice threads: the game's Audio "Voice chat" toggle and voice chat volume (0..1).

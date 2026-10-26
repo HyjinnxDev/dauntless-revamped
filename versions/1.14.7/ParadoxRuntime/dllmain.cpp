@@ -3570,10 +3570,18 @@ FString* GetGameDefaultMap(FString* a1) {
     if (GauntletLevel >= 0) {
         FinalURL += std::wstring(L"?GauntletLevel=");
         FinalURL += std::to_wstring(GauntletLevel);
-        // The hunt row's GameModeOverride is never applied, so adventure_destroyed_ramsgate_00 ran its default
-        // BPGM_ArchonExploration ([GauntletProbe] gm=). ?game= is UE's own per-URL game mode switch.
-        // ponytail: Gauntlet-only path; pass GameModeOverride from the Director if other rows need it.
-        FinalURL += std::wstring(L"?game=/Game/Blueprints/GameMode/BPGM_ArchonGauntlet.BPGM_ArchonGauntlet_C");
+    }
+
+    // [2026-10-26] The hunt row's GameModeOverride is never applied by the server, so a map ran its default mode
+    // (Gauntlet got BPGM_ArchonExploration, story missions BPGM_ArchonEscalation). The Director passes the row's
+    // override as MYSTICPARADOX_GAME_MODE; ?game= is UE's own per-URL game mode switch.
+    {
+        wchar_t GameMode[256] = {};
+        DWORD n = GetEnvironmentVariableW(L"MYSTICPARADOX_GAME_MODE", GameMode, 256);
+        if (n > 0 && n < 256) {
+            FinalURL += std::wstring(L"?game=");
+            FinalURL += GameMode;
+        }
     }
 
     // [1.14.7 2026-10-03] With MAP_URL_LISTEN.flag present, advertise the map as a LISTEN server so the
@@ -5821,6 +5829,23 @@ static void LogFit(SDK::UNamePlatesWidget* W) {
     Log(Buf);
 }
 
+// The plate is drawn by a UWidgetComponent at a fixed DrawSize, so a long name (or one an outline makes a few px
+// taller, "desired 62x44 local 307x40") is clipped by the box. Drawing at desired size makes the box follow the
+// text for every plate, styled or not.
+static void FitComponent(SDK::UNamePlatesWidget* W) {
+    SDK::AArchonCharacter* Owner = W->OwningPlayer;
+    if (!Owner) return;
+    for (int32_t i = 0; i < Owner->CachedNameplateComponents.Num(); ++i) {
+        SDK::UWidgetComponent* Wc = Owner->CachedNameplateComponents[i];
+        if (!Wc || Wc->Widget != W || Wc->bDrawAtDesiredSize) continue;
+        char Buf[128];
+        snprintf(Buf, sizeof(Buf), "fit: component draw %dx%d space=%d -> desired size", Wc->DrawSize.X, Wc->DrawSize.Y,
+            static_cast<int>(Wc->Space));
+        Log(Buf);
+        Wc->SetDrawAtDesiredSize(true);
+    }
+}
+
 // Re-applied every tick: the game recolours names on its own updates.
 static void Animate(SDK::UTextBlock* Tb, const Plate& P, ULONGLONG Now) {
     switch (P.S) {
@@ -5909,6 +5934,7 @@ static void Update() {
         for (int32_t i = 0; i < s_Found->Num(); ++i) {
             auto* W = static_cast<SDK::UNamePlatesWidget*>((*s_Found)[i]);
             if (!W || !W->TextBlock_Name) continue;
+            FitComponent(W);
             const std::string Text = SDK::UKismetTextLibrary::Conv_TextToString(W->TextBlock_Name->GetText()).ToString();
             auto Old = std::find_if(s_Plates.begin(), s_Plates.end(), [&](const Plate& P) { return P.W.Get() == W; });
             // New plate, or the game re-set the name: staff tag, then style tag, both optional.
@@ -5985,6 +6011,8 @@ static void Tick() {
 //   PC->Inventory(+0x9B8, AArchonInventory): ReplicatedItems(+0x460), CurrentMismatchCount(+0x358),
 //   PendingClientItemStateUpdates(+0x338), QueuedClientItemStateUpdates(+0x348)
 // Client only. Log tag [InvProbe]. DISABLE_INVENTORY_PROBE.flag beside the exe turns it off.
+extern void* OrigHasFinishedLoading;   // HasFinishedLoadingHook below; used by InventoryProbe::LoadoutHeal
+
 namespace InventoryProbe {
 
 struct Snap {
@@ -6058,6 +6086,69 @@ static void Heal(const Snap& S, uint64_t Now) {
     reinterpret_cast<AArchonInventory*>(S.Inv)->ClientQueryInventory(true);
 }
 
+// [1.14.7 FIX 2026-10-25] Equipment screen empty (no weapon/armour, power 0) while potions show. Gear slots
+// (UArchonLoadoutItemSlot) replicate only the item's CRC (FItemInstanceIdRepl::ItemInstanceID is RepSkip); the
+// client maps it to an item in OnRep_ItemInstanceIdChanged (+0x1BADCE0), which returns at once when the slot's
+// Inventory (+0x28) is still null - i.e. the slot arrived before the bp_archon_inventory actor. Inventory has no
+// RepNotify, so nothing retries and GetItem (+0x1BA0280, looks up the empty id string) stays null until a relog.
+// Quick items survive because their getter resolves lazily. Once the client inventory has finished loading, find
+// gear slots with a CRC but no id, fill a null Inventory from the controller and re-run the engine's OnRep.
+// At most 5 passes per controller. Log tag [LoadoutHeal]. DISABLE_LOADOUT_HEAL.flag beside the exe turns it off.
+struct UnresolvedSlot { void* Slot; void* Inv; };
+
+// No C++ objects here, so __try is allowed. Returns how many unresolved gear slots it wrote to Out.
+static int FindUnresolvedGearSlots(void* Loadout, UnresolvedSlot* Out, int Max) {
+    int N = 0;
+    __try {
+        if (!Loadout || !IsReadablePointer(Loadout, 0x680)) return 0;
+        const uintptr_t Arr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(Loadout) + 0x670);   // LoadoutSlotDataArray
+        const int Count = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(Loadout) + 0x678);
+        for (int i = 0; i < Count && i < 16 && Arr; ++i) {
+            const uintptr_t Data = *reinterpret_cast<uintptr_t*>(Arr + i * 8);
+            if (!Data || !IsReadablePointer(reinterpret_cast<void*>(Data), 0x388)) continue;
+            for (uintptr_t Off = 0x348; Off <= 0x380; Off += 8) {   // PlayerRole, Weapon, Subweapon, Helmet, Chest, Legs, Arms, Lantern
+                const uintptr_t Slot = *reinterpret_cast<uintptr_t*>(Data + Off);
+                if (!Slot || !IsReadablePointer(reinterpret_cast<void*>(Slot), 0xC0)) continue;
+                const uint32_t Crc = *reinterpret_cast<uint32_t*>(Slot + 0x48);       // ItemInstanceID.ItemInstanceIdCrc
+                const int32_t IdLen = *reinterpret_cast<int32_t*>(Slot + 0x40);       // ItemInstanceID.ItemInstanceID.Num
+                if (Crc == 0 || IdLen > 1 || N >= Max) continue;
+                Out[N++] = { reinterpret_cast<void*>(Slot), *reinterpret_cast<void**>(Slot + 0x28) };
+            }
+        }
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+    return N;
+}
+
+static void LoadoutHeal(const Snap& S) {
+    static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_LOADOUT_HEAL.flag");
+    static void* s_Pc = nullptr;
+    static int s_Passes = 0;
+    if (s_Disabled || !S.Pc || !S.Inv || S.Loaded != 1 || S.Items <= 0) return;
+    if (S.Pc != s_Pc) { s_Pc = S.Pc; s_Passes = 0; }
+    if (s_Passes >= 5) return;
+    auto* Pc = reinterpret_cast<UObject*>(S.Pc);
+    if (!Pc->IsA(AArchonPlayerController::StaticClass())) return;
+    // The resolver queues a callback instead of resolving while the inventory is still loading; wait for it.
+    auto Finished = reinterpret_cast<bool(*)(UObject*)>(OrigHasFinishedLoading ? OrigHasFinishedLoading
+        : reinterpret_cast<void*>(Globals::BaseAddress + 0x01BA5E40));
+    if (!Finished(reinterpret_cast<UObject*>(S.Inv))) return;
+
+    UnresolvedSlot Found[16 * 8];
+    const int N = FindUnresolvedGearSlots(reinterpret_cast<AArchonPlayerController*>(Pc)->LOADOUT, Found, 16 * 8);
+    if (N == 0) return;
+    ++s_Passes;
+    for (int i = 0; i < N; ++i) {
+        auto* Slot = reinterpret_cast<UArchonLoadoutItemSlot*>(Found[i].Slot);
+        if (!Found[i].Inv) Slot->Inventory = reinterpret_cast<AArchonInventory*>(S.Inv);
+        Slot->OnRep_ItemInstanceIdChanged(FItemInstanceIdRepl{});
+        MpLog("[LoadoutHeal] pass " + std::to_string(s_Passes) + "/5 slot=" + MpPtr(Found[i].Slot)
+            + " type=" + std::to_string(static_cast<int>(Slot->ItemSlotType))
+            + " slotInventory=" + (Found[i].Inv ? "set" : "null->controller")
+            + " crc=0x" + MpHex(*reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(Found[i].Slot) + 0x48))
+            + " resolved=" + (Slot->CachedItem ? "yes" : "no"));
+    }
+}
+
 static void Tick() {
     if (Globals::AmServer || s_Faulted) return;
     static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_PROBE.flag");
@@ -6073,6 +6164,7 @@ static void Tick() {
         return;
     }
     Heal(S, Now);
+    LoadoutHeal(S);
     if (std::memcmp(&S, &s_Last, sizeof(Snap)) == 0) return;
     s_Last = S;
     // ponytail: change-only logging with a session cap; per-map budget if 4000 ever runs out.
@@ -14293,6 +14385,61 @@ static void TickGuarded() {
 
 }  // namespace JoinPopup
 
+// [2026-10-25] Fountain core popup. The game server rolls CONTAINER_CORE_REWARD_DAILY_01 itself and sends the
+// client that roll (ArchonInventory.ClientContainerUnlocked), then backend ramsRewards.ts pays roll +2 Patrol Keys
+// (clamped 4-6) and +20 Platinum, so the popup showed fewer keys and no Platinum. Rewrite the incoming notification
+// list the same way before the UI reads it. A Patrol Key line marks the fountain core (no other core grants keys).
+// Keep the numbers in step with FOUNTAIN_PATROL_KEYS_* / DAILY_GIFT_PLATINUM in ramsRewards.ts. Log tag [CorePopup].
+// DISABLE_FOUNTAIN_POPUP_FIX.flag beside the exe turns it off.
+struct RawArray { void* Data; int32_t Num; int32_t Max; };
+struct RawNotification {   // FGrantedItemNotification
+    RawArray ItemId; bool bHasPlatinumTag; uint8_t Pad11[3]; int32_t GrantedAmount; int32_t RemainingUses;
+    uint8_t Pad1C[4]; RawArray Sources; RawArray ReplacedItemId;
+};
+static_assert(sizeof(RawNotification) == 0x40, "FGrantedItemNotification layout");
+
+static void MpFountainCorePopupFix(void* Parms) {
+    static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_FOUNTAIN_POPUP_FIX.flag");
+    if (s_Disabled || !Parms) return;
+    auto* List = static_cast<RawArray*>(Parms);
+    if (List->Num <= 0 || List->Num > 256 || !IsReadablePointer(List->Data, List->Num * sizeof(RawNotification))) return;
+
+    auto* Items = static_cast<RawNotification*>(List->Data);
+    std::string Seen;
+    RawNotification* Keys = nullptr;
+    for (int32_t i = 0; i < List->Num; ++i) {
+        const std::string Id = CoreCapFString(&Items[i].ItemId);
+        Seen += " " + Id + " x" + std::to_string(Items[i].GrantedAmount);
+        if (Id == "TOKEN_DAILY_PATROL_BONUS_PURCHASED") Keys = &Items[i];
+    }
+    MpLog("[CorePopup] ClientContainerUnlocked" + Seen);
+    if (!Keys) return;
+
+    // ponytail: assumes one key line per open (the daily core is one per day); sum the lines if a merged open shows up.
+    const int32_t GameKeys = Keys->GrantedAmount;
+    Keys->GrantedAmount = (std::min)(6, (std::max)(4, GameKeys + 2));
+    const int32_t ShownKeys = Keys->GrantedAmount;
+
+    // Append a Platinum line. Both buffers come from the engine allocator, so the RPC's param cleanup frees them.
+    static const wchar_t kPlatinum[] = L"CURRENCY_PLATINUM";
+    constexpr int32_t kPlatinumLen = static_cast<int32_t>(sizeof(kPlatinum) / sizeof(wchar_t));   // with terminator
+    auto* IdData = static_cast<wchar_t*>(EngineRealloc(nullptr, sizeof(kPlatinum)));
+    if (!IdData) { MpLog("[CorePopup] allocation failed; keys only"); return; }
+    // Realloc frees the old block on success, so List->Data is replaced right below whenever Grown is non-null.
+    auto* Grown = static_cast<RawNotification*>(EngineRealloc(List->Data, (List->Num + 1) * sizeof(RawNotification)));
+    if (!Grown) { MpLog("[CorePopup] allocation failed; keys only"); return; }
+    wmemcpy(IdData, kPlatinum, kPlatinumLen);
+    RawNotification& Plat = Grown[List->Num];
+    memset(&Plat, 0, sizeof(Plat));
+    Plat.ItemId = { IdData, kPlatinumLen, kPlatinumLen };
+    Plat.bHasPlatinumTag = true;
+    Plat.GrantedAmount = 20;
+    List->Data = Grown;
+    List->Num += 1;
+    List->Max = List->Num;
+    MpLog("[CorePopup] fountain core keys " + std::to_string(GameKeys) + " -> " + std::to_string(ShownKeys) + ", +20 CURRENCY_PLATINUM line");
+}
+
 void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
     const uint64_t HookTscIn = __rdtsc();
     g_clientProcessEventCount.fetch_add(1, std::memory_order_relaxed);
@@ -14355,6 +14502,9 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
 
     const std::string& FunctionName = CachedFunctionFullName(Function);
     MpHuntPassProbe(Object, FunctionName);
+    if (FunctionName == "Function Archon.ArchonInventory.ClientContainerUnlocked") {
+        MpFountainCorePopupFix(Parms);
+    }
 
     // Party drop-in during hunt intro (adventure_island_arrival_trigger_bp, one per player, owned by the pawn).
     // Retail: the trigger is owner-relevant only (server side now clears that, see ProcessEventHook), a
@@ -18647,6 +18797,23 @@ void InitClientHooks() {
         }
     }
 
+    // [1.14.7 FIX 2026-10-26] Inventory blanking / naked character. AArchonInventory::HandleItemStateUpdates
+    // (+0x01B65290) hashes the client's item-state array (+0x360: sorted {crc(InstanceID), crc(CatalogId),
+    // Quantity, crc(CustomData)}) after every server op and compares it with the op's PostOperationHash. On a
+    // mismatch, while CurrentMismatchCount (+0x358) < 10, it calls ClientQueryInventory(true) (+0x01B514D0, full
+    // HTTP reload + OnInventoryDataLoaded rebuild) and ServerHandleInventoryHashMismatch(true) (server reloads
+    // too). On our stack the hashes never agree after a map join, so every join ran 10 back-to-back client+server
+    // reloads (backend log: ~10 bearer + ~10 gameserver GET /inventory in one second; [InvProbe] mismatch 0->10)
+    // while the menu and gear slots were bound to the items being rebuilt. Make the cap check `cmp ecx, 0` so the
+    // engine takes its own "already mismatched the maximum number of times" branch: no reload, no RPC, counters
+    // stay in step with the server, server ops keep applying. The next map join still loads fresh.
+    // DISABLE_INVENTORY_RESYNC_CAP.flag reverts.
+    if (!MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_RESYNC_CAP.flag")) {
+        static const uint8_t Expected[] = { 0x83, 0xF9, 0x0A };      // cmp ecx, 0xA
+        static const uint8_t Replacement[] = { 0x83, 0xF9, 0x00 };   // cmp ecx, 0x0
+        MpPatchBytesVerified(0x01B65AC4, Expected, Replacement, sizeof(Expected), "inventory hash resync cap 10->0");
+    }
+
     // [1.14.7 login fix 2026-10-03] IsEOSEnabled (+0x01C30030) decides EOS-SDK auth vs MCP auth.
     // The previous note ("Launcher supplies -DisableEOS ... preserve as-is") was disproved by an
     // A/B on this machine: with the flag only on the OS command line, FCommandLine::CmdLine is
@@ -19215,6 +19382,78 @@ static int s_escalationBuffChoiceLastRound = INT_MIN;
 // end of round 1 (no pickup, no choice screen) while the other got theirs. Marking every boon row
 // unlocked once per server keeps every season's pool full; the game still applies its own drop
 // conditions, uniqueness and weights. Disable with ESCALATION_KEEP_BOON_UNLOCKS.flag next to the exe.
+//
+// [2026-10-24] Unlocking alone did not fix frost: its season row narrows the table with
+// RequiredRelicTags/ExcludedRelicTags to a handful of LANTERN_/SPECIAL_WARDEN_ relics, so even fully
+// unlocked it offered 2, then 1, then nothing (2026-10-24 logs: buffChoicesNum 2,2,1 / 2,2,1,1,1 on
+// escalation_island_frost_00, 3 every round on blaze/terra/radiant). Any season whose filtered pool
+// is too small to fill 3 options for a full run gets its tag filter dropped (required first, then
+// excluded). Disable with ESCALATION_KEEP_RELIC_TAGS.flag.
+static bool EscalationTagsHave(const SDK::FGameplayTagContainer& Row, const SDK::FGameplayTag& Tag) {
+    for (const auto* Arr : { &Row.GameplayTags, &Row.ParentTags }) {   // ParentTags = UE's non-exact match
+        const SDK::FGameplayTag* Data = Arr->GetDataPtr();
+        if (!Data || Arr->Num() < 0 || Arr->Num() > Arr->Max()) continue;
+        for (int32_t i = 0; i < Arr->Num(); ++i) if (Data[i].TagName == Tag.TagName) return true;
+    }
+    return false;
+}
+
+static int CountEscalationRelicPool(SDK::UDataTable* Relics, const SDK::FGameplayTagContainer& Required,
+                                    const SDK::FGameplayTagContainer& Excluded) {
+    int Pool = 0;
+    for (auto& Pair : Relics->RowMap) {
+        auto* Row = reinterpret_cast<SDK::FEscalationBuffDefinition*>(Pair.Value());
+        if (!Row || !IsReadablePointer(Row, sizeof(SDK::FEscalationBuffDefinition))) continue;
+        if (!IsSaneTempestDiagTags(Row->Tags)) continue;
+        bool Ok = true;
+        for (int32_t i = 0; Ok && i < Required.GameplayTags.Num(); ++i)
+            Ok = EscalationTagsHave(Row->Tags, Required.GameplayTags.GetDataPtr()[i]);
+        for (int32_t i = 0; Ok && i < Excluded.GameplayTags.Num(); ++i)
+            Ok = !EscalationTagsHave(Row->Tags, Excluded.GameplayTags.GetDataPtr()[i]);
+        Pool += Ok;
+    }
+    return Pool;
+}
+
+static void WidenStarvedEscalationRelicPools() {
+    constexpr int kMinPool = 15;   // 3 options x 5 rounds
+    const bool KeepTags = MpExeRelativeFlagPresent(L"ESCALATION_KEEP_RELIC_TAGS.flag");
+    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+        if (!Obj || Obj->IsDefaultObject() || !Obj->IsA(SDK::UDataTable::StaticClass())) continue;
+        auto* Dt = static_cast<SDK::UDataTable*>(Obj);
+        if (!Dt->RowStruct || Dt->RowStruct->GetName() != "EscalationProgressionTuning") continue;
+        for (auto& Pair : Dt->RowMap) {
+            auto* Row = reinterpret_cast<SDK::FEscalationProgressionTuning*>(Pair.Value());
+            if (!Row || !IsReadablePointer(Row, sizeof(SDK::FEscalationProgressionTuning))) continue;
+            SDK::UDataTable* Relics = Row->EscalationRelicsTable;
+            if (!Relics || !IsReadablePointer(Relics, sizeof(SDK::UDataTable))) continue;
+            if (!IsSaneTempestDiagTags(Row->RequiredRelicTags) || !IsSaneTempestDiagTags(Row->ExcludedRelicTags)) continue;
+            const int Before = CountEscalationRelicPool(Relics, Row->RequiredRelicTags, Row->ExcludedRelicTags);
+            std::string Action = "kept";
+            if (Before < kMinPool && !KeepTags && Row->RequiredRelicTags.GameplayTags.Num() > 0) {
+                Row->RequiredRelicTags.GameplayTags.Clear();
+                Row->RequiredRelicTags.ParentTags.Clear();
+                Action = "clearedRequired";
+            }
+            if (!KeepTags && CountEscalationRelicPool(Relics, Row->RequiredRelicTags, Row->ExcludedRelicTags) < kMinPool
+                && Row->ExcludedRelicTags.GameplayTags.Num() > 0) {
+                Row->ExcludedRelicTags.GameplayTags.Clear();
+                Row->ExcludedRelicTags.ParentTags.Clear();
+                Action += "+clearedExcluded";
+            }
+            MpLog("[EscalationBoonPool] season=" + Pair.Key().ToString()
+                + " context=" + std::to_string(static_cast<int>(Row->SeasonContext))
+                + " relics=" + Relics->GetName() + "/" + std::to_string(Relics->RowMap.Num())
+                + " required=" + TempestDiagTags(Row->RequiredRelicTags)
+                + " excluded=" + TempestDiagTags(Row->ExcludedRelicTags)
+                + " pool=" + std::to_string(Before) + "->"
+                + std::to_string(CountEscalationRelicPool(Relics, Row->RequiredRelicTags, Row->ExcludedRelicTags))
+                + " " + Action);
+        }
+    }
+}
+
 static void EnsureEscalationBoonsUnlocked() {
     static bool s_done = false;
     if (s_done) return;
@@ -19236,6 +19475,7 @@ static void EnsureEscalationBoonsUnlocked() {
     s_done = Tables > 0;   // retry on the next state change if the tables are not loaded yet
     MpLog("[EscalationBoonPool] tables=" + std::to_string(Tables) + " rows=" + std::to_string(Rows)
         + " newlyUnlocked=" + std::to_string(Unlocked));
+    if (s_done) WidenStarvedEscalationRelicPools();
 }
 
 // Called from ProcessEventHook when the mode component is told the state changed. Records only; the
@@ -21933,6 +22173,20 @@ static bool EnsureSyntheticNetId(void* PlayerState) {
 // Same route as MpCaptureGenuineNetIdType: NetDriver ClientConnections -> PC +0x98 -> PlayerState +0x228 ->
 // net id +0x258; the id string is the genuine object's vtable slot +0x18 (const TCHAR*, measured). The phantom's
 // synthetic id is skipped. An id the relay has no ticket for never matches anyone (fails closed).
+// Backend account id of a client's PlayerState ("" for the phantom or anything unreadable).
+static std::string MpPlayerStateAccountId(uintptr_t PS) {
+    void* Id = PS ? reinterpret_cast<void*>(SafeReadPtr(PS, 0x258)) : nullptr;
+    if (!Id || Id == reinterpret_cast<void*>(&g_MpSynthNetIdObject)) return "";
+    const uintptr_t Vt = SafeReadPtr(reinterpret_cast<uintptr_t>(Id), 0x00);
+    const uintptr_t Fn = Vt ? SafeReadPtr(Vt, 0x18) : 0;
+    if (!Fn) return "";
+    uint8_t Scratch[0x10] = {};
+    const uint64_t Rax = MpNetIdCallSlotRaw(reinterpret_cast<void*>(Fn), Id, Scratch);
+    if (Rax == 0xEEEEEEEEEEEEEEEEull) return "";
+    const std::string AccountId = MpTryWideString(static_cast<uintptr_t>(Rax));
+    return AccountId.size() > 64 ? "" : AccountId;
+}
+
 static void MpVoiceProximityTick() {
     if (g_wdIsHub.load(std::memory_order_relaxed) != 1 || !Networking::NetDriver || !Globals::ServerAPIKey) return;
     static bool s_started = false;
@@ -21957,23 +22211,91 @@ static void MpVoiceProximityTick() {
         void* C = Clients->Data[i];
         if (!C || !IsReadablePointer(C, 0x420)) continue;
         const uintptr_t PC = SafeReadPtr(reinterpret_cast<uintptr_t>(C), 0x98);
-        const uintptr_t PS = PC ? SafeReadPtr(PC, 0x228) : 0;
-        void* Id = PS ? reinterpret_cast<void*>(SafeReadPtr(PS, 0x258)) : nullptr;
-        if (!Id || Id == reinterpret_cast<void*>(&g_MpSynthNetIdObject)) continue;
-        const uintptr_t Vt = SafeReadPtr(reinterpret_cast<uintptr_t>(Id), 0x00);
-        const uintptr_t Fn = Vt ? SafeReadPtr(Vt, 0x18) : 0;
-        if (!Fn) continue;
-        uint8_t Scratch[0x10] = {};
-        const uint64_t Rax = MpNetIdCallSlotRaw(reinterpret_cast<void*>(Fn), Id, Scratch);
-        if (Rax == 0xEEEEEEEEEEEEEEEEull) continue;
-        const std::string AccountId = MpTryWideString(static_cast<uintptr_t>(Rax));
+        const std::string AccountId = MpPlayerStateAccountId(PC ? SafeReadPtr(PC, 0x228) : 0);
         float X, Y, Z;
-        if (AccountId.empty() || AccountId.size() > 64
+        if (AccountId.empty()
             || !GetActorWorldLocation(reinterpret_cast<void*>(SafeReadPtr(PC, 0x250)), X, Y, Z)) continue;
         if (s_logged.insert(AccountId).second) MpLog("[ProxVoice] reporting player id=" + AccountId);
         Players.push_back({ AccountId, X, Y, Z });
     }
     MpVoiceReportPositions(Players);
+}
+
+// [2026-10-22 hunt stats] Per-player hunt damage for the Slayer's Ledger. The game already keeps it, server-side
+// only (not replicated): AArchonPlayerState::DamagesDealt (damage per behemoth) and MonsterPartDamagesDealt
+// (part/wound damage per part). Once a second (from MpHuntJoinTick) each player's highest value per behemoth/part
+// is kept, so a cleared array or a player who left still counts. When the target behemoth dies (hpPct falls to 0)
+// every player's totals go to the backend (HuntStats.cpp -> POST /mystic/hunt-stats). An escalation posts once per
+// kill; the backend keys rows by hunt + player, so the last post wins. DISABLE_HUNT_STATS.flag turns it off.
+// ponytail: failed or abandoned hunts are never posted; also post at hunt end if those should count.
+struct MpHuntStatsPlayer {
+    std::unordered_map<void*, float> Damage;                    // per behemoth
+    std::unordered_map<void*, std::pair<float, float>> Parts;   // per part: part, wound
+    std::unordered_map<void*, std::string> Names;               // behemoth object names
+};
+
+// Only [A-Za-z0-9_.:-], so every value can go into the JSON unescaped.
+static std::string MpHuntStatsSafe(const std::string& S) {
+    std::string Out;
+    for (char c : S)
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-' || c == '.' || c == ':') Out += c;
+    return Out.substr(0, 128);
+}
+
+static std::string MpHuntStatsNum(float V) {
+    return std::to_string(std::isfinite(V) && V > 0.f ? std::llround(V) : 0LL);
+}
+
+static void MpHuntStatsTick(SDK::AArchonGameState* GS, int HpPct) {
+    static std::unordered_map<std::string, MpHuntStatsPlayer> s_players;
+    static int s_lastHpPct = -1;
+    if (!GS || !Globals::ServerAPIKey || MpExeRelativeFlagPresent(L"DISABLE_HUNT_STATS.flag")) return;
+
+    for (int32_t i = 0; i < GS->PlayerArray.Num(); ++i) {
+        SDK::APlayerState* P = GS->PlayerArray[i];
+        if (!P || !P->IsA(SDK::AArchonPlayerState::StaticClass())) continue;
+        const std::string Id = MpHuntStatsSafe(MpPlayerStateAccountId(reinterpret_cast<uintptr_t>(P)));
+        if (Id.empty()) continue;
+        auto* PS = static_cast<SDK::AArchonPlayerState*>(P);
+        MpHuntStatsPlayer& S = s_players[Id];
+        for (int32_t j = 0; j < PS->DamagesDealt.Num(); ++j) {
+            const SDK::FDamagesDealt& D = PS->DamagesDealt[j];
+            if (!D.Behemoth) continue;
+            float& Best = S.Damage[D.Behemoth];
+            Best = (std::max)(Best, D.Damage);
+            if (!S.Names.count(D.Behemoth)) S.Names[D.Behemoth] = MpHuntStatsSafe(SafeObjectNameForDiagnostic(D.Behemoth));
+        }
+        for (int32_t j = 0; j < PS->MonsterPartDamagesDealt.Num(); ++j) {
+            const SDK::FMonsterPartDamagesDealt& D = PS->MonsterPartDamagesDealt[j];
+            if (!D.MonsterPart) continue;
+            auto& Best = S.Parts[D.MonsterPart];
+            Best.first = (std::max)(Best.first, D.PartDamage);
+            Best.second = (std::max)(Best.second, D.WoundDamage);
+        }
+    }
+
+    const bool Killed = HpPct == 0 && s_lastHpPct > 0;
+    s_lastHpPct = HpPct;
+    if (!Killed || s_players.empty()) return;
+
+    static const std::string s_hunt = std::to_string(Globals::Port) + "-" + std::to_string(std::time(nullptr));
+    std::string Json = "{\"hunt\":\"" + s_hunt + "\",\"playerHuntId\":\""
+        + MpHuntStatsSafe(MpNarrow(ServerSharedPlayerHuntId())) + "\",\"players\":[";
+    bool First = true;
+    for (const auto& [Id, S] : s_players) {
+        float Damage = 0.f, Part = 0.f, Wound = 0.f;
+        for (const auto& [B, V] : S.Damage) Damage += V;
+        for (const auto& [M, V] : S.Parts) { Part += V.first; Wound += V.second; }
+        std::string Names;
+        for (const auto& [B, N] : S.Names) Names += (Names.empty() ? "\"" : ",\"") + N + "\"";
+        Json += (First ? "{" : ",{") + std::string("\"userId\":\"") + Id + "\",\"damage\":" + MpHuntStatsNum(Damage)
+            + ",\"partDamage\":" + MpHuntStatsNum(Part) + ",\"woundDamage\":" + MpHuntStatsNum(Wound)
+            + ",\"behemoths\":[" + Names + "]}";
+        First = false;
+    }
+    Json += "]}";
+    MpLog("[HuntStats] post " + Json);
+    MpHuntStatsPost(Json, Globals::ServerAPIKey);
 }
 
 // [2026-10-17 join-in-progress] Hunt servers (g_wdIsHub == 0), once a second:
@@ -22050,6 +22372,7 @@ static void MpHuntJoinTick() {
         s_lastLine = Line;
         s_reportMs = Now;
     }
+    MpHuntStatsTick(GS, HpPct);
 }
 
 // ============================================================================
