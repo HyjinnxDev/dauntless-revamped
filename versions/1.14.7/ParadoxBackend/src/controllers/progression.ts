@@ -426,7 +426,16 @@ export function IsAuthorizedProgressionReader(authData: any, targetUserId: strin
 }
 
 export async function GetPersistedObjectivesForUser(userId: string){
-    const Rows = await GetRepositories().progressionTracks.getAllObjectivesForUser(userId);
+    const Rows = [...await GetRepositories().progressionTracks.getAllObjectivesForUser(userId)];
+    // Banked-XP objectives (see BANKED_XP_OBJECTIVE_IDS) are computed, not reported, so serve them here too:
+    // the game server takes online objective progress from this list, not from the /pjm node objectives.
+    const Banked = await GetBankedWeaponXp(userId);
+    const Now = new Date().toISOString();
+    for (const Id of BANKED_XP_OBJECTIVE_IDS) {
+        if (Rows.some((Row) => Row.objectiveId === Id)) continue;
+        const Target = BANKED_XP_OBJECTIVE_TARGETS[Id];
+        Rows.push({ userId, objectiveId: Id, value: Banked, completedCount: Target !== undefined && Banked >= Target ? 1 : 0, updatedAt: Now });
+    }
 
     return Rows.map((Row) => ({
         objective_id: Row.objectiveId,
@@ -653,6 +662,7 @@ export async function GetPlayerJourney(userId: string){
 // ("bank N XP"). Retail's backend computed these; the game server only echoes what it loaded, so they sat at 0.
 // Banked XP = weapon XP past max rank, summed over all weapons, counted whenever it was earned.
 // ponytail: only _02's target is known (2450, shown in game); others show progress but complete only once added here.
+const BANKED_XP_OBJECTIVE_IDS = ["PrestigeXP_PJMNode_02", "PrestigeXP_PJMNode_03", "PrestigeXP_PJMNode_04", "PrestigeXP_PJMNode_05"];
 const BANKED_XP_OBJECTIVE_TARGETS: Record<string, number> = { PrestigeXP_PJMNode_02: 2450 };
 const OBJECTIVE_STATUS_COMPLETE = 2;
 
@@ -671,7 +681,7 @@ export function ApplyBankedXpObjectives(nodes: any, bankedXp: number) {
     for (const Node of Object.values<any>(nodes ?? {})) {
         for (const Objective of Array.isArray(Node?.objectives) ? Node.objectives : []) {
             const Id = Objective?.online_objective_id;
-            if (typeof Id !== "string" || !/^PrestigeXP_PJMNode_0[2-9]$/.test(Id)) continue;
+            if (!BANKED_XP_OBJECTIVE_IDS.includes(Id)) continue;
             Objective.objective_amount = Math.max(Number(Objective.objective_amount) || 0, bankedXp);
             const Target = BANKED_XP_OBJECTIVE_TARGETS[Id];
             if (Target !== undefined && Objective.objective_amount >= Target) Objective.objective_status = OBJECTIVE_STATUS_COMPLETE;
