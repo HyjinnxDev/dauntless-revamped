@@ -9,6 +9,8 @@ import {
     IsApprovedXpProgressionTrack,
     IsValidProgressionGrantId,
     MergePlayerJourneyNodes,
+    ApplyBankedXpObjectives,
+    GetTrackCurve,
     IsAuthorizedProgressionReader,
     IsAuthorizedProgressionReporter,
     IsCharacterOwnedByUser
@@ -93,6 +95,18 @@ test("journey merge preserves concurrent unlocks and stale stored values", () =>
         Conflict: { node_status: 1 }
     });
     assert.equal(Merged.version, 3);
+});
+
+test("banked weapon XP fills Slayer's Path banked-XP objectives", () => {
+    const Node = (id: string) => ({ objectives: [{ online_objective_id: id, objective_amount: 0, objective_status: 1 }] });
+    const Nodes = ApplyBankedXpObjectives({ B2: Node("PrestigeXP_PJMNode_02"), B3: Node("PrestigeXP_PJMNode_03"), U: Node("PrestigeXP_PJMNode_00") }, 3308);
+    assert.deepEqual(Nodes.B2.objectives[0], { online_objective_id: "PrestigeXP_PJMNode_02", objective_amount: 3308, objective_status: 2 });
+    assert.deepEqual(Nodes.B3.objectives[0], { online_objective_id: "PrestigeXP_PJMNode_03", objective_amount: 3308, objective_status: 1 });
+    assert.equal(Nodes.U.objectives[0].objective_amount, 0);
+    assert.equal(ApplyBankedXpObjectives({ B2: Node("PrestigeXP_PJMNode_02") }, 1954).B2.objectives[0].objective_status, 1);
+    // banked XP starts past the weapon curve's max-rank total (27775 in 1.14.7)
+    const Sword = GetTrackCurve("ExperienceTrack_Weapon_Sword")!;
+    assert.equal(Sword.cumulativeXpForRank.get(Sword.maxRank), 27775);
 });
 
 test("only Unlocked (2) journey nodes are reward-eligible, not the claimable frontier (1)", () => {
