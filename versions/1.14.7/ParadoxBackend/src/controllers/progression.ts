@@ -644,40 +644,9 @@ export async function GetPlayerJourney(userId: string){
     try { ParsedNodes = JSON.parse(Row.nodes); } catch { ParsedNodes = {}; }
 
     return {
-        nodes: ApplyBankedXpObjectives(ParsedNodes, await GetBankedWeaponXp(userId)),
+        nodes: ParsedNodes,
         update_version: Row.updateVersion
     };
-}
-
-// [Revamped 2026-10-27] Slayer's Path BankedXP_02..05 each need an online objective PrestigeXP_PJMNode_0N
-// ("bank N XP"). Retail's backend computed these; the game server only echoes what it loaded, so they sat at 0.
-// Banked XP = weapon XP past max rank, summed over all weapons, counted whenever it was earned.
-// ponytail: only _02's target is known (2450, shown in game); others show progress but complete only once added here.
-const BANKED_XP_OBJECTIVE_TARGETS: Record<string, number> = { PrestigeXP_PJMNode_02: 2450 };
-const OBJECTIVE_STATUS_COMPLETE = 2;
-
-export async function GetBankedWeaponXp(userId: string): Promise<number> {
-    let Banked = 0;
-    for (const Track of await GetRepositories().progressionTracks.getAllForUser(userId)) {
-        if (!Track.progressionId.startsWith("ExperienceTrack_Weapon_")) continue;
-        const Curve = GetTrackCurve(Track.progressionId);
-        const Max = Curve?.cumulativeXpForRank.get(Curve.maxRank);
-        if (Max !== undefined) Banked += Math.max(0, Track.progress - Max);
-    }
-    return Banked;
-}
-
-export function ApplyBankedXpObjectives(nodes: any, bankedXp: number) {
-    for (const Node of Object.values<any>(nodes ?? {})) {
-        for (const Objective of Array.isArray(Node?.objectives) ? Node.objectives : []) {
-            const Id = Objective?.online_objective_id;
-            if (typeof Id !== "string" || !/^PrestigeXP_PJMNode_0[2-9]$/.test(Id)) continue;
-            Objective.objective_amount = Math.max(Number(Objective.objective_amount) || 0, bankedXp);
-            const Target = BANKED_XP_OBJECTIVE_TARGETS[Id];
-            if (Target !== undefined && Objective.objective_amount >= Target) Objective.objective_status = OBJECTIVE_STATUS_COMPLETE;
-        }
-    }
-    return nodes;
 }
 
 export function MergePlayerJourneyNodes(storedNodes: any, incomingNodes: any, incomingVersion: number, storedVersion: number): { nodes: any; version: number } {
@@ -754,7 +723,7 @@ export async function SavePlayerJourney(userId: string, nodes: any, updateVersio
         }
 
         return {
-            nodes: ApplyBankedXpObjectives(MergedNodes, await GetBankedWeaponXp(userId)),
+            nodes: MergedNodes,
             update_version: EffectiveVersion,
             newlyUnlocked: NewlyUnlocked
         };
