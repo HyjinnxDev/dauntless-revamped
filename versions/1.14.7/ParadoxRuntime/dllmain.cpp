@@ -6012,6 +6012,7 @@ static void Tick() {
 //   PendingClientItemStateUpdates(+0x338), QueuedClientItemStateUpdates(+0x348)
 // Client only. Log tag [InvProbe]. DISABLE_INVENTORY_PROBE.flag beside the exe turns it off.
 extern void* OrigHasFinishedLoading;   // HasFinishedLoadingHook below; used by InventoryProbe::LoadoutHeal
+extern thread_local int s_lmDepth;     // LoadMapDiagHook below; >0 while the engine is inside LoadMap
 
 namespace InventoryProbe {
 
@@ -6033,7 +6034,10 @@ static bool Read(Snap& S) {
     S = Snap{ nullptr, nullptr, nullptr, nullptr, -1, -1, -1, -1, -1, -1 };
     __try {
         const uintptr_t Pc = reinterpret_cast<uintptr_t>(s_LastPossessedPC);
-        if (!Pc || !IsReadablePointer(reinterpret_cast<void*>(Pc), 0x9C0)) return true;
+        // [1.14.7 FIX 2026-10-27] Readable is not alive: after travel s_LastPossessedPC is the old world's freed
+        // controller until the next possession. Crash reports #10/#11 were LoadoutHeal calling into it.
+        if (!Pc || !IsReadablePointer(reinterpret_cast<void*>(Pc), 0x9C0)
+            || !IsRegisteredLiveObject(reinterpret_cast<void*>(Pc))) return true;
         S.Pc = reinterpret_cast<void*>(Pc);
         S.LocalPlayer = *reinterpret_cast<void**>(Pc + 0x298);
         if (S.LocalPlayer && IsReadablePointer(S.LocalPlayer, 0x348)) {
@@ -6045,6 +6049,7 @@ static bool Read(Snap& S) {
             }
         }
         S.Inv = *reinterpret_cast<void**>(Pc + 0x9B8);
+        if (S.Inv && !IsRegisteredLiveObject(S.Inv)) S.Inv = nullptr;
         if (S.Inv && IsReadablePointer(S.Inv, 0x470)) {
             const uintptr_t I = reinterpret_cast<uintptr_t>(S.Inv);
             S.RepItems = ArrayNum(I, 0x460);
@@ -6108,7 +6113,8 @@ static int FindUnresolvedGearSlots(void* Loadout, UnresolvedSlot* Out, int Max) 
             if (!Data || !IsReadablePointer(reinterpret_cast<void*>(Data), 0x388)) continue;
             for (uintptr_t Off = 0x348; Off <= 0x380; Off += 8) {   // PlayerRole, Weapon, Subweapon, Helmet, Chest, Legs, Arms, Lantern
                 const uintptr_t Slot = *reinterpret_cast<uintptr_t*>(Data + Off);
-                if (!Slot || !IsReadablePointer(reinterpret_cast<void*>(Slot), 0xC0)) continue;
+                if (!Slot || !IsReadablePointer(reinterpret_cast<void*>(Slot), 0xC0)
+                    || !IsRegisteredLiveObject(reinterpret_cast<void*>(Slot))) continue;
                 const uint32_t Crc = *reinterpret_cast<uint32_t*>(Slot + 0x48);       // ItemInstanceID.ItemInstanceIdCrc
                 const int32_t IdLen = *reinterpret_cast<int32_t*>(Slot + 0x40);       // ItemInstanceID.ItemInstanceID.Num
                 if (Crc == 0 || IdLen > 1 || N >= Max) continue;
@@ -6150,7 +6156,7 @@ static void LoadoutHeal(const Snap& S) {
 }
 
 static void Tick() {
-    if (Globals::AmServer || s_Faulted) return;
+    if (Globals::AmServer || s_Faulted || s_lmDepth) return;   // LoadMap frees the old world mid-call
     static const bool s_Disabled = MpExeRelativeFlagPresent(L"DISABLE_INVENTORY_PROBE.flag");
     if (s_Disabled) return;
     const uint64_t Now = GetTickCount64();
@@ -18347,7 +18353,7 @@ static void ExecGetViewportSizeHook(void* ctx, void* stack, void* result) {
 // nulled its pending-kill PersistentLevel. Observe-only: UWorld census at LoadMap entry/exit, plus the
 // current world's PersistentLevel + GUObjectArray flags at the checkpoints LoadMap passes between
 // SetCurrentWorld and the crash site (SetGameMode +0x042D9AA0, ProcessAsyncResults +0x04153460).
-static thread_local int s_lmDepth = 0;
+thread_local int s_lmDepth = 0;   // not static: InventoryProbe::Tick reads it
 static void* s_lmCtx = nullptr;
 
 // FUObjectItem::Flags (EInternalObjectFlags) for Obj; 0xFFFFFFFF unreadable, 0xFFFFFFFE stale slot.
