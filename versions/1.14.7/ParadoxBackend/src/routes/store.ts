@@ -146,15 +146,22 @@ const PublicSku = (Sku: ReturnType<typeof GetStoreSkus>[number]) => ({
 });
 
 // Single-SKU lookup the Hunt Pass purchase window makes (GET /product/sku/{id}); without it the window opens blank.
-storeRouter.get("/product/sku/:id", HasParadoxBackendAuth, (req: any, res) => {
+storeRouter.get("/product/sku/:id", HasParadoxBackendAuth, async (req: any, res) => {
     const Located = FindStoreSkuByIdOrCatalogId(req.params.id);
     if (!Located) {
         res.status(404);
         res.json({ code: "404", message: "unknown_sku" });
         return;
     }
+    // [Revamped 2026-10-28] The hunt pass Elite keeps one id for every pass; show the one of the pass this player
+    // is on, which is what PurchaseStoreSku sells (it showed season43's even on the Commission pass).
+    let Sku = Located.sku;
+    if (IsHuntPassSkuTag(Located.storeTag) && typeof req.AuthData?.userId === "string") {
+        const ServedSlot = await GetServedSlotForUser(req.AuthData.userId);
+        Sku = GetStoreSkus(Located.storeTag, ServedSlot).find((S) => S.id === Sku.id) ?? Sku;
+    }
     res.status(200);
-    res.json(PublicSku(Located.sku));
+    res.json(PublicSku(Sku));
 });
 
 // [2026-07-24] Confirmed real endpoint contract (DauntlessEndpointDocumentation/Store/Product/Skus/
@@ -319,6 +326,7 @@ storeRouter.post("/notification/:currency", HasParadoxBackendAuth, async (req: a
             insufficient_balance: 402,
             conflict: 409,
             already_purchased_different_request: 409,
+            nothing_to_grant: 409,
             transaction_failed: 500,
         };
         logger.warn(`[Store:${StoreTag}] purchase denied for ${UserId} sku=${Payload.skuId}: ${Result.reason}`);

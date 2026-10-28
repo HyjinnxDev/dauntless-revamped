@@ -135,9 +135,10 @@ export class DirectChatService {
             return [messageError(rawTarget, senderFull, stanzaId, "auth", "forbidden")];
         }
 
-        const recipients = target.resource.length > 0
-            ? [this.registry.connectionFor(recipientId, target.resource)].filter((c): c is RegisteredConnection => c !== undefined)
-            : this.registry.connectionsFor(recipientId);
+        // A full JID whose resource is gone (the friend reconnected with a new one) falls back to their live
+        // resources, like a bare JID; otherwise whispers failed after every reconnect.
+        const exact = target.resource.length > 0 ? this.registry.connectionFor(recipientId, target.resource) : undefined;
+        const recipients = exact ? [exact] : this.registry.connectionsFor(recipientId);
 
         if (recipients.length === 0) {
             logger.info(`[XMPP] direct chat recipient offline sender=${sanitizeName(senderId)} recipient=${sanitizeName(recipientId)}`);

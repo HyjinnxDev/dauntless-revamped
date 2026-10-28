@@ -78,7 +78,8 @@ async function recordPartyPresence(accountId: string, state: "ONLINE" | "OFFLINE
         // The presence service reaches OFFLINE only after the reconnect grace expires. At that
         // point remove the stale member through the durable party transaction. PartyRepository
         // deterministically promotes the first remaining member when the old leader left.
-        if (state === "OFFLINE") {
+        // Re-checked after the awaits above: a reconnect in that window must not be kicked from its party.
+        if (state === "OFFLINE" && !sessionRegistry.isOnline(accountId)) {
             await GetUnitOfWork().withTransaction((repos, session) =>
                 repos.parties.leave(accountId, now, session)
             );

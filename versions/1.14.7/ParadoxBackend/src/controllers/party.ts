@@ -117,8 +117,15 @@ export async function InviteToParty(
 }
 
 export async function GetInvitesForPlayer(recipientId: string): Promise<PartyInvite[]> {
-    const records = await GetRepositories().parties.listPendingInvites(recipientId, new Date().toISOString());
-    return records.map(ToInvite);
+    const Repos = GetRepositories();
+    const records = await Repos.parties.listPendingInvites(recipientId, new Date().toISOString());
+    // [Revamped 2026-10-28] Hide invites whose sender has since left that party: accepting one does nothing
+    // (acceptInvite only joins the issuing party), so showing it just made players click Accept twice.
+    const live: typeof records = [];
+    for (const record of records) {
+        if ((await Repos.parties.findByMember(record.sendingPlayerId))?.partyId === record.partyId) live.push(record);
+    }
+    return live.map(ToInvite);
 }
 
 export async function LeaveParty(playerId: string): Promise<void> {

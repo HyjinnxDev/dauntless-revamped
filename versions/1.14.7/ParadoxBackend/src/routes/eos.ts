@@ -16,7 +16,7 @@ import { GetUserIDForAPIKey, SignMetagameJWTForUid, ValidateMetagameJWTAndGetPay
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
 import { GetUsernameForUserId } from "../controllers/login";
 import { StripStaffNameTag } from "../security/staffRoles";
-import { GameNameTagFor } from "../characterSlots";
+import { ActiveCharacters, GameNameTagFor } from "../characterSlots";
 import { GetRepositories } from "../persistence";
 import { HashOpaqueToken } from "../security/launcherTokens";
 import { IsAccountEligible } from "../security/accountEligibility";
@@ -398,9 +398,12 @@ eosRouter.get("/account/api/public/account/displayName/:displayName", async (req
         return;
     }
 
-    logger.info(`Display-name lookup: ${DisplayName} -> ${Account.userId}`);
+    // [Revamped 2026-10-28] Answer with the character the player launched last (as friend lists do): a slot 2+
+    // player's XMPP session and party polls use that id, so invites and friend pushes to the owner id never arrived.
+    const GameId = (await ActiveCharacters([Account.userId])).get(Account.userId) ?? Account.userId;
+    logger.info(`Display-name lookup: ${DisplayName} -> ${GameId}`);
     res.json({
-        id: Account.userId,
+        id: GameId,
         displayName: await GameNameTagFor(Account.roles, Account.userId) + Account.displayName,
         externalAuths: {}
     });

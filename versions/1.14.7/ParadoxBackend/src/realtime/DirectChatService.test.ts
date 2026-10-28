@@ -65,7 +65,7 @@ function setup(statusAB: FriendEdgeRecord["status"] = "ACCEPTED", statusBA: Frie
         registry,
         () => 1_000,
     );
-    return { service, sender, bob1, bob2 };
+    return { service, sender, bob1, bob2, registry };
 }
 
 test("direct chat: accepted friendship delivers escaped text to all recipient resources", async () => {
@@ -98,9 +98,17 @@ test("direct chat: both friendship directions must be accepted", async () => {
     assert.match(errors[0], /<forbidden /);
 });
 
-test("direct chat: offline friend returns service-unavailable without throwing", async () => {
+test("direct chat: full JID of a gone resource falls back to the live resources (RFC 6121 8.5.3.2.1)", async () => {
     const { service, sender, bob1, bob2 } = setup();
-    // Target an accepted friend's specific resource that is not connected.
+    const errors = await service.routeDirectMessage(sender, "bob@prod.ol.epicgames.com/missing", "m4", "hello?");
+    assert.deepEqual(errors, []);
+    assert.equal(bob1.sent.length, 1);
+    assert.equal(bob2.sent.length, 1);
+});
+
+test("direct chat: offline friend returns service-unavailable without throwing", async () => {
+    const { service, sender, bob1, bob2, registry } = setup();
+    registry.conns.delete("bob");
     const errors = await service.routeDirectMessage(sender, "bob@prod.ol.epicgames.com/missing", "m4", "hello?");
     assert.equal(bob1.sent.length + bob2.sent.length, 0);
     assert.match(errors[0], /<service-unavailable /);

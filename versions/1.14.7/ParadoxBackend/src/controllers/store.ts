@@ -325,6 +325,12 @@ export const FountainClaimedToday = (userId: string, characterId: string) =>
 // controllers/progression.ts validates rank-confirm requests with. A no-op plan (unknown track,
 // already at max rank, nothing to grant) is logged rather than silently ignored, because for a
 // PAID SKU "granted nothing" is a fact worth having in the log next to the debit.
+class NothingToGrantError extends Error {
+    constructor(skuId: string) {
+        super(`sku ${skuId} would grant nothing`);
+    }
+}
+
 async function GrantSkuProgressionInTransaction(repos: RepositoryProvider, userId: string, sku: StoreSku, session: ClientSession): Promise<void> {
     if (sku.skuProgression == undefined) return;
 
@@ -344,6 +350,9 @@ async function GrantSkuProgressionInTransaction(repos: RepositoryProvider, userI
 
     if (Plan.kind === "none") {
         logger.warn(`[StoreProgression] ${userId} sku=${sku.id} granted no progression (${Plan.reason}, requested track=${RawTrackId} xp=${sku.skuProgression.xp} ranks=${sku.skuProgression.ranks})`);
+        // [Revamped 2026-10-28] A SKU that is only progression (rank skips) must not charge for nothing, e.g. at
+        // max rank: throwing rolls the debit back. SKUs with items or entitlements still go through.
+        if ((sku.items?.length ?? 0) === 0 && (sku.entitlements?.length ?? 0) === 0) throw new NothingToGrantError(sku.id);
         return;
     }
 
@@ -357,7 +366,7 @@ async function GrantSkuProgressionInTransaction(repos: RepositoryProvider, userI
 
 export type PurchaseResult =
     | { ok: true; result: any }
-    | { ok: false; reason: "unknown_sku" | "unknown_currency" | "insufficient_balance" | "conflict" | "already_purchased_different_request" | "transaction_failed" };
+    | { ok: false; reason: "unknown_sku" | "unknown_currency" | "insufficient_balance" | "conflict" | "already_purchased_different_request" | "transaction_failed" | "nothing_to_grant" };
 
 // The client's currency path segment (/token/{currency}/{sku}): a price's currencyId without `id_currency_` and underscores.
 export const CurrencySlug = (CurrencyId: string) => CurrencyId.replace(/^id_currency_/, "").replace(/_/g, "");
@@ -471,6 +480,9 @@ export async function PurchaseStoreSku(userId: string, characterId: string, stor
         }
         if (Err instanceof InventoryTransactionMismatchError) {
             return { ok: false, reason: "already_purchased_different_request" };
+        }
+        if (Err instanceof NothingToGrantError) {
+            return { ok: false, reason: "nothing_to_grant" };
         }
         throw Err;
     }

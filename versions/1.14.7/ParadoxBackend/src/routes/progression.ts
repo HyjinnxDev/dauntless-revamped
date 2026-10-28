@@ -37,6 +37,7 @@ const NO_PLAYER_SENTINEL = "INVALID";
 
 const DEFAULT_PROGRESSION_IDS = [
     "MasteryTrack_PlayerLevel",
+    "MasteryTrack_Behemoth", // [Revamped 2026-10-28] was missing: no zero row until the first Behemoth XP (APPROVED_XP_PROGRESSION_TRACK_IDS has it)
     "MasteryTrack_Weapon_Axe",
     "MasteryTrack_Weapon_ChainBlades",
     "MasteryTrack_Weapon_Hammer",
