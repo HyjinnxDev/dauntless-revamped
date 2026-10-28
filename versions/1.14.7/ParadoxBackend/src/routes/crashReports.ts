@@ -120,7 +120,12 @@ async function fileIssue(id: string, report: Record<string, any>, summary: strin
         }
         await github("POST", `/issues/${known.number}/comments`, { body: `Seen again (#${known.count}): ${line}` });
     }
-    fs.writeFileSync(ISSUE_INDEX, JSON.stringify(index, null, 1));
+    // Re-read before writing (sync, no await between): another signature's chain may have written meanwhile,
+    // and writing our stale copy dropped its entry, so its next crash opened a duplicate issue.
+    const latest: Record<string, { number: number; count: number }> = fs.existsSync(ISSUE_INDEX)
+        ? JSON.parse(fs.readFileSync(ISSUE_INDEX, "utf8")) : {};
+    latest[sig] = index[sig];
+    fs.writeFileSync(ISSUE_INDEX, JSON.stringify(latest, null, 1));
 }
 
 function queueIssue(id: string, report: Record<string, any>, summary: string): void {

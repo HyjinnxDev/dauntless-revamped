@@ -32,7 +32,8 @@ export interface RefreshSessionRecord {
 export interface RefreshSessionRepository {
     create(session: RefreshSessionRecord): Promise<void>;
     findByTokenHash(tokenHash: string): Promise<RefreshSessionRecord | undefined>;
-    revokeById(id: string): Promise<void>;
+    /** false = already revoked (a concurrent rotation won). */
+    revokeById(id: string): Promise<boolean>;
     revokeFamily(familyId: string): Promise<void>;
     revokeAllForUser(userId: string): Promise<void>;
     isFamilyActive(familyId: string, userId: string): Promise<boolean>;

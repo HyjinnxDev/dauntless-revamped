@@ -255,7 +255,9 @@ async function GracefulShutdown(Signal: string, ExitCode = 0): Promise<void> {
 process.on("SIGINT", () => { GracefulShutdown("SIGINT"); });
 process.on("SIGTERM", () => { GracefulShutdown("SIGTERM"); });
 
+// [Revamped 2026-10-28] Exit on a failed startup: exitCode alone left the process up (Mongo client, a listener
+// already bound) with nothing serving, which looked alive to the restart script.
 Main().catch((Err) => {
     logger.error(`Fatal startup error: ${Err}`);
-    process.exitCode = 1;
+    void GracefulShutdown("STARTUP_FAILED", 1);
 });

@@ -2095,7 +2095,8 @@ async function loadExtras(snap: Snapshot): Promise<void> {
   if (!snap.server || snap.phase === "join" || snap.phase === "connect") return;
   const key = `${snap.server.host}:${snap.server.port}`;
   const empty = state.news.length === 0 && state.branding.backgrounds.length === 0;
-  if (key === state.extrasFor && !(empty && Date.now() - state.extrasAt > 5000)) return;
+  // Re-asks every minute once loaded (main refreshes news every 60 s; host art can land after the news).
+  if (key === state.extrasFor && Date.now() - state.extrasAt < (empty ? 5000 : 60_000)) return;
   const changedServer = key !== state.extrasFor;
   state.extrasFor = key;
   state.extrasAt = Date.now();

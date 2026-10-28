@@ -176,7 +176,16 @@ export class MongoPartyRepository implements PartyRepository {
         // An invite belongs to the issuing party, not merely to the inviter account. If the
         // inviter left or switched parties, the old invite cannot become a capability to join
         // their new party.
-        if (target.partyId !== invite.partyId) return current;
+        if (target.partyId !== invite.partyId) {
+            // [Revamped 2026-10-28] Revoke it, or it stayed listed and every Accept did nothing (players clicked
+            // again until a fresh invite came).
+            await db.collection(Collections.PartyInvites).updateOne(
+                { _id: InviteId(input.recipientId, input.inviterId) as never, status: "PENDING" },
+                { $set: { status: "REVOKED", consumedAt: input.now } },
+                { session }
+            );
+            return current;
+        }
         if (current?.partyId === target.partyId) {
             await this.consumeRecipientInvites(db, input.recipientId, input.inviterId, input.now, session);
             return target;

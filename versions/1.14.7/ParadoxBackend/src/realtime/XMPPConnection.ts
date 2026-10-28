@@ -146,6 +146,11 @@ export class XMPPConnection {
             recordAuthSuccess(this.remoteIp);
         }
         if (action.resource) {
+            // [Revamped 2026-10-28] A second <bind> on this socket used to leave the old resource registered,
+            // so isOnline() stayed true and pushes went to a ghost (FINDINGS L13).
+            if (this.accountId && this.resource && this.resource !== action.resource) {
+                sessionRegistry.unbind(this.accountId, this.resource, this);
+            }
             this.resource = action.resource;
             if (this.accountId) {
                 // Duplicate-resource policy: deterministic replacement (plan §10.3). If the same

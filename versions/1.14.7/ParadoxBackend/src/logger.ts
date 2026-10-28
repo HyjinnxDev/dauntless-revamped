@@ -40,9 +40,12 @@ export const logger = pino({
   },
 
   transport: {
+    // level: "trace" on each target: pino targets default to info, which silently dropped debug lines even
+    // when the DEVELOPMENT diagnostics profile lowered logger.level. logger.level stays the only gate.
     targets: [
       {
         target: "pino-pretty",
+        level: "trace",
         options: {
           colorize: true,
           translateTime: "HH:MM:ss",
@@ -51,6 +54,7 @@ export const logger = pino({
       },
       {
         target: "pino-pretty",
+        level: "trace",
         options: {
           colorize: false,
           translateTime: "SYS:standard",

@@ -174,7 +174,8 @@ app.use((req, res, next) => {
     if (BODY_CAPTURE_ENABLED && req.method === "POST" && /(pjm|progression|breadcrumbs|store|reconcile|balance|purchase|unlock|merit|currenc|inventory)/i.test(req.originalUrl)) {
         try { logger.info(`[BODY-CAPTURE] ${req.method} ${loggedUrl} body=${JSON.stringify(req.body)}`); } catch { /* ignore */ }
     }
-    res.on("finish", () => {
+    // "close" fires for finished and aborted responses alike; "finish" missed aborts, so inflight only climbed.
+    res.once("close", () => {
         AdjustMetric("mysticparadox_http_inflight", -1);
         IncrementMetric("mysticparadox_http_responses_total", 1, { class: metricClass, status: `${Math.floor(res.statusCode / 100)}xx` });
         ObserveMetric("mysticparadox_http_request_duration_ms", Date.now() - started, { class: metricClass });
@@ -265,3 +266,13 @@ app.use((req, res) => {
 });
 
 Extension.http.mountErrorHandlers(app);
+
+// [Revamped 2026-10-28] Last error handler: without one, Express's default sent the stack trace (with local
+// paths) as HTML for bad JSON bodies and any thrown controller error.
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) return next(err);
+    const Status = (err as { status?: unknown })?.status;
+    const Code = typeof Status === "number" && Status >= 400 && Status < 600 ? Status : 500;
+    if (Code >= 500) logger.error({ err }, `[HTTP] ${req.method} ${sanitizeUrlForLog(req.originalUrl)} failed`);
+    res.status(Code).json({ error: Code >= 500 ? "internal_error" : "bad_request" });
+});

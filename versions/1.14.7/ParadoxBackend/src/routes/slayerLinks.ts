@@ -93,13 +93,25 @@ async function Settle(Me: string) {
         if (Row.status !== "LINKED" || (Row.endsAt ?? 0) + REWARD_GRACE_HOURS * 60 * 60 * 1000 <= Now || Row.rewardsGranted?.includes(Me)) continue;
         const Xp = await LinkXp(Me, SlotOf(Row, Me));
         const Skip = new Set<string>(!Row.prizePools?.[Me] && await OwnsCrown(Me) ? [LINK_CROWN] : []);
-        let { put, grant } = SettleLink(Row, Me, Xp, Now, Math.random, Skip);
+        const { put, grant } = SettleLink(Row, Me, Xp, Now, Math.random, Skip);
         let Log = `settle for=${Me} id=${Row._id} xp=${Xp}`;
+        let Granted = false;
         if (grant && (grant.length === 0 || await GrantPrizes(Me, Row, grant))) {
-            put = { ...(put ?? Row), rewardsGranted: [...(Row.rewardsGranted ?? []), Me] };
+            Granted = true;
             Log += ` -> granted [${grant.map((P) => `${P.catalog_id}x${P.quantity}@${P.received_for_level}`).join(",")}]`;
         }
-        if (put) await Apply({ put: [put], log: Log });
+        // [Revamped 2026-10-28] Settle only changes my own pool and my granted flag, so write just those. Replacing
+        // the whole row lost the partner's pool when both settled at once (the next read redrew it, and the
+        // week-end grant then hit a transaction mismatch on every read).
+        const Pool = put?.prizePools?.[Me];
+        if (Pool || Granted) {
+            const Db = await GetMongoDb();
+            await Db.collection<SlayerLinkRow>(Collections.SlayerLinks).updateOne({ _id: Row._id }, {
+                ...(Pool ? { $set: { [`prizePools.${Me}`]: Pool } } : {}),
+                ...(Granted ? { $addToSet: { rewardsGranted: Me } } : {}),
+            } as any);
+            logger.info(`slayerlink: ${Log}`);
+        }
     }
 }
 

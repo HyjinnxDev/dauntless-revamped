@@ -151,6 +151,7 @@ export class VerifiedCache {
   private dir: string | null = null;
   private files = new Map<string, { size: number; mtimeMs: number }>();
   private dirty = false;
+  private writing: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly file: string) {
     try {
@@ -195,12 +196,22 @@ export class VerifiedCache {
     if (this.dir === dir && this.files.delete(f.path)) this.dirty = true;
   }
 
-  async save(): Promise<void> {
-    if (!this.dirty) return;
-    this.dirty = false;
-    const data = { dir: this.dir, files: Object.fromEntries(this.files) };
-    await fsp.mkdir(path.dirname(this.file), { recursive: true });
-    await fsp.writeFile(this.file + ".tmp", JSON.stringify(data));
-    await fsp.rename(this.file + ".tmp", this.file);
+  // Saves run one at a time (up to 4 downloads finish together and share the .tmp file); a failed save stays dirty.
+  save(): Promise<void> {
+    const write = this.writing.then(async () => {
+      if (!this.dirty) return;
+      this.dirty = false;
+      const data = { dir: this.dir, files: Object.fromEntries(this.files) };
+      try {
+        await fsp.mkdir(path.dirname(this.file), { recursive: true });
+        await fsp.writeFile(this.file + ".tmp", JSON.stringify(data));
+        await fsp.rename(this.file + ".tmp", this.file);
+      } catch (e) {
+        this.dirty = true;
+        throw e;
+      }
+    });
+    this.writing = write.catch(() => undefined);
+    return write;
   }
 }

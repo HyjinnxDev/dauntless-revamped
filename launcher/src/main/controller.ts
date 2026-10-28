@@ -536,14 +536,19 @@ export class Controller {
     if (this.checking) return OK;
     this.checking = true;
     this.publish();
+    // A server switch mid-check must not get the old server's answer; the finally re-checks the new one.
+    const gen = this.generation;
     try {
       const res = await fetchServerStatus(ep);
+      if (gen !== this.generation) return OK;
       this.lastCheckedAt = new Date().toISOString();
       if (res.kind === "ok") {
         this.reachable = true;
         this.connectProblem = null;
         this.failedPolls = 0;
-        this.contentProbe = await probeContent(ep);
+        const probe = await probeContent(ep);
+        if (gen !== this.generation) return OK;
+        this.contentProbe = probe;
         if (!this.account) await this.resumeSession();
         await this.inspectInstall();
         void this.loadExtras();
@@ -558,6 +563,7 @@ export class Controller {
       return OK;
     } finally {
       this.checking = false;
+      if (gen !== this.generation) void this.connect();
       this.publish();
     }
   }
@@ -662,6 +668,7 @@ export class Controller {
   private async loadExtras(): Promise<void> {
     const ep = this.contentEndpoint();
     if (!ep) return;
+    const gen = this.generation;
     await this.refreshNews();
     if (this.branding === null) {
       const index = await fetchBrandingIndex(ep);
@@ -670,6 +677,8 @@ export class Controller {
         const img = await fetchBrandingImage(ep, b.path);
         if (img) backgrounds.push({ url: await this.keepArt(img), credit: b.credit });
       }
+      // Switched server while the art downloaded: don't paint the old server's art on the new one.
+      if (gen !== this.generation) return;
       this.branding = { backgrounds, accent: index.accent };
     }
     this.publish();
@@ -728,7 +737,12 @@ export class Controller {
       const token = await this.keys.load(slot).catch(() => null);
       if (!token) return null;
       const res = await refreshSession(ep, token, this.device());
-      if (gen !== this.generation) return null;
+      if (gen !== this.generation) {
+        // The server already rotated the token: keep the new one for that server, or the next visit replays the
+        // old one and the server revokes the whole sign-in.
+        if (res.ok) await this.keys.save(slot, res.session.refreshToken).catch(() => undefined);
+        return null;
+      }
       if (res.ok) return this.adopt(res.session);
       if (res.error === "session_expired" || res.error === "account_banned") {
         await this.keys.remove(slot);
@@ -741,10 +755,11 @@ export class Controller {
       }
       return null;
     };
-    this.refreshing = run().finally(() => {
-      this.refreshing = null;
+    const p: Promise<Account | null> = run().finally(() => {
+      if (this.refreshing === p) this.refreshing = null;
     });
-    return this.refreshing;
+    this.refreshing = p;
+    return p;
   }
 
   // ------------------------------------------------------------------ characters
@@ -875,9 +890,12 @@ export class Controller {
     const ep = this.endpoint();
     if (!slot || !ep) return OK;
     const token = this.account?.accessToken;
+    const pending = this.refreshing;
     this.generation++;
     this.account = null;
     this.refreshing = null;
+    // An in-flight refresh saves its rotated token when it finishes; remove only after that, or the sign-in comes back.
+    if (pending) await pending.catch(() => null);
     await this.keys.remove(slot);
     if (token) await apiLogout(ep, token);
     log.info("signed out");
@@ -990,12 +1008,15 @@ export class Controller {
     return this.runTask("repair");
   }
 
+  // publish(): the Pause/Resume button label comes from the snapshot, which progress events don't refresh.
   pauseTask(): void {
     if (this.job && this.task?.kind === "download") this.job.pause();
+    this.publish();
   }
 
   resumeTask(): void {
     if (this.job && this.task?.kind === "download") this.job.resume();
+    this.publish();
   }
 
   cancelTask(): void {
@@ -1029,7 +1050,8 @@ export class Controller {
   }
 
   private async runTask(mode: "install" | "repair"): Promise<ActionResult> {
-    if (this.task || this.busy) return err("busy");
+    // taskAbort is set before the first await, task only after it: check both so two clicks can't start two jobs.
+    if (this.task || this.taskAbort || this.busy) return err("busy");
     if (this.game.running) return this.fail("already_running");
     const manifest = this.p.manifest;
     if (!manifest) return this.fail("manifest_unavailable");
@@ -1076,7 +1098,8 @@ export class Controller {
         if (ep && this.contentProbe !== true) this.contentProbe = await probeContent(ep);
         const cep = this.contentEndpoint();
         if (!cep) return this.fail("no_content_server");
-        if ((await this.accessToken()) === null) return this.fail("session_expired");
+        // null with the account still set = the refresh failed for a moment (unreachable, busy); the sign-in is kept.
+        if ((await this.accessToken()) === null) return this.fail(this.account ? ((this.lastError as LauncherError | null)?.code ?? "server_unreachable") : "session_expired");
 
         const serverManifest = await fetchContentManifest(cep);
         if (serverManifest === null) return this.fail("manifest_unavailable");
@@ -1097,7 +1120,12 @@ export class Controller {
         const job = new DownloadJob({
           endpoint: cep,
           downloadBaseUrl: contentDownloadBase(serverManifest),
-          auth: () => this.accessToken(),
+          auth: async () => {
+            const token = await this.accessToken();
+            // A brief refresh failure is a normal retry, not "session expired" (which stops the whole download).
+            if (token === null && this.account) throw new Error("sign-in refresh failed");
+            return token;
+          },
           installDir: dir,
           files: needed,
           onProgress: (p) => this.setTask({ kind: "download", ...p }),
@@ -1107,6 +1135,8 @@ export class Controller {
           },
         });
         this.job = job;
+        // Cancel clicked before the job existed (manifest fetch, disk check) only aborted taskAbort.
+        if (abort.signal.aborted) throw new AbortedError();
         this.setTask(blank("download", needed.reduce((a, f) => a + f.size, 0), needed.length));
         this.publish();
         await job.run();
@@ -1115,6 +1145,7 @@ export class Controller {
       }
 
       // 3. The server's runtime.
+      if (abort.signal.aborted) throw new AbortedError();
       this.setTask(blank("runtime", 2, 2));
       this.publish();
       const runtime = await this.ensureRuntime(dir);

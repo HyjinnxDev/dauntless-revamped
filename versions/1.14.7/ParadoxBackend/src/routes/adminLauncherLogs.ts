@@ -9,6 +9,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { pipeline } from "node:stream";
 import path from "node:path";
 import { LOG_STORAGE_ROOT } from "./launcherLogs";
 
@@ -104,6 +105,6 @@ adminLauncherLogsRouter.get(
         }
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Length", fs.statSync(filePath).size);
-        fs.createReadStream(filePath).pipe(res);
+        pipeline(fs.createReadStream(filePath), res, () => undefined); // a file removed or locked mid-send must not crash the process
     }
 );

@@ -20,7 +20,8 @@ const DEPLOYSERVER_URL = process.env.DEPLOYSERVER_URL;
 const DEPLOYSERVER_MATCHMAKING_PATH = "/api/matchmaker/handle-matchmaking-for-player";
 
 // [2026-10-19] A solo player or a whole party travelling together to a public hunt.
-type PublicMatchGroup = { PartyId?: string, Members: string[] };
+// StartedAt: when the launch began; members who cancelled since then are not written back in.
+type PublicMatchGroup = { PartyId?: string, Members: string[], StartedAt?: number };
 
 export type MatchmakingResult = {
     Ready: boolean,
@@ -243,7 +244,10 @@ function ReleaseGroupTo(HuntId: string, Group: PublicMatchGroup, Host: string, P
         PartyInstanceMap.set(Group.PartyId, Shared);
         PartyInstanceCreatedAtMap.set(Group.PartyId, Date.now());
     }
-    for (const Member of Group.Members) MatchmakingResultMap.set(Member, { ...Shared, CandidateId: crypto.randomUUID() });
+    for (const Member of Group.Members) {
+        if (Group.StartedAt != undefined && WasCancelledSince(Member, Group.StartedAt)) continue;
+        MatchmakingResultMap.set(Member, { ...Shared, CandidateId: crypto.randomUUID() });
+    }
     return Shared;
 }
 
@@ -301,7 +305,14 @@ async function JoinPublicHuntOnDeployserver(HuntId: string, Players: string[]): 
 // When a whole party joins the same hunt, they must land in ONE game instance. The first
 // member to arrive creates it (with the full party as ExpectedPlayers); everyone else — who
 // follows once GetParty shows the party's active hunt — reuses that same host:port.
+// [Revamped 2026-10-28] One launch per party at a time. The party instance is only written once the Director
+// answers (stagger + readiness wait, up to ~30 s); a second join in that window (retry, double click, another
+// member) launched a second server and split the party. Later callers wait for the first launch and reuse it.
+const PartyLaunchInFlight = new Map<string, { HuntId: string, Done: Promise<boolean> }>();
 async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId: string, PartyMembers: string[], IsPrivate: boolean = true, GauntletLevel?: number){
+    const InFlight = PartyLaunchInFlight.get(PartyId);
+    if (InFlight != undefined && InFlight.HuntId === HuntId && !(await InFlight.Done)) return false;
+
     const Existing = PartyInstanceMap.get(PartyId);
     const ExistingCreatedAt = PartyInstanceCreatedAtMap.get(PartyId) ?? 0;
 
@@ -317,8 +328,19 @@ async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId:
         return true;
     }
 
+    const Done = LaunchPartyInstance(HuntId, PartyId, PartyMembers, IsPrivate, GauntletLevel);
+    PartyLaunchInFlight.set(PartyId, { HuntId, Done });
+    try {
+        return await Done;
+    } finally {
+        if (PartyLaunchInFlight.get(PartyId)?.Done === Done) PartyLaunchInFlight.delete(PartyId);
+    }
+}
+
+async function LaunchPartyInstance(HuntId: string, PartyId: string, PartyMembers: string[], IsPrivate: boolean, GauntletLevel?: number){
+    const StartedAt = Date.now();
     if(!IsPrivate){
-        return await JoinOrLaunchPublicHunt(HuntId, { PartyId, Members: PartyMembers });
+        return await JoinOrLaunchPublicHunt(HuntId, { PartyId, Members: PartyMembers, StartedAt });
     }
 
     const GameOnDeployServer = await LaunchGameOnDeployserver("ISLAND", "", HuntId, PartyMembers, true, GauntletLevel);
@@ -343,6 +365,8 @@ async function HandlePartyMatchmaking(HuntId: string, PlayerId: string, PartyId:
     PartyInstanceCreatedAtMap.set(PartyId, Date.now());
 
     for(const Member of PartyMembers){
+        // A member who cancelled while the server launched stays out (the requester is checked by the route).
+        if (WasCancelledSince(Member, StartedAt)) continue;
         MatchmakingResultMap.set(Member, { ...SharedResult, CandidateId: crypto.randomUUID() });
     }
 

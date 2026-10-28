@@ -33,4 +33,3 @@ export const RUNTIME_RELATIVE_PATHS = RUNTIME_FILE_NAMES.map((n) => `${WIN64_REL
 export const CONNECT_TIMEOUT_MS = 5000;
 export const STATUS_POLL_MS = 15000;
 export const DISK_MARGIN_BYTES = 1024 * 1024 * 1024; // 1 GiB on top of what is still to download
-export const DOWNLOAD_CONCURRENCY = 4;

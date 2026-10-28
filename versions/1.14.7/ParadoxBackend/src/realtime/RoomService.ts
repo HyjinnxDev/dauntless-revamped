@@ -89,6 +89,9 @@ export function parseRoomJid(to: string, requireNick = false): { roomBare: strin
 
 export class RoomService {
     private readonly rooms = new Map<string, Map<string, Occupant>>();
+    // [Revamped 2026-10-28] Sockets already torn down: a join still awaiting authorizeJoin when its socket closed
+    // used to register a ghost occupant that never left the room.
+    private readonly closedConns = new WeakSet<RegisteredConnection>();
     private cityWarned = false;
     private huntWarned = false;
 
@@ -108,6 +111,7 @@ export class RoomService {
         if (!target || !accountId || !resource) return [];
 
         const auth = await this.authorizeJoin(target.roomLocal, accountId);
+        if (this.closedConns.has(conn)) return [];
         if (!auth.ok) {
             logger.warn(`[XMPP] MUC join denied (${auth.reason}) room=${sanitizeName(target.roomLocal)}`);
             return [
@@ -222,6 +226,7 @@ export class RoomService {
 
     /** Remove a closed connection from every room it occupied (called on teardown). */
     onConnectionClosed(conn: RegisteredConnection): void {
+        this.closedConns.add(conn);
         if (!conn.accountId || !conn.resource) return;
         for (const roomLocal of [...this.rooms.keys()]) {
             this.removeOccupant(roomLocal, conn.accountId, conn.resource);
