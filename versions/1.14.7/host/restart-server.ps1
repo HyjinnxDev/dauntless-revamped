@@ -52,6 +52,7 @@ if (-not (Get-NetTCPConnection -State Listen -LocalPort 27018 -ErrorAction Silen
 }
 
 # 3. Backend (rebuilds itself when stale), then wait until HTTPS is up.
+Remove-Item "$logs\backend.log" -ErrorAction SilentlyContinue   # else the ready check can match the last run
 Start-Process cmd.exe -ArgumentList '/c', "npm start > `"$logs\backend.log`" 2>&1" -WorkingDirectory "$repo\ParadoxBackend" -WindowStyle Hidden
 $deadline = (Get-Date).AddMinutes(3)
 while (-not (Select-String "$logs\backend.log" -Pattern 'paradox=ready|EADDRINUSE|FATAL' -Quiet -ErrorAction SilentlyContinue)) {

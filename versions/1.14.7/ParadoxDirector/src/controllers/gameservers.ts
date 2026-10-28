@@ -501,6 +501,8 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
             : (Behemoth != undefined ? Behemoth.split("/").pop()!.split(".")[0] : "hunt");
     const LogPath = path.join(GAMESERVER_LOG_DIR, `port${Port}_${Label}.log`);
     const LogStream = fs.createWriteStream(LogPath, { flags: "a" });
+    // A log write error (disk full, a late write after end) must not become an uncaught exception.
+    LogStream.on("error", (err) => logger.warn(`gameserver log ${LogPath}: ${err.message}`));
     LogStream.write(
         `=== Gameserver launch ${new Date().toLocaleString()} (local time) ===\n` +
         `port=${Port} map=${Map} behemoth=${Behemoth ?? "NO_BEHEMOTH"} ` +
@@ -550,8 +552,11 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     }
     if (IsHunt) Ports.attachPid(LeasedPort, Id, Child.pid);
 
-    Child.stdout?.pipe(LogStream);
-    Child.stderr?.pipe(LogStream);
+    // end: false on both, closed once both pipes are done: the first pipe to end used to end the log, so the
+    // "Gameserver process exited" banner (written on exit) never reached the per-port log.
+    Child.stdout?.pipe(LogStream, { end: false });
+    Child.stderr?.pipe(LogStream, { end: false });
+    Child.once("close", () => LogStream.end());
     LogStream.write(`pid=${Child.pid ?? "unknown"}\n\n`);
 
     logger.info(`${Label} spawned on port ${Port} (pid=${Child.pid ?? "unknown"}) -> ${LogPath}`);

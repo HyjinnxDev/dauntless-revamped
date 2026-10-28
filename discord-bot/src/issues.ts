@@ -42,15 +42,21 @@ export interface IssueData { lastId: number; channels: string[]; log?: string; i
 // The whole ticket file, kept in memory; every change rewrites it (write to .tmp, then rename).
 export class IssueStore {
     private Data: IssueData | undefined;
+    private Loading: Promise<IssueData> | undefined;
     private Saving: Promise<void> = Promise.resolve();
     constructor(readonly file: string) {}
 
     // A missing file starts empty; an unreadable one throws, so it is never overwritten.
+    // One shared read: two commands during the first load each got their own copy, and one ticket was lost.
     async load(): Promise<IssueData> {
-        this.Data ??= await readFile(this.file, "utf8").then((Text) => JSON.parse(Text) as IssueData, (error) => {
+        this.Loading ??= readFile(this.file, "utf8").then((Text) => JSON.parse(Text) as IssueData, (error) => {
             if (error.code === "ENOENT") return { lastId: 0, channels: [], issues: [] };
             throw error;
+        }).catch((error) => {
+            this.Loading = undefined; // retry on the next command
+            throw error;
         });
+        this.Data ??= await this.Loading;
         return this.Data;
     }
 
