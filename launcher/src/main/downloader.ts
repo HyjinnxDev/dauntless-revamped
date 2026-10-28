@@ -176,6 +176,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 function hashExisting(file: string, hash: Hash, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new Interrupted());
     const rs = createReadStream(file, { highWaterMark: 1024 * 1024 });
     const onAbort = () => {
       rs.destroy();
@@ -387,6 +388,7 @@ export class DownloadJob {
           return;
         }
         this.opts.onRetry?.(file, n, reason);
+        if (slot.bytes > 0) this.partial.set(file.path, slot.bytes); // keeps the bar from jumping back during the wait
         await this.pausableSleep(this.backoff(n));
         this.queue.unshift(file);
       }
@@ -460,6 +462,8 @@ export class DownloadJob {
     token: string,
   ): Promise<number> {
     const signal = slot.controller.signal;
+    // An abort listener added to an already-aborted signal never fires: pause/cancel during the token refresh.
+    if (signal.aborted) return Promise.reject(new Interrupted());
     const cdn = this.downloadBaseUrl !== undefined;
     const url = cdn
       ? new URL(file.path.split("/").map(encodeURIComponent).join("/"), this.downloadBaseUrl)

@@ -111,6 +111,8 @@ export function sanitizeSettings(raw: unknown, language: Language): StoredSettin
 export class SettingsStore {
   private data: StoredSettings;
   private readonly file: string;
+  // One write at a time: overlapping writes shared settings.json.tmp, so a rename could fail or leave broken JSON.
+  private writing: Promise<unknown> = Promise.resolve();
 
   constructor(dir: string, language: Language) {
     this.file = path.join(dir, "settings.json");
@@ -131,10 +133,15 @@ export class SettingsStore {
     const copy: StoredSettings = JSON.parse(JSON.stringify(this.data));
     fn(copy);
     this.data = sanitizeSettings(copy, copy.language);
-    await fsp.mkdir(path.dirname(this.file), { recursive: true });
-    const tmp = `${this.file}.tmp`;
-    await fsp.writeFile(tmp, JSON.stringify(this.data, null, 2));
-    await fsp.rename(tmp, this.file);
+    const text = JSON.stringify(this.data, null, 2);
+    const write = this.writing.then(async () => {
+      await fsp.mkdir(path.dirname(this.file), { recursive: true });
+      const tmp = `${this.file}.tmp`;
+      await fsp.writeFile(tmp, text);
+      await fsp.rename(tmp, this.file);
+    });
+    this.writing = write.catch(() => undefined);
+    await write;
     return this.data;
   }
 }
