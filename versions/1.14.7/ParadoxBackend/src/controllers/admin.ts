@@ -280,7 +280,10 @@ export async function UpdatePlayerRoles(req: Request, res: Response): Promise<vo
 
     // A beta/dev exchange code must not survive removal of Tester during its 60-second lifetime.
     if (Before.roles.includes(TESTER_ROLE) && !After.roles.includes(TESTER_ROLE)) {
-        await Repos.gameExchangeCodes.revokeUnusedForUser(TargetUserId);
+        // Exchange codes are stored under the character slot's game id, so revoke on every slot.
+        for (const Slot of await ListSlots(await OwnerOf(TargetUserId))) {
+            await Repos.gameExchangeCodes.revokeUnusedForUser(Slot._id);
+        }
     }
 
     const RequestId = crypto.randomUUID();

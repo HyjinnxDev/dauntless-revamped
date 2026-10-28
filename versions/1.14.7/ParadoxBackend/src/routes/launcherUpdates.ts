@@ -1,6 +1,7 @@
 import express, { Router, Request, Response } from "express";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { pipeline } from "node:stream";
 import path from "node:path";
 import { HasLauncherAuth } from "../middleware/HasLauncherAuth";
 import { GetRepositories } from "../persistence";
@@ -333,7 +334,7 @@ function serveRuntimeDownload(target: string, channel: string, platform: string,
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Length", fs.statSync(artifact).size);
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        fs.createReadStream(artifact).pipe(res);
+        pipeline(fs.createReadStream(artifact), res, () => undefined); // a file removed or locked mid-send must not crash the process
     } catch {
         res.sendStatus(400);
     }
@@ -600,7 +601,7 @@ launcherUpdatesRouter.get("/launcher/v1/runtime/:target/:channel/:platform/extra
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Length", fs.statSync(artifact).size);
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        fs.createReadStream(artifact).pipe(res);
+        pipeline(fs.createReadStream(artifact), res, () => undefined); // a file removed or locked mid-send must not crash the process
     } catch { res.sendStatus(400); }
 });
 
@@ -658,7 +659,7 @@ launcherUpdatesRouter.get("/launcher/v1/updates/:target/:arch/download", (req, r
         res.setHeader("Content-Type", "application/octet-stream");
         res.setHeader("Content-Length", fs.statSync(artifact).size);
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-        fs.createReadStream(artifact).pipe(res);
+        pipeline(fs.createReadStream(artifact), res, () => undefined); // a file removed or locked mid-send must not crash the process
     } catch {
         res.sendStatus(400);
     }

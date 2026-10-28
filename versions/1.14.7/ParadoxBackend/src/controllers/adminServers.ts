@@ -112,6 +112,11 @@ function ListProcesses(): Promise<RawProc[]> {
             let Procs: RawProc[] = [];
             try { if (!Err) Procs = JSON.parse(Out) ?? []; } catch { /* empty list */ }
             ProcCache = { at: Date.now(), procs: Procs };
+            // Forget exited processes (every hunt server is a new pid), or the map grows for the life of the backend.
+            if (!Err) {
+                const Live = new Set(Procs.map((P) => P.p));
+                for (const Pid of LastProcCpu.keys()) if (!Live.has(Pid)) LastProcCpu.delete(Pid);
+            }
             resolve(Procs);
         });
     });
@@ -229,9 +234,14 @@ export async function RestartStack(req: Request, res: Response): Promise<void> {
     res.json({ ok: true });
     // Detached so the script outlives this process (a stack restart stops the backend itself).
     setTimeout(() => {
-        const Out = fs.openSync(path.join(LOG_DIR ?? os.tmpdir(), "restart.log"), "a");
-        spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", RESTART_SCRIPT, ...(Target === "director" ? ["-DirectorOnly"] : [])],
-            { detached: true, windowsHide: true, stdio: ["ignore", Out, Out] }).unref();
+        // A throw here (log dir missing/unwritable) was uncaught and killed the backend.
+        try {
+            const Out = fs.openSync(path.join(LOG_DIR ?? os.tmpdir(), "restart.log"), "a");
+            spawn("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", RESTART_SCRIPT, ...(Target === "director" ? ["-DirectorOnly"] : [])],
+                { detached: true, windowsHide: true, stdio: ["ignore", Out, Out] }).unref();
+        } catch (Err) {
+            logger.error(`[ADMIN] ${Target} restart could not start: ${(Err as Error).message}`);
+        }
     }, 500);
 }
 

@@ -19,7 +19,12 @@ function ReadCookie(req: Request, name: string): string | undefined {
     if (!Header) return undefined;
     for (const Part of Header.split(";")) {
         const [Key, ...Value] = Part.trim().split("=");
-        if (Key === name) return decodeURIComponent(Value.join("="));
+        if (Key !== name) continue;
+        try {
+            return decodeURIComponent(Value.join("="));
+        } catch {
+            return undefined; // malformed %-escape: not signed in (was a 500)
+        }
     }
     return undefined;
 }

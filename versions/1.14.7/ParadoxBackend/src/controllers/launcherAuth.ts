@@ -344,7 +344,12 @@ export async function RefreshSession(rawRefreshToken: string, deviceId: string, 
         throw error;
     }
 
-    await Repos.refreshSessions.revokeById(Session.id);
+    if (!(await Repos.refreshSessions.revokeById(Session.id))) {
+        // Lost the race to another refresh with the same token: treat as reuse, like the check above.
+        logger.warn(`Concurrent refresh token reuse for family ${Session.familyId} — revoking.`);
+        await Repos.refreshSessions.revokeFamily(Session.familyId);
+        throw new LauncherApiError("AUTH_REFRESH_INVALID", "Session expired. Please sign in again.");
+    }
 
     const NewRefreshToken = GenerateOpaqueToken();
     const NewSessionId = crypto.randomUUID();

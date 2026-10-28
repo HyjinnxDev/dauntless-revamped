@@ -58,9 +58,11 @@ export class MongoRefreshSessionRepository implements RefreshSessionRepository {
         return Doc == undefined ? undefined : ToRecord(Doc);
     }
 
-    async revokeById(id: string): Promise<void> {
+    async revokeById(id: string): Promise<boolean> {
         const Db = await GetMongoDb();
-        await Db.collection(Collections.RefreshSessions).updateOne({ _id: id as any }, { $set: { revokedAt: new Date().toISOString() } });
+        // Conditional, so two concurrent refreshes with one token can't both rotate it (forking the family).
+        const Result = await Db.collection(Collections.RefreshSessions).updateOne({ _id: id as any, revokedAt: null }, { $set: { revokedAt: new Date().toISOString() } });
+        return Result.modifiedCount === 1;
     }
 
     async revokeFamily(familyId: string): Promise<void> {
