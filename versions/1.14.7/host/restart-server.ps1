@@ -55,7 +55,8 @@ if (-not (Get-NetTCPConnection -State Listen -LocalPort 27018 -ErrorAction Silen
 Remove-Item "$logs\backend.log" -ErrorAction SilentlyContinue   # else the ready check can match the last run
 Start-Process cmd.exe -ArgumentList '/c', "npm start > `"$logs\backend.log`" 2>&1" -WorkingDirectory "$repo\ParadoxBackend" -WindowStyle Hidden
 $deadline = (Get-Date).AddMinutes(3)
-while (-not (Select-String "$logs\backend.log" -Pattern 'paradox=ready|EADDRINUSE|FATAL' -Quiet -ErrorAction SilentlyContinue)) {
+# Test-Path first: under ErrorActionPreference=Stop, Select-String throws on a missing file despite SilentlyContinue.
+while (-not ((Test-Path "$logs\backend.log") -and (Select-String "$logs\backend.log" -Pattern 'paradox=ready|EADDRINUSE|FATAL' -Quiet))) {
   if ((Get-Date) -gt $deadline) { throw "backend did not start; see $logs\backend.log" }
   Start-Sleep -Seconds 1
 }
