@@ -18,19 +18,33 @@ import { ipKeyGenerator, type Options } from "express-rate-limit";
 // in Plans/LAUNCHER_BACKEND_AUTH_REQUIREMENTS.md). Resets on process restart and
 // doesn't coordinate across multiple Metagame instances — both acceptable for now,
 // neither acceptable for a public launch.
-const Windows = new Map<string, number[]>();
+const Windows = new Map<string, { windowMs: number; attempts: number[] }>();
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+let LastSweep = 0;
+
+// [Revamped 2026-10-28] Drop keys whose newest attempt is older than their window, so one-off IPs and emails
+// don't stay in memory forever (FINDINGS L1).
+function SweepExpired(now: number): void {
+    if (now - LastSweep < SWEEP_INTERVAL_MS) return;
+    LastSweep = now;
+    for (const [Key, Entry] of Windows) {
+        const Newest = Entry.attempts[Entry.attempts.length - 1];
+        if (Newest === undefined || now - Newest >= Entry.windowMs) Windows.delete(Key);
+    }
+}
 
 export function IsRateLimited(key: string, maxAttempts: number, windowMs: number): boolean {
     const Now = Date.now();
-    const Attempts = (Windows.get(key) ?? []).filter((t) => Now - t < windowMs);
+    SweepExpired(Now);
+    const Attempts = (Windows.get(key)?.attempts ?? []).filter((t) => Now - t < windowMs);
 
     if (Attempts.length >= maxAttempts) {
-        Windows.set(key, Attempts);
+        Windows.set(key, { windowMs, attempts: Attempts });
         return true;
     }
 
     Attempts.push(Now);
-    Windows.set(key, Attempts);
+    Windows.set(key, { windowMs, attempts: Attempts });
     return false;
 }
 

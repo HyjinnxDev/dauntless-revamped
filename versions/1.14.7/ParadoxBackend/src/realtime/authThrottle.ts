@@ -34,8 +34,22 @@ export function isAuthThrottled(ip: string): boolean {
     return e !== undefined && Date.now() < e.blockedUntil;
 }
 
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+let lastSweep = 0;
+
+// [Revamped 2026-10-28] IPs that only ever fail were never removed (FINDINGS L2). Drop entries that are past
+// their block and have decayed.
+function sweepExpired(now: number): void {
+    if (now - lastSweep < SWEEP_INTERVAL_MS) return;
+    lastSweep = now;
+    for (const [key, e] of byIp) {
+        if (now >= e.blockedUntil && now - e.lastFailure > DECAY_MS) byIp.delete(key);
+    }
+}
+
 export function recordAuthFailure(ip: string): void {
     const now = Date.now();
+    sweepExpired(now);
     let e = byIp.get(ip);
     if (e === undefined || now - e.lastFailure > DECAY_MS) {
         e = { failures: 0, blockedUntil: 0, lastFailure: now };
