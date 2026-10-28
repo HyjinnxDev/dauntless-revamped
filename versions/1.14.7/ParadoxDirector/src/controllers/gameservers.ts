@@ -94,6 +94,8 @@ export function IsSupersededHunt(Server: Gameserver, Requesters: Set<string>): b
         && !!Server.expectedPlayers?.length && Server.expectedPlayers.every((P) => Requesters.has(P.playerUid));
 }
 
+const EMPTY_HUNT_GRACE_MS = 20_000;
+
 function ReapEmptyHunt(Server: Gameserver, Why: string) {
     logger.info(`Closing empty hunt port=${Server.port} pid=${Server.processId}: ${Why}`);
     Gameservers = Gameservers.filter((S) => S !== Server);
@@ -612,6 +614,10 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     // Extra listener only: pipe(LogStream) stays the stream's consumer (see WaitForServerReady).
     if (IsHunt) {
         let Pending = "";
+        // [Revamped 2026-10-28] Close only after players=0 has held for EMPTY_HUNT_GRACE_MS: the first 0 killed the
+        // server while a party member was still loading or the only player was reconnecting, so they arrived at
+        // a dead port.
+        let EmptyTimer: NodeJS.Timeout | undefined;
         Child.stdout?.on("data", (Chunk: Buffer | string) => {
             const Lines = (Pending + Chunk.toString()).split(/\r?\n/);
             Pending = Lines.pop()!.slice(-4096);
@@ -620,8 +626,17 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
                 if (!State) continue;
                 const WasOccupied = (NewGameserver.huntState?.players ?? 0) > 0;
                 NewGameserver.huntState = { ...State, at: Date.now() };
-                if (State.players > 0) NewGameserver.hadPlayers = true;
-                else if (WasOccupied) ReapEmptyHunt(NewGameserver, "last player left");
+                if (State.players > 0) {
+                    NewGameserver.hadPlayers = true;
+                    if (EmptyTimer) clearTimeout(EmptyTimer);
+                    EmptyTimer = undefined;
+                } else if (WasOccupied && EmptyTimer == undefined) {
+                    EmptyTimer = globalThis.setTimeout(() => {
+                        EmptyTimer = undefined;
+                        if ((NewGameserver.huntState?.players ?? 0) === 0 && Gameservers.includes(NewGameserver)) ReapEmptyHunt(NewGameserver, "last player left");
+                    }, EMPTY_HUNT_GRACE_MS);
+                    EmptyTimer.unref();
+                }
             }
         });
     }
