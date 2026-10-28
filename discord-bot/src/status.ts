@@ -35,7 +35,9 @@ async function Players(url: string): Promise<number | null> {
     try {
         const Res = await fetch(url, { signal: AbortSignal.timeout(5000) });
         if (!Res.ok) return null;
-        return Number((await Res.json()).players) || 0;
+        // A body without a numeric count isn't our backend answering: offline, not "0 slayers" (FINDINGS L16).
+        const Count = (await Res.json())?.players;
+        return typeof Count === "number" && Number.isFinite(Count) ? Count : null;
     } catch {
         return null;
     }
