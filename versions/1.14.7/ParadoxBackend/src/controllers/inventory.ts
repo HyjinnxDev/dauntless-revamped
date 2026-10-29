@@ -460,7 +460,8 @@ async function RefillBountyTokensDaily(UserId: string, CharacterId: string){
         StackedItems.push({ catalogId: "TOKEN_BOUNTY_DRAFT", quantity: BOUNTY_TOKENS_DAILY });
     }
     else{
-        Stack.quantity = BOUNTY_TOKENS_DAILY;
+        // [Revamped 2026-10-26] Top up, never cut: Platinum-bought tokens above the daily amount survive the refill.
+        Stack.quantity = Math.max(Number(Stack.quantity) || 0, BOUNTY_TOKENS_DAILY);
     }
     const Updated = await GetRepositories().inventories.updateBothIfRevisionMatches(
         CharacterId, Inventory.instancedItems, JSON.stringify(StackedItems), Inventory.revision ?? 0);

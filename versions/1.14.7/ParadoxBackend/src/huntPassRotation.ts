@@ -88,6 +88,19 @@ export function LegacyHuntPassStorageMoves(): [string, string][] {
 
 export const HuntPassMaxXp = (SlotId: string, NowMs = Date.now()) => PassForSlot(SlotId, NowMs).levels.length * HUNT_PASS_XP_PER_LEVEL;
 
+// [2026-10-25] Past the Commission pass's last level (the end of the season's hunt pass) every further
+// HUNT_PASS_XP_PER_LEVEL pays 25-50 platinum. Progress is never capped, so this is the platinum for one grant moving
+// the stored progress Before -> After; the grant ledger makes it once per grantId.
+const OVERFLOW_PLATINUM_MIN = 25, OVERFLOW_PLATINUM_MAX = 50;
+export function HuntPassOverflowPlatinum(SlotId: string, Before: number, After: number, NowMs = Date.now(), Rand = Math.random): number {
+    if (SlotId !== COMMISSION_PASS_SLOT) return 0;
+    const Max = HuntPassMaxXp(SlotId, NowMs);
+    const Levels = (Xp: number) => Math.max(0, Math.floor((Xp - Max) / HUNT_PASS_XP_PER_LEVEL));
+    let Platinum = 0;
+    for (let N = Levels(After) - Levels(Before); N > 0; N--) Platinum += OVERFLOW_PLATINUM_MIN + Math.floor(Rand() * (OVERFLOW_PLATINUM_MAX - OVERFLOW_PLATINUM_MIN + 1));
+    return Platinum;
+}
+
 // Rank curve of the pass a slot carries (same shape controllers/progression.ts builds for configured tracks).
 export function HuntPassCurve(SlotId: string, NowMs = Date.now()) {
     const Levels = PassForSlot(SlotId, NowMs).levels.length;
@@ -108,15 +121,13 @@ export function HuntPassPassSkuTag(SlotId: string): string {
 }
 
 // The entitlement that unlocks a pass's Elite track; the same string is the path's premium_gating_entitlement and
-// what the Elite SKU grants. A cosmetic pass's Elite is owned for good (it next returns n seasons later); the five
-// Commission passes repeat every five seasons, so their Elite is per season.
-export const HuntPassEntitlement = (SlotId: string, NowMs = Date.now()) => SlotId === COMMISSION_PASS_SLOT
-    ? `${PassForSlot(SlotId, NowMs).id}_${HuntPassRotationIndex(NowMs)}_premium`
-    : `${PassForSlot(SlotId, NowMs).id}_premium`;
-// One-time purchase key of the Elite SKU (keeps the 60-day rotation's "season43_premium:<pass>" for cosmetic passes).
-const HuntPassOwnershipKey = (SlotId: string, NowMs = Date.now()) => SlotId === COMMISSION_PASS_SLOT
-    ? `${SlotId}_premium:${PassForSlot(SlotId, NowMs).id}:${HuntPassRotationIndex(NowMs)}`
-    : `${SlotId}_premium:${PassForSlot(SlotId, NowMs).id}`;
+// what the Elite SKU grants. A cosmetic pass's Elite is owned for good (it next returns n seasons later).
+// [2026-10-25] The season pass's Elite also unlocks that season's Commission pass Elite (the user's call): the game
+// server only knows season43's gate, so it sends a season Elite owner's Commission claims as Elite claims, and a
+// separate Commission Elite made them 403 ("server error"). SlotId is kept so callers stay per slot.
+export const HuntPassEntitlement = (_SlotId: string, NowMs = Date.now()) => `${PassForSlot(SEASON_PASS_SLOT, NowMs).id}_premium`;
+// One-time purchase key of the Elite SKU (keeps the 60-day rotation's "season43_premium:<pass>").
+const HuntPassOwnershipKey = (_SlotId: string, NowMs = Date.now()) => `${SEASON_PASS_SLOT}_premium:${PassForSlot(SEASON_PASS_SLOT, NowMs).id}`;
 
 // One level's rewards in the shape the real configs use: stacked_items {catalog_id, hidden, priority, quantity},
 // instanced_items [catalog ids] (lanterns, banner fabric/standard) and entitlements (escalation boosts).
@@ -163,6 +174,22 @@ export function BuildHuntPassPath(SlotId: string, NowMs = Date.now(), ClientSlot
         end_date: Window.end,
         pass_name: Pass.name,
     };
+}
+
+// What a claim on SlotId's pass owes: every rank stored Progress reaches past the confirmed ranks, free track always,
+// Elite track when Elite is owned. Returns the new confirmed ranks and the summed stacked rewards (the passes only
+// pay stacked items: currencies and tokens).
+export function HuntPassClaimOwed(SlotId: string, Progress: number, Free: number, Premium: number, Elite: boolean, NowMs = Date.now()) {
+    const Path = BuildHuntPassPath(SlotId, NowMs);
+    const Rank = Math.min(Path.free_rewards.length - 1, Math.floor(Progress / HUNT_PASS_XP_PER_LEVEL));
+    const NewFree = Math.max(Free, Rank), NewPremium = Elite ? Math.max(Premium, Rank) : Premium;
+    const Totals = new Map<string, number>();
+    const Add = (Levels: typeof Path.free_rewards, From: number, To: number) => {
+        for (let R = From + 1; R <= To; R++) for (const I of Levels[R].stacked_items) Totals.set(I.catalog_id!, (Totals.get(I.catalog_id!) ?? 0) + I.quantity);
+    };
+    Add(Path.free_rewards, Free, NewFree);
+    Add(Path.premium_rewards, Premium, NewPremium);
+    return { free: NewFree, premium: NewPremium, items: [...Totals].map(([catalogId, quantity]) => ({ catalogId, quantity })) };
 }
 
 // The Elite SKU of the pass SlotId carries, listed as ClientSlot's (season43_premium in tag season43_pass: the client
@@ -252,5 +279,22 @@ if (require.main === module) {
     }
     assert.equal(Merits(BuildHuntPassPath("season43", At(0)).premium_rewards), MeritDropRanks(50).length * ELITE_MERITS); // Frostfall had none
     assert.deepEqual(MeritDropRanks(10), [3, 7]);
+    // overflow platinum: only past the Commission pass's end, 25-50 per whole level crossed
+    const CMax = HuntPassMaxXp(COMMISSION_PASS_SLOT, At(0));
+    assert.equal(HuntPassOverflowPlatinum(SEASON_PASS_SLOT, 1e6, 2e6, At(0)), 0);
+    assert.equal(HuntPassOverflowPlatinum(COMMISSION_PASS_SLOT, CMax - 50, CMax + 99, At(0)), 0);
+    assert.equal(HuntPassOverflowPlatinum(COMMISSION_PASS_SLOT, CMax - 50, CMax + 250, At(0), () => 0), 2 * 25);
+    assert.equal(HuntPassOverflowPlatinum(COMMISSION_PASS_SLOT, CMax + 150, CMax + 250, At(0), () => 0.999), 50);
+    // claims owed: Return to Light rank 1 free pays its own 1000 notes + 66 plat (it paid Frostfall's rank 1 before)
+    const Qty = (Items: { catalogId: string; quantity: number }[], Id: string) => Items.find((I) => I.catalogId === Id)?.quantity ?? 0;
+    const R1 = HuntPassClaimOwed(COMMISSION_PASS_SLOT, 184, 0, 0, false, At(0));
+    assert.deepEqual([R1.free, R1.premium, Qty(R1.items, "CURRENCY_NOTES"), Qty(R1.items, "CURRENCY_PLATINUM_UNIV")], [1, 0, 1000, 66]);
+    assert.deepEqual(HuntPassClaimOwed(COMMISSION_PASS_SLOT, 184, 1, 0, false, At(0)).items, []); // already claimed
+    const E2 = HuntPassClaimOwed(COMMISSION_PASS_SLOT, 250, 1, 0, true, At(0)); // rank 2 free + Elite 1-2
+    assert.deepEqual([E2.free, E2.premium, Qty(E2.items, "CURRENCY_PJM_WEAPON"), Qty(E2.items, "CURRENCY_NOTES")], [2, 2, 125, 10000]);
+    assert.equal(HuntPassClaimOwed(COMMISSION_PASS_SLOT, 1e9, 0, 0, false, At(0)).free, 100); // capped at the last level
+    // the season pass's Elite is the Commission pass's Elite
+    assert.equal(HuntPassEntitlement(COMMISSION_PASS_SLOT, At(0)), "frostfall_premium");
+    assert.equal(HuntPassEntitlement(SEASON_PASS_SLOT, At(1)), HuntPassEntitlement(COMMISSION_PASS_SLOT, At(1)));
     console.log("huntPassRotation ok");
 }

@@ -85,5 +85,8 @@ export const Collections = {
     GauntletGuildClears: "gauntletGuildClears",
 
     // Extra characters per launcher account (src/characterSlots.ts). _id = the character's game userId.
-    CharacterSlots: "characterSlots"
+    CharacterSlots: "characterSlots",
+
+    // Per-player hunt damage posted by hunt servers (routes/huntStats.ts). _id = "<hunt>:<userId>".
+    HuntStats: "huntStats"
 } as const;

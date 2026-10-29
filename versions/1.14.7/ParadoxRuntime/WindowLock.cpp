@@ -4,9 +4,12 @@
 // The engine moves its window in-process (SetWindowLong(Ptr)W GWL_STYLE, then SetWindowPos / MoveWindow); outside
 // tools and window drags never pass through these. So an engine request identical to its previous one is a re-apply
 // and leaves the window as it is now; a new request (display settings changed in the options menu) goes through.
+// Slate caches the size it asked for, so a kept window is re-announced with WM_MOVE/WM_SIZE (else it renders and
+// maps the mouse for the engine's rect). A borderless window smaller than its monitor gets resize edges.
 // Off with DISABLE_WINDOW_LOCK.flag beside the exe.
 
 #include <windows.h>
+#include <windowsx.h>
 #include <mutex>
 #include <string>
 #include "MinHook/MinHook.h"
@@ -39,6 +42,45 @@ bool GameWindow(HWND H) {
     return Pid == GetCurrentProcessId() && GetClassNameW(H, Cls, 32) && wcscmp(Cls, L"UnrealWindow") == 0;
 }
 
+// Tells the engine the window's real client rect after a kept re-apply; the engine handles both on its message pump.
+void Resync(HWND H) {
+    RECT C{};
+    POINT O{};
+    if (!GetClientRect(H, &C) || !ClientToScreen(H, &O)) return;
+    PostMessageW(H, WM_MOVE, 0, MAKELPARAM(O.x, O.y));
+    PostMessageW(H, WM_SIZE, SIZE_RESTORED, MAKELPARAM(C.right, C.bottom));
+}
+
+// Resize edge under the cursor for a borderless (no caption) window that does not fill its monitor, else 0.
+// ponytail: fixed 8 px grab band, scale with GetDpiForWindow if it feels thin on high-DPI screens.
+LRESULT EdgeHit(HWND H, LPARAM L) {
+    if ((GetWindowLongPtrW(H, GWL_STYLE) & WS_CAPTION) == WS_CAPTION || IsZoomed(H) || IsIconic(H)) return 0;
+    RECT W{};
+    MONITORINFO M{ sizeof(M) };
+    if (!GetWindowRect(H, &W) || !GetMonitorInfoW(MonitorFromWindow(H, MONITOR_DEFAULTTONEAREST), &M)
+        || EqualRect(&W, &M.rcMonitor)) return 0;
+    constexpr int B = 8;
+    const int X = GET_X_LPARAM(L), Y = GET_Y_LPARAM(L);
+    const bool Left = X < W.left + B, Right = X >= W.right - B;
+    if (Y < W.top + B) return Left ? HTTOPLEFT : Right ? HTTOPRIGHT : HTTOP;
+    if (Y >= W.bottom - B) return Left ? HTBOTTOMLEFT : Right ? HTBOTTOMRIGHT : HTBOTTOM;
+    return Left ? HTLEFT : Right ? HTRIGHT : 0;
+}
+
+bool SizingHit(WPARAM Hit) { return Hit >= HTLEFT && Hit <= HTBOTTOMRIGHT; }
+
+HWND g_Subclassed = nullptr;
+WNDPROC g_EngineProc = nullptr;
+
+// Our edges go to Windows' own sizing loop and cursor; everything else to the engine.
+LRESULT CALLBACK GameWndProc(HWND H, UINT Msg, WPARAM W, LPARAM L) {
+    if (Msg == WM_NCHITTEST)
+        if (const LRESULT Hit = EdgeHit(H, L)) return Hit;
+    if ((Msg == WM_NCLBUTTONDOWN && SizingHit(W)) || (Msg == WM_SETCURSOR && SizingHit(LOWORD(L))))
+        return DefWindowProcW(H, Msg, W, L);
+    return CallWindowProcW(g_EngineProc, H, Msg, W, L);
+}
+
 std::string RectText(const RECT& R) {
     return std::to_string(R.right - R.left) + "x" + std::to_string(R.bottom - R.top)
         + " at " + std::to_string(R.left) + "," + std::to_string(R.top);
@@ -68,23 +110,44 @@ LONG_PTR FilterStyle(HWND H, LONG_PTR Style) {
     return (Style & ~kFrameBits) | Now;
 }
 
+// Puts GameWndProc in front of the engine's window procedure, once per game window.
+void Subclass(HWND H) {
+    std::lock_guard<std::mutex> Lk(g_Lock);
+    if (H == g_Subclassed) return;
+    // Engine proc stored before the swap: the window thread may dispatch to GameWndProc straight away.
+    g_EngineProc = reinterpret_cast<WNDPROC>(GetWindowLongPtrW(H, GWLP_WNDPROC));
+    if (!g_EngineProc || !OrigSetWindowLongPtrW(H, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(GameWndProc))) return;
+    g_Subclassed = H;
+    MpLog("[WindowLock] borderless resize edges on");
+}
+
 BOOL WINAPI HookSetWindowPos(HWND H, HWND After, int X, int Y, int Cx, int Cy, UINT Flags) {
     RECT Cur{};
     if ((Flags & (SWP_NOMOVE | SWP_NOSIZE)) != (SWP_NOMOVE | SWP_NOSIZE) && GameWindow(H) && GetWindowRect(H, &Cur)) {
+        Subclass(H);
         RECT Req = Cur;
         if (!(Flags & SWP_NOMOVE)) OffsetRect(&Req, X - Cur.left, Y - Cur.top);
         if (!(Flags & SWP_NOSIZE)) { Req.right = Req.left + Cx; Req.bottom = Req.top + Cy; }
         RECT Keep{};
-        if (KeepRect(H, Req, Keep))
-            return OrigSetWindowPos(H, After, Keep.left, Keep.top, Keep.right - Keep.left, Keep.bottom - Keep.top, Flags & ~(SWP_NOMOVE | SWP_NOSIZE));
+        if (KeepRect(H, Req, Keep)) {
+            const BOOL Ok = OrigSetWindowPos(H, After, Keep.left, Keep.top, Keep.right - Keep.left, Keep.bottom - Keep.top, Flags & ~(SWP_NOMOVE | SWP_NOSIZE));
+            Resync(H);
+            return Ok;
+        }
     }
     return OrigSetWindowPos(H, After, X, Y, Cx, Cy, Flags);
 }
 
 BOOL WINAPI HookMoveWindow(HWND H, int X, int Y, int W, int Ht, BOOL Repaint) {
     RECT Keep{};
-    if (GameWindow(H) && KeepRect(H, RECT{ X, Y, X + W, Y + Ht }, Keep))
-        return OrigMoveWindow(H, Keep.left, Keep.top, Keep.right - Keep.left, Keep.bottom - Keep.top, Repaint);
+    if (GameWindow(H)) {
+        Subclass(H);
+        if (KeepRect(H, RECT{ X, Y, X + W, Y + Ht }, Keep)) {
+            const BOOL Ok = OrigMoveWindow(H, Keep.left, Keep.top, Keep.right - Keep.left, Keep.bottom - Keep.top, Repaint);
+            Resync(H);
+            return Ok;
+        }
+    }
     return OrigMoveWindow(H, X, Y, W, Ht, Repaint);
 }
 

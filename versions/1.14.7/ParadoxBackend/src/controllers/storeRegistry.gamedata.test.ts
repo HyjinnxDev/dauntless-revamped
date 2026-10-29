@@ -29,7 +29,13 @@ const EXPECTED_CATEGORY_COUNTS: Record<string, number> = {
 const ALLOWED_PRICE_TIERS = new Set([700, 800, 1000, 2000, 2500, 3000]);
 
 test("Reward Cache exposes the deterministic 163-item reconstructed rotation", () => {
-    const Skus = GetStoreSkus("season_store");
+    // [Revamped 2026-10-26] plus 2 house Aetherspark bundles (reward_cache_house), checked below.
+    // [Revamped 2026-10-27] and 2 house Combat Merit bundles.
+    const Skus = GetStoreSkus("season_store").filter((Sku) => Sku.tags.includes("reward_cache_reconstructed"));
+    assert.deepEqual(GetStoreSkus("season_store").filter((Sku) => Sku.tags.includes("reward_cache_house")).map((Sku) => [Sku.items[0].catalogId, Sku.items[0].quantity, Sku.prices[0].price]), [
+        ["CURRENCY_PJM_PRESTIGE_EMPTY", 100, 2000], ["CURRENCY_PJM_PRESTIGE_EMPTY", 500, 8000],
+        ["CURRENCY_PJM_WEAPON", 250, 1500], ["CURRENCY_PJM_WEAPON", 1000, 5000],
+    ]);
     assert.equal(Skus.length, 163);
     assert.equal(new Set(Skus.map((Sku) => Sku.id)).size, 163);
     assert.equal(new Set(Skus.flatMap((Sku) => Sku.items.map((Item) => Item.catalogId))).size, 163);
@@ -355,12 +361,15 @@ test("platinum offers never overlap Lady Luck's Store or the Reward Cache", () =
     ]);
 
     const PlatinumGrants = GetStoreSkus("webstore").flatMap((Sku) => Sku.items.map((Item) => Item.catalogId));
-    const Collisions = PlatinumGrants.filter((CatalogId) => Sold.has(CatalogId));
+    // [Revamped 2026-10-27] except Combat Merits, deliberately sold for Platinum and Cache Coins.
+    const Collisions = PlatinumGrants.filter((CatalogId) => CatalogId !== "CURRENCY_PJM_WEAPON" && Sold.has(CatalogId));
     assert.deepEqual(Collisions, [], "the three stores must stay disjoint");
 
     // and no catalog id is sold twice within the platinum store itself
     // [Revamped 2026-10-20] except Patrol Keys, deliberately sold as 1 and 25 bundles.
-    const Unique = PlatinumGrants.filter((CatalogId) => CatalogId !== "TOKEN_DAILY_PATROL_BONUS_PURCHASED");
+    // [Revamped 2026-10-26] and Bounty Tokens, sold as 5/14/32 bundles.
+    // [Revamped 2026-10-27] and Combat Merits, sold as 250/1000 bundles.
+    const Unique = PlatinumGrants.filter((CatalogId) => !["TOKEN_DAILY_PATROL_BONUS_PURCHASED", "TOKEN_BOUNTY_DRAFT", "CURRENCY_PJM_WEAPON"].includes(CatalogId));
     assert.equal(new Set(Unique).size, Unique.length);
 });
 
@@ -497,4 +506,13 @@ test("Middleman offers: one +1/+2/+3 cell at tiered Platinum or Aetherdust price
     assert.deepEqual(WeeklyCellSkus(Reset + Day - 1).map((S) => S.id), This.map((S) => S.id));
     assert.notDeepEqual(WeeklyCellSkus(Reset + Day).map((S) => S.id), This.map((S) => S.id));
     assert.equal(FindStoreSkuByIdOrCatalogId(GetStoreSkus("weekly_cell_offering")[0].id)?.storeTag, "weekly_cell_offering");
+});
+
+test("Research Lab sells all 21 trackers and every season's 15 cells for 1 Crest", () => {
+    const Skus = GetStoreSkus("gauntlet_store");
+    const Tab = (T: string) => Skus.filter((Sku) => Sku.tags.includes(T));
+    assert.equal(Tab("gauntlet_store_tab_trackers").length, 21);
+    assert.equal(Tab("gauntlet_store_tab_cells").length, 15);
+    assert.equal(new Set(Skus.map((Sku) => Sku.items[0].catalogId)).size, 36);
+    for (const Sku of Skus) assert.deepEqual(Sku.prices, [{ currencyId: "id_currency_gauntlet_coin", price: 1 }], Sku.id);
 });

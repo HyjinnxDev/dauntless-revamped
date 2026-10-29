@@ -17,7 +17,7 @@ const progressionconfig = loadGameData<any>("progression_config.json");
 import { GetEscalationProgress, SaveEscalationProgress } from "../controllers/escalationProgress";
 import { GetEntitlementsForUser } from "../controllers/entitlements";
 import { ActiveSeasonWindow, BuildHuntPassPath, COMMISSION_PASS_SLOT, HUNT_PASS_SLOT_IDS, IsHuntPassSlot, SEASON_PASS_SLOT } from "../huntPassRotation";
-import { GetServedSlotForUser } from "../controllers/progression";
+import { GetServedSlotForUser, RememberClientSlot } from "../controllers/progression";
 import { MonitorBountyLoad, MonitorBountySave, MonitorCooldownLoad, MonitorCooldownSave, MonitorSourceOf } from "../diagnostics/economyMonitor";
 import { CooldownSaveValidationError, IsAuthorizedCooldownReader, IsAuthorizedCooldownWriter } from "../cooldownState";
 import { GetCooldownState, SaveCooldowns } from "../controllers/cooldowns";
@@ -382,6 +382,17 @@ export function WidenHuntPassWindows(Config: any, ServedSlot?: string): any {
         const { pass_name, ...Built } = BuildHuntPassPath(Source, Now, SlotId);
         const Current = ServedSlot === undefined ? SlotId === SEASON_PASS_SLOT || SlotId === COMMISSION_PASS_SLOT : SlotId === SEASON_PASS_SLOT;
         if (Current) Carried.push(`${SlotId}=${pass_name}`);
+        // The game server's season43 also takes claims from players on the Commission pass (their client shows it as
+        // season43). Empty levels pad it to the Commission's length so ranks past the season pass's last stay
+        // claimable; what those claims pay comes from controllers/progression.ts CommissionClaimStackedItems.
+        if (ServedSlot === undefined && SlotId === SEASON_PASS_SLOT) {
+            const Commission = BuildHuntPassPath(COMMISSION_PASS_SLOT, Now);
+            for (let Rank = Built.requirements.length; Rank < Commission.requirements.length; Rank++) {
+                Built.requirements.push(Commission.requirements[Rank]);
+                Built.free_rewards.push({ rank_id: Rank, entitlements: [], instanced_items: [], stacked_items: [] });
+                Built.premium_rewards.push({ rank_id: Rank, entitlements: [], instanced_items: [], stacked_items: [] });
+            }
+        }
         const Slot = Current ? Built : { ...Built, start_date: FUTURE_PASS_WINDOW_START, end_date: FUTURE_PASS_WINDOW_END };
         const At = Paths.findIndex((P: any) => P?.progression_id === SlotId);
         if (At >= 0) Paths[At] = Slot; else Paths.push(Slot);
@@ -425,6 +436,7 @@ systemRouter.get("/progression/config", HasParadoxBackendAuth, async (req: any, 
 	const IsGameserver = req.headers["x-mysticparadox-gameserver-apikey"] !== undefined;
 	const PlayerId = req.AuthData?.userId;
 	const ServedSlot = !IsGameserver && typeof PlayerId === "string" ? await GetServedSlotForUser(PlayerId) : undefined;
+	if (ServedSlot !== undefined) RememberClientSlot(PlayerId, ServedSlot);
 	res.status(200);
 	res.json(WidenHuntPassWindows(JSON.parse(JSON.stringify(progressionconfig)), ServedSlot));
 });

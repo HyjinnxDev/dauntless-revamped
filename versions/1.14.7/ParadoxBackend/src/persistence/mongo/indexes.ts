@@ -119,6 +119,10 @@ export async function EnsureMongoIndexes(Db: Db): Promise<void> {
     // unique; this secondary index supports account audits and future admin views.
     await Db.collection(Collections.EscalationProgress).createIndex({ userId: 1, seasonId: 1 });
 
+    // Hunt stats: the Ledger lists a player's hunts newest first, then loads each hunt's whole party.
+    await Db.collection(Collections.HuntStats).createIndex({ userId: 1, updatedAt: -1 });
+    await Db.collection(Collections.HuntStats).createIndex({ hunt: 1 });
+
     // --- Launcher auth (Plans/LAUNCHER_BACKEND_AUTH_REQUIREMENTS.md) ---
     //
     // email/displayNameNormalized live on the SAME `accounts` collection dev/API-key

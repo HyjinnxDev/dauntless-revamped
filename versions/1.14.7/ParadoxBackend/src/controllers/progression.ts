@@ -14,7 +14,7 @@ import { logger } from "../logger";
 import { loadGameData } from "../gameData/loader";
 import { ComputeNewlyUnlockedNodeIds } from "./slayersPath";
 import crypto from "node:crypto";
-import { HUNT_PASS_SLOT_IDS, HuntPassCurve, HuntPassEntitlement, HuntPassStorageId, IsHuntPassSlot, IsHuntPassStorageId, SEASON_PASS_SLOT, ServedSlotFor } from "../huntPassRotation";
+import { COMMISSION_PASS_SLOT, HUNT_PASS_SLOT_IDS, HuntPassClaimOwed, HuntPassCurve, HuntPassEntitlement, HuntPassOverflowPlatinum, HuntPassStorageId, IsHuntPassSlot, IsHuntPassStorageId, SEASON_PASS_SLOT, ServedSlotFor } from "../huntPassRotation";
 import { DoesUserHoldEntitlement } from "./entitlements";
 import { GetPartyForPlayer } from "./party";
 import { GetMongoDb } from "../persistence/mongo/client";
@@ -75,6 +75,17 @@ export const ProgressionStorageId = (progressionId: string) => IsHuntPassSlot(pr
 // The internal hunt pass slot this player is on (the season pass until completed, then the Commission pass).
 export async function GetServedSlotForUser(userId: string, repos: Pick<RepositoryProvider, "progressionTracks"> = GetRepositories()): Promise<string> {
     return ServedSlotFor(await repos.progressionTracks.getAllForUser(userId));
+}
+
+// [2026-10-25] The pass this player's client has loaded: their served slot when they last fetched /progression/config
+// (routes/system.ts). Completing the season pass moves XP to the Commission pass at once, but the client shows the
+// season pass until it fetches config again (relog); serving it the Commission row made the pass look reset to 0 and
+// its last rank confirm 409. So progress shown, rank confirms and claims follow the loaded pass; XP grants do not.
+// ponytail: in memory, so after a backend restart this falls back to the served slot until the player relogs.
+const ClientSlotByUser = new Map<string, string>();
+export const RememberClientSlot = (userId: string, slot: string) => void ClientSlotByUser.set(userId, slot);
+export async function GetClientSlotForUser(userId: string): Promise<string> {
+    return ClientSlotByUser.get(userId) ?? GetServedSlotForUser(userId);
 }
 
 // `selected_huntpass` is the symbolic track id the rank-skip SKUs carry; it means "whichever Hunt
@@ -180,6 +191,15 @@ async function HuntedTogetherLinkSlots(userId: string): Promise<ReturnType<typeo
     }
 }
 
+// Levels past the end of the hunt pass pay platinum (huntPassRotation.ts HuntPassOverflowPlatinum), same transaction.
+async function PayHuntPassOverflow(userId: string, slot: string, before: number, after: number, grantId: string, session: Parameters<typeof AddCurrency>[3]) {
+    const Platinum = HuntPassOverflowPlatinum(slot, before, after);
+    if (Platinum > 0) {
+        const Balance = await AddCurrency(userId, "CURRENCY_PLATINUM_UNIV", Platinum, session);
+        logger.info(`[HuntPassOverflow] grant=${grantId} user=${userId} xp ${before}->${after} +${Platinum} platinum -> ${Balance}`);
+    }
+}
+
 export async function GrantProgressionXp(
     userId: string,
     progressionId: string,
@@ -214,6 +234,7 @@ export async function GrantProgressionXp(
                 const StorageId = ProgressionStorageId(Track);
                 const Before = await repos.progressionTracks.get(userId, StorageId, session);
                 const After = await repos.progressionTracks.increment(userId, StorageId, amount, session);
+                await PayHuntPassOverflow(userId, Track, Before?.progress ?? 0, After.progress, grantId, session);
                 // Reforge (ServerPrestigeExperience) grants +1 PrestigeTrack_Weapon_* XP per reforge; each pays one
                 // Aetherheart. The 1.14.7 prestige tables carry no rewards, so the trade is made here, once per grantId.
                 if (/^PrestigeTrack_Weapon_\w+$/.test(progressionId)) {
@@ -227,6 +248,7 @@ export async function GrantProgressionXp(
                         const PassXp = Math.max(1, Math.round(amount * LINK_HUNT_PASS_XP_RATIO));
                         const PassAfter = await repos.progressionTracks.increment(userId, ProgressionStorageId(PassSlot), PassXp, session);
                         logger.info(`[ProgressionGrant] grant=${grantId} link xp +${PassXp} -> hunt pass ${PassSlot} total=${PassAfter.progress}`);
+                        await PayHuntPassOverflow(userId, PassSlot, PassAfter.progress - PassXp, PassAfter.progress, grantId, session);
                     }
                 }
                 for (const Link of LinkSlots) {
@@ -264,7 +286,7 @@ export async function GetPersistedProgressionForUser(userId: string, knownTrackI
     const PersistedById = new Map(Persisted.map((Row) => [Row.progressionId, Row]));
     // Hunt pass rows are stored per season and pass ("huntpass:0:frostfall"); the client only knows season43, which is
     // answered with the row of the pass this player is on. Stored pass rows themselves are not the client's business.
-    const ServedRow = PersistedById.get(HuntPassStorageId(ServedSlotFor(Persisted)));
+    const ServedRow = PersistedById.get(HuntPassStorageId(ClientSlotByUser.get(userId) ?? ServedSlotFor(Persisted)));
     for (const Slot of HUNT_PASS_SLOT_IDS) PersistedById.delete(Slot);
     if (ServedRow) PersistedById.set(SEASON_PASS_SLOT, ServedRow);
     for (const Id of [...PersistedById.keys()]) if (IsHuntPassStorageId(Id)) PersistedById.delete(Id);
@@ -460,10 +482,43 @@ export type ConfirmRankResult =
     | { ok: true; record: ProgressionTrackRecord }
     | { ok: false; reason: "unknown_track" | "rank_out_of_range" | "insufficient_xp" | "not_entitled" };
 
+// [2026-10-25] A player on the Commission pass sees it as season43, but the game server's season43 is the season
+// pass, so its "Progression Track season43 Claim Rewards" grant carried the season pass's rewards (Return to Light
+// rank 1 paid Frostfall rank 1). For such a player the grant is replaced by what stored progress says is owed:
+// unclaimed ranks of the Commission pass, plus season-pass ranks left unclaimed when it completed. Ranks are marked
+// claimed first (compare-and-set), so a repeated or concurrent claim never pays twice. undefined = keep the game
+// server's items (not a hunt pass claim, or the player is still on the season pass).
+// ponytail: an Elite bought with nothing new on the free track pays on the next claim the game server sends.
+export async function CommissionClaimStackedItems(userId: string, source: unknown): Promise<{ catalogId: string; quantity: number }[] | undefined> {
+    const Match = typeof source === "string" ? /^Progression Track (\S+) Claim Rewards$/.exec(source) : null;
+    if (!Match || !IsHuntPassSlot(Match[1])) return undefined;
+    if (await GetClientSlotForUser(userId) !== COMMISSION_PASS_SLOT) return undefined;
+    const Db = await GetMongoDb();
+    const Items: { catalogId: string; quantity: number }[] = [];
+    for (const Slot of [SEASON_PASS_SLOT, COMMISSION_PASS_SLOT]) {
+        const StorageId = HuntPassStorageId(Slot);
+        const Row = await GetRepositories().progressionTracks.get(userId, StorageId);
+        if (!Row) continue;
+        const Free = Row.confirmedFremiumRank, Premium = Row.confirmedPremiumRank;
+        const Owed = HuntPassClaimOwed(Slot, Row.progress, Free, Premium, await DoesUserHoldEntitlement(userId, HuntPassEntitlement(Slot)));
+        if (Owed.free === Free && Owed.premium === Premium) continue;
+        // _id as MongoProgressionTrackRepository.TrackId builds it
+        const Claimed = await Db.collection(Collections.ProgressionTracks).updateOne(
+            { _id: `${userId}::${StorageId}` as any, confirmedFremiumRank: Free, confirmedPremiumRank: Premium },
+            { $set: { confirmedFremiumRank: Owed.free, confirmedPremiumRank: Owed.premium, updatedAt: new Date().toISOString() }, $inc: { updateVersion: 1 } });
+        if (Claimed.modifiedCount !== 1) continue;   // another claim got there first
+        Items.push(...Owed.items);
+        logger.info(`[CommissionClaim] user=${userId} ${StorageId} free ${Free}->${Owed.free} elite ${Premium}->${Owed.premium}`);
+    }
+    // both passes may pay the same currency: one entry per catalog id
+    const Merged = Items.reduce((M, I) => M.set(I.catalogId, (M.get(I.catalogId) ?? 0) + I.quantity), new Map<string, number>());
+    return [...Merged].map(([catalogId, quantity]) => ({ catalogId, quantity }));
+}
+
 // Elite (premium) ranks: same checks, plus the player must own the served pass's Elite entitlement.
 export async function ConfirmPublicProgressionRank(userId: string, progressionId: string, rank: number, premium = false): Promise<ConfirmRankResult> {
     // The client confirms "season43"; the ranks belong to the pass this player is on.
-    if (IsHuntPassSlot(progressionId)) progressionId = await GetServedSlotForUser(userId);
+    if (IsHuntPassSlot(progressionId)) progressionId = await GetClientSlotForUser(userId);
     if (premium && !(IsHuntPassSlot(progressionId) && await DoesUserHoldEntitlement(userId, HuntPassEntitlement(progressionId)))) {
         logger.warn(`Rejected premium rank confirm: user=${userId} lacks Elite entitlement for track ${progressionId}`);
         return { ok: false, reason: "not_entitled" };

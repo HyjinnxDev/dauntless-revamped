@@ -621,6 +621,35 @@ progressionRouter.delete("/progression/:userId/:progressionId", HasParadoxBacken
     });
 });
 
+// [Revamped 2026-10-27] Right after the reforge reset, the game server applies the weapon's banked XP (track XP past
+// rank 20, at most 3500) to the fresh track with this POST. Unrouted it 404'd: every reforge lost its banked XP.
+// Gameserver-only, weapon XP tracks only; same grant path as /progression/:userId/:progressionId/:amount.
+const MAX_BANKED_XP = 3500;
+progressionRouter.post("/progression/purchase/:userId/:progressionId/:amount", HasParadoxBackendAuth, async (req: any, res) => {
+    const { userId, progressionId } = req.params;
+    const Amount = Number(req.params.amount);
+    if(req.AuthData?.IsGameserver !== true || !/^ExperienceTrack_Weapon_\w+$/.test(progressionId) || userId === NO_PLAYER_SENTINEL
+        || !Number.isInteger(Amount) || Amount <= 0 || Amount > MAX_BANKED_XP){
+        logger.warn(`Rejected banked XP apply (user=${userId}, track=${progressionId}, amount=${req.params.amount}, gs=${req.AuthData?.IsGameserver === true})`);
+        res.status(403).json({ code: null, message: "Forbidden", payload: {} });
+        return;
+    }
+    const { record: Updated } = await GrantProgressionXp(userId, progressionId, Amount, randomUUID());
+    logger.info(`[Reforge] banked XP +${Amount} -> ${progressionId} for ${userId} (total ${Updated.progress})`);
+    res.status(200).json({
+        code: null,
+        message: "OK",
+        payload: {
+            phx_account_id: userId,
+            progression_id: progressionId,
+            progress: Updated.progress,
+            confirmed_fremium_rank: Updated.confirmedFremiumRank,
+            confirmed_premium_rank: Updated.confirmedPremiumRank,
+            confirmed_date: Updated.updatedAt,
+        }
+    });
+});
+
 progressionRouter.get("/progression/:userId", HasParadoxBackendAuth, async (req: any, res) => {
     const RequestorAccountId = ResolveRequestUserId(req);
     if(!RequireProgressionRead(req, res, RequestorAccountId)) return;

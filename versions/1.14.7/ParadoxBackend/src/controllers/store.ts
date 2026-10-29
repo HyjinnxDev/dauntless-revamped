@@ -199,6 +199,107 @@ export function RamsExchangeSku(NowMs = Date.now()): StoreSku {
         duplicateInstancedItems: [],
     };
 }
+// [1.14.7 2026-10-25] Dr. Priyani's Research Lab = the Gauntlet store (tag `gauntlet_store`, tabs from the client's
+// gauntlet_store_view_model: gauntlet_store_tab_{progress,trackers,cells,misc,lastchance}). SKU ids are the client's
+// StoreItemsTable rows; items and the 1 Crest price per the fandom wiki (Gauntlet#Research_Lab). Server choice: every
+// season's cells are on sale from the start, so the Last Chance (_lc, Crumbling Crest) rows are not served.
+// ponytail: the two consumable bundles (sku_gauntlet_s1_consumables_a/b) are left out, their contents are unknown.
+const GAUNTLET_TRACKERS: [string, string, string][] = [
+    ["sku_part_wt_gatherables", "PART_WT_GATHERABLES", "Gatherables"],
+    ["sku_part_wt_dodges", "PART_WT_DODGES", "Dodges"],
+    ["sku_part_wt_damage", "PART_WT_DAMAGE", "Damage Dealt"],
+    ["sku_wt_revives", "PART_WT_REVIVES", "Players Revived"],
+    ["sku_part_wt_wounds", "PART_WT_WOUNDS", "Wounds"],
+    ["sku_part_wt_interrupts", "PART_WT_INTERRUPTS", "Interrupts"],
+    ["sku_part_wt_kills", "PART_WT_KILLS", "Behemoth Slain"],
+    ["sku_part_wt_staggers", "PART_WT_STAGGERS", "Staggers"],
+    ["sku_part_wt_fauna", "PART_WT_FAUNA", "Fauna Slain"],
+    ["sku_part_wt_downed", "PART_WT_DOWNED", "Time Downed"],
+    ["sku_part_wt_parts", "PART_WT_PARTS", "Parts Broken"],
+    ["sku_part_wt_gauntlet_levels_unique", "PART_WT_GAUNTLET_LEVELS_UNIQUE", "Unique Gauntlet Level Completed"],
+    ["sku_part_wt_events", "PART_WT_EVENTS", "Island Events Completed"],
+    ["sku_part_wt_bighit", "PART_WT_BIGHIT", "Biggest Hit"],
+    ["sku_part_wt_hesca_count", "PART_WT_HESCA_COUNT", "Heroic Escalations Completed"],
+    ["sku_part_wt_chests", "PART_WT_CHESTS", "Patrol Chests Opened"],
+    ["sku_part_wt_longest_glide", "PART_WT_LONGEST_GLIDE", "Longest Glide"],
+    ["sku_part_wt_shortest_hesca", "PART_WT_SHORTEST_HESCA", "Fastest Heroic Escalation Completion"],
+    ["sku_part_wt_shortest_trial", "PART_WT_SHORTEST_TRIAL", "Fastest Dauntless Trial Completion"],
+    // The client rows' art is wrong for these two (pets shows the hesca icon), so the tracker icon is sent explicitly.
+    ["sku_part_wt_pets", "PART_WT_DOGS_PET", "Dogs Pet"],
+    ["sku_part_wt_pets_duplicated", "PART_WT_RAMS_HEADBUTTED", "Rams Headbutted"],
+];
+const GAUNTLET_TRACKER_ICONS: Record<string, string> = {
+    PART_WT_DOGS_PET: "Engine.Texture2D'/Game/UI/Textures/Icons/trackers/ico_part_wt_dog.ico_part_wt_dog'",
+    PART_WT_RAMS_HEADBUTTED: "Engine.Texture2D'/Game/UI/Textures/Icons/trackers/ico_part_wt_rams3.ico_part_wt_rams3'",
+};
+// Seasons 1-5 in order; each cell's season matched by its cell type (client row icon) against the wiki's season tables.
+const GAUNTLET_CELLS: [string, string, string][] = [
+    ["sku_gauntlet_cell_dodge_stagger_uc", "CELL_DODGE_STAGGER_UC", "Stop"],
+    ["sku_gauntlet_min_stam_uc", "CELL_MIN_STAM_UC", "Drop"],
+    ["sku_gauntlet_stagger_free_dodge_uc", "CELL_STAGGER_FREE_DODGE_UC", "Roll"],
+    ["sku_gauntlet_dmgup_atkspddown_uc", "CELL_DMGUP_ATKSPDDOWN_UC", "Reduce"],
+    ["sku_gauntlet_part_break_stkspd_up_uc", "CELL_PART_BREAK_ATKSPD_UP_UC", "Reuse"],   // row says stkspd, the cell is ATKSPD
+    ["sku_gauntlet_same_part_dmg_up_uc", "CELL_SAME_PART_DMG_UP_UC", "Recycle"],
+    ["sku_gauntlet_shield_detonation_uc", "CELL_SHIELD_DETONATION_UC", "Earth"],
+    ["sku_gauntlet_ms_down_shield_up_uc", "CELL_MS_DOWN_SHIELD_UP_UC", "Water"],
+    ["sku_gauntlet_atkspd_mvspd_selfharm_uc", "CELL_ATKSPD_MVSPD_SELFHARM_UC", "Fire"],
+    ["sku_gauntlet_dodge_dr_uc", "CELL_DODGE_DR_UC", "Conservation"],
+    ["sku_gauntlet_crit_damage_from_ms_uc", "CELL_CRIT_DAMAGE_FROM_MS_UC", "Impulse"],
+    ["sku_gauntlet_crit_chance_while_sprint_uc", "CELL_CRIT_CHANCE_WHILE_SPRINT_UC", "Inertia"],
+    ["sku_gauntlet_cell_near_fauna_ms_uc", "CELL_NEAR_FAUNA_MS_AS_UC", "Pack Walker"],
+    ["sku_gauntlet_cell_kill_fauna_dmg_uc", "CELL_KILL_FAUNA_DMG_UC", "Pack Hunter"],
+    ["sku_gauntlet_cell_break_summon_uc", "CELL_BREAK_SUMMON_FAUNA_UC", "Pack Caller"],
+];
+function GauntletStoreSkus(): StoreSku[] {
+    const Sku = (Id: string, CatalogId: string, Name: string, Tab: string, Priority: number, Tracker: boolean): StoreSku => ({
+        id: Id,
+        displayName: Name,
+        displayDescription: "",
+        displayPriority: Priority,
+        prices: [{ currencyId: "id_currency_gauntlet_coin", price: 1 }],
+        maxAllowed: Tracker ? 1 : null,   // a tracker is a one-time weapon part; cells are repeatable
+        ...(GAUNTLET_TRACKER_ICONS[CatalogId] ? { images: { standard: GAUNTLET_TRACKER_ICONS[CatalogId] } } : {}),
+        tags: ["gauntlet_store", Tab],
+        items: [{ catalogId: CatalogId, quantity: 1, instanced: Tracker }],
+        duplicateInstancedItems: [],
+    });
+    return [
+        ...GAUNTLET_TRACKERS.map(([Id, CatalogId, Name], I) => Sku(Id, CatalogId, `"${Name}" Tracker`, "gauntlet_store_tab_trackers", I, true)),
+        ...GAUNTLET_CELLS.map(([Id, CatalogId, Name], I) => Sku(Id, CatalogId, `+1 ${Name} Cell`, "gauntlet_store_tab_cells", I, false)),
+    ];
+}
+
+// [Revamped 2026-10-26] House-priced repeatable currency bundles: Aethersparks in the Reward Cache, Bounty Tokens in
+// the Platinum store (Supplies tab, next to Patrol Keys). Ids are ours, art is the catalog icon.
+function BundleSku(Id: string, Name: string, Description: string, CatalogId: string, Quantity: number, CurrencyId: string, Price: number, Icon: string, Tags: string[]): StoreSku {
+    return {
+        id: Id,
+        displayName: `${Quantity} ${Name}`,
+        displayDescription: Description,
+        displayPriority: 1000 + Quantity,
+        prices: [{ currencyId: CurrencyId, price: Price }],
+        maxAllowed: null,
+        images: { standard: `Engine.Texture2D'${Icon}'` },
+        tags: Tags,
+        items: [{ catalogId: CatalogId, quantity: Quantity, instanced: false }],
+        duplicateInstancedItems: [],
+    };
+}
+const AETHERSPARK_SKUS = ([[100, 2000], [500, 8000]] as const).map(([Quantity, Price]) => BundleSku(
+    `rewardcache_aethersparks_${Quantity}`, "Aethersparks", "A bundle of Aethersparks.", "CURRENCY_PJM_PRESTIGE_EMPTY", Quantity,
+    "id_currency_seasonal_coin", Price, "/Game/UI/Textures/SlayerPath/ui_icon_aether_shards.ui_icon_aether_shards",
+    ["season_store", "season_store_general", "reward_cache_house"]));
+const BOUNTY_TOKEN_SKUS = ([[5, 100], [14, 250], [32, 500]] as const).map(([Quantity, Price]) => BundleSku(
+    `bundle_bountytokens_${Quantity}`, "Bounty Tokens", "Can be consumed to draft a new bounty.", "TOKEN_BOUNTY_DRAFT", Quantity,
+    "id_currency_platinum", Price, "/Game/UI/Textures/HuntpassRewards/ui_hp_bounty_tokens.ui_hp_bounty_tokens",
+    ["webstore", "supplies_supplies", "platinum_store_house"]));
+// [Revamped 2026-10-27] Combat Merits sold in both stores: Platinum (webstore) and Cache Coins (Reward Cache).
+const CombatMeritSkus = (IdPrefix: string, CurrencyId: string, Bundles: readonly (readonly [number, number])[], Tags: string[]) => Bundles.map(([Quantity, Price]) => BundleSku(
+    `${IdPrefix}_combatmerits_${Quantity}`, "Combat Merits", "Spend on Combat nodes of the Slayer's Path.", "CURRENCY_PJM_WEAPON", Quantity,
+    CurrencyId, Price, "/Game/UI/Textures/StoreImagesSquare/ui_combat_merits_currency_icon_store.ui_combat_merits_currency_icon_store", Tags));
+const COMBAT_MERIT_PLATINUM_SKUS = CombatMeritSkus("bundle", "id_currency_platinum", [[250, 100], [1000, 350]], ["webstore", "supplies_supplies", "platinum_store_house"]);
+const COMBAT_MERIT_CACHE_SKUS = CombatMeritSkus("rewardcache", "id_currency_seasonal_coin", [[250, 1500], [1000, 5000]], ["season_store", "season_store_general", "reward_cache_house"]);
+
 // The client only shows season43's Elite; which pass it unlocks depends on the player (GetStoreSkus' servedSlot).
 const HUNT_PASS_SKU_TAG = HuntPassPassSkuTag(SEASON_PASS_SLOT);
 const HUNT_PASS_SKUS = { [HUNT_PASS_SKU_TAG]: HuntPassSkus(SEASON_PASS_SLOT) };
@@ -209,11 +310,12 @@ const STORE_SKUS: Record<string, StoreSku[]> = {
     exchange_vendor_slot_2: EXCHANGE_SLOT_SKUS.slot2,
     exchange_vendor_slot_3: EXCHANGE_SLOT_SKUS.slot3,
     ladyluckstore: LADYLUCK_SKUS,
-    season_store: REWARD_CACHE_SKUS,
-    webstore: PlatinumSection("webstore"),
+    season_store: [...REWARD_CACHE_SKUS, ...AETHERSPARK_SKUS, ...COMBAT_MERIT_CACHE_SKUS],
+    webstore: [...PlatinumSection("webstore"), ...BOUNTY_TOKEN_SKUS, ...COMBAT_MERIT_PLATINUM_SKUS],
     dyes: PlatinumSection("dyes"),
     hp_level_skip_rank: PlatinumSection("hp_level_skip_rank"),
     huntpass_store: PlatinumSection("huntpass_store"),
+    gauntlet_store: GauntletStoreSkus(),
     get fountain_daily_free_bundle() { return [FountainDailySku()]; },   // rebuilt per read: the ownership key carries today's date
     get weekly_cell_offering() { return [...WeeklyCellSkus(), RamsExchangeSku()]; },   // rebuilt per read: rotates daily
 };
@@ -230,6 +332,8 @@ const CURRENCY_ID_MAP: Record<string, string> = {
     id_currency_seasonal_coin: "CURRENCY_SEASONAL_COIN",
     id_currency_rewardcache: "CURRENCY_REWARDCACHE",
     id_currency_notes: "CURRENCY_NOTES",
+    // [1.14.7 2026-10-25] Research Lab (gauntlet_store) price: Gauntlet Crests.
+    id_currency_gauntlet_coin: "CURRENCY_GAUNTLET_COIN",
     // [2026-07-30] Platinum resolves to the AGGREGATE id; ApplyCurrencyDeltas splits the debit across
     // the real per-storefront buckets (platinumWallet.ts). Without this entry the fallback below
     // produced "ID_CURRENCY_PLATINUM", which fails the CURRENCY_ prefix test in ApplyCurrencyDeltas and
