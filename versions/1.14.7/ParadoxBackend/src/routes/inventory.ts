@@ -18,6 +18,7 @@ import { MonitorGrant, MonitorInventoryOutcome, MonitorInventoryRequest, Monitor
 import { IsChallengeRewardGrant, WaitForFundableSeasonClaim } from "../controllers/challengeRewards";
 import { ValidateInventoryTransactionBody, InventoryBodyHasGrantOrSpend, ValidateInstancedItemUpdateBody } from "../validation";
 import { CaptureInventoryTransaction, CaptureEvent } from "../diagnostics/capture";
+import { CommissionClaimStackedItems } from "../controllers/progression";
 import { GetCharactersForUid } from "../controllers/character";
 import { ExtensionInventoryTransaction, GetP2PExtension } from "../extensions/p2p";
 
@@ -184,8 +185,8 @@ inventoryRouter.post("/inventory", HasParadoxBackendAuth, async (req: any, res) 
     }
 
     const TransactionId = req.body.transactionId;
-    const InstancedItemsToAdd = req.body.addInstancedItems;
-    const StackedItemsToAdd = req.body.addStackedItems;
+    let InstancedItemsToAdd = req.body.addInstancedItems;
+    let StackedItemsToAdd = req.body.addStackedItems;
     const InstancedItemsToRemove = req.body.removeInstancedItems;
     const StackedItemsToRemove = req.body.removeStackedItems;
     const InstancedItemsToSave = req.body.saveInstancedItems;
@@ -274,6 +275,15 @@ inventoryRouter.post("/inventory", HasParadoxBackendAuth, async (req: any, res) 
         && StackedItemsToAdd.some((Item: any) => IsChallengeRewardGrant(Item?.catalogId, Item?.quantity))) {
         const Ready = await WaitForFundableSeasonClaim(UserId);
         if (!Ready) logger.warn(`transactionId ${TransactionId}: challenge-reward currency with no claimed, uncredited season challenge after 1.5 s`);
+    }
+
+    // Hunt pass claims by a player on the Commission pass pay that pass, not the game server's season pass
+    // (controllers/progression.ts CommissionClaimStackedItems).
+    const CommissionItems = IsDedicatedServer ? await CommissionClaimStackedItems(UserId, req.body.source) : undefined;
+    if (CommissionItems) {
+        logger.info(`[CommissionClaim] txn=${TransactionId} user=${UserId} game server items replaced by ${JSON.stringify(CommissionItems)}`);
+        StackedItemsToAdd = CommissionItems;
+        InstancedItemsToAdd = [];
     }
 
     let TransactionResult: any;

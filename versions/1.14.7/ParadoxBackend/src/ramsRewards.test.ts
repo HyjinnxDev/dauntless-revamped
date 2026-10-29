@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ApplyRamsRewards, NoteRemovedBounties } from "./ramsRewards";
+import { ApplyRamsRewards, NoteRemovedBounties, UpgradeCoreCells } from "./ramsRewards";
 import { GetStoreSkus, RamsExchangeSku } from "./controllers/store";
 
 const Core = [{ catalogId: "CONTAINER_CORE_REWARD_DAILY_01", quantity: 1 }];
 const Of = (Items: any[], Id: string) => Items.filter((Item) => Item.catalogId === Id);
 const Rams = (Items: any[]) => Of(Items, "CURRENCY_NOTES").map((Item) => Item.quantity);
 
-test("fountain core keys roll 4-6 as one stack; other grants untouched", () => {
+test("fountain core keys are game roll +2 (clamped 4-6) as one stack; other grants untouched", () => {
     const Add = [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 1 }, { catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 2 }, { catalogId: "CURRENCY_NOTES", quantity: 100 }];
-    assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined, 1, () => 0), "TOKEN_DAILY_PATROL_BONUS_PURCHASED"), [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 4 }]);
-    assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined, 1, () => 0.999), "TOKEN_DAILY_PATROL_BONUS_PURCHASED"), [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 6 }]);
+    assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined), "TOKEN_DAILY_PATROL_BONUS_PURCHASED"), [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 5 }]);
+    const KeysFor = (Game: number) => Of(ApplyRamsRewards("u", "t", [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: Game }], Core, undefined), "TOKEN_DAILY_PATROL_BONUS_PURCHASED")[0].quantity;
+    assert.deepEqual([KeysFor(1), KeysFor(3), KeysFor(4), KeysFor(9)], [4, 5, 6, 6]);
     assert.deepEqual(Rams(ApplyRamsRewards("u", "t", Add, Core, undefined)), [100]);
     assert.deepEqual(Of(ApplyRamsRewards("u", "t", Add, Core, undefined), "CURRENCY_PLATINUM_UNIV"), [{ catalogId: "CURRENCY_PLATINUM_UNIV", quantity: 20 }]);
     const Keys = [{ catalogId: "TOKEN_DAILY_PATROL_BONUS_PURCHASED", quantity: 3 }];
@@ -51,4 +52,35 @@ test("Middleman lists a once-a-day dust -> Rams exchange keyed on the rotation d
     const Reset = Date.UTC(2026, 9, 19, 18);
     assert.equal(RamsExchangeSku(Reset).ownershipKey, RamsExchangeSku(Reset + 86_399_000).ownershipKey);
     assert.notEqual(RamsExchangeSku(Reset).ownershipKey, RamsExchangeSku(Reset + 86_400_000).ownershipKey);
+});
+
+test("cell cores swap one +1 cell for +2/+3 per upgraded core; cell count and other grants unchanged", () => {
+    const Add = [{ catalogId: "CELL_A_UC", quantity: 2 }, { catalogId: "CELL_B_UC", quantity: 1 }, { catalogId: "CURRENCY_NOTES", quantity: 50 }];
+    const Open = (Core: string, Rolls: number[], Quantity = 1) => {
+        let i = 0;
+        return UpgradeCoreCells(Add, [{ catalogId: Core, quantity: Quantity }], () => Rolls[i++ % Rolls.length]);
+    };
+    // Rare: always upgrades; roll 0.5 -> +2, cell pick 0 -> CELL_A
+    assert.deepEqual(Open("CONTAINER_CORE_GOLD_CELLCORE", [0.5, 0.5, 0]), [{ catalogId: "CELL_A_UC", quantity: 1 }, { catalogId: "CELL_B_UC", quantity: 1 }, { catalogId: "CURRENCY_NOTES", quantity: 50 }, { catalogId: "CELL_A_R", quantity: 1 }]);
+    // Rare 1% epic; pick 0.9 -> CELL_B, whose emptied +1 stack is dropped
+    assert.deepEqual(Open("CONTAINER_CORE_GOLD_CELLCORE", [0.5, 0.005, 0.9]), [{ catalogId: "CELL_A_UC", quantity: 2 }, { catalogId: "CURRENCY_NOTES", quantity: 50 }, { catalogId: "CELL_B_E", quantity: 1 }]);
+    // Uncommon 10%, Common 1%, never +3
+    assert.equal(Open("CONTAINER_CORE_SILVER_CELLCORE", [0.1]), Add);
+    assert.deepEqual(Of(Open("CONTAINER_CORE_SILVER_CELLCORE", [0.099, 0, 0]), "CELL_A_R"), [{ catalogId: "CELL_A_R", quantity: 1 }]);
+    assert.equal(Open("CONTAINER_CORE_BRONZE_CELLCORE", [0.01]), Add);
+    assert.deepEqual(Of(Open("CONTAINER_CORE_BRONZE_CELLCORE", [0.009, 0, 0]), "CELL_A_R"), [{ catalogId: "CELL_A_R", quantity: 1 }]);
+    // Two rare cores in one request upgrade two cells; never more upgrades than +1 cells granted
+    assert.deepEqual(Of(Open("CONTAINER_CORE_GOLD_CELLCORE", [0.5, 0.5, 0], 2), "CELL_A_R"), [{ catalogId: "CELL_A_R", quantity: 2 }]);
+    assert.equal(Open("CONTAINER_CORE_GOLD_CELLCORE", [0.5, 0.5, 0], 9).filter((Item) => /^CELL_/.test(Item.catalogId)).reduce((S, I) => S + I.quantity, 0), 3);
+    // Not a cell core: untouched
+    assert.equal(UpgradeCoreCells(Add, [{ catalogId: "CONTAINER_CORE_REWARD_DAILY_01", quantity: 1 }]), Add);
+});
+
+test("cell core roll is seeded from the game's cells, so the client popup (MpCellCorePopupFix) can replay it", () => {
+    // Real gold core open 2026-10-25; the DLL's FNV-1a + mulberry32 must give the same answer.
+    const Add = ["CELL_SHIELDS_HIT_ABSORB_UC", "CELL_CRIT_CHANCE_UC", "CELL_LANTERN_TAP_EFFECTIVENESS_UC", "CELL_PART_BREAK_ATKSPD_UP_UC"]
+        .map((catalogId) => ({ catalogId, quantity: 1 })).concat({ catalogId: "CURRENCY_CELLDUST", quantity: 6 });
+    const Out = ApplyRamsRewards("u", "t", Add, [{ catalogId: "CONTAINER_CORE_GOLD_CELLCORE", quantity: 1 }], "Core Opener");
+    assert.deepEqual(Of(Out, "CELL_LANTERN_TAP_EFFECTIVENESS_R"), [{ catalogId: "CELL_LANTERN_TAP_EFFECTIVENESS_R", quantity: 1 }]);
+    assert.deepEqual(ApplyRamsRewards("u", "t", Add, [{ catalogId: "CONTAINER_CORE_GOLD_CELLCORE", quantity: 1 }], "Core Opener"), Out);
 });

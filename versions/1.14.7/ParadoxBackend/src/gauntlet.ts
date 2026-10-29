@@ -10,6 +10,7 @@ import { logger } from "./logger";
 import { GetMongoDb } from "./persistence/mongo/client";
 import { Collections } from "./persistence/mongo/collections";
 import { ActiveSeasonWindow, HuntPassRotationIndex } from "./huntPassRotation";
+import { AddCurrency } from "./controllers/wallet";
 
 // Gauntlet seasons and level access (gauntlet-prod.steelyard.ca), 2026-10-21.
 // Contract from the 1.14.7 exe (OnlineSubsystemPhoenix serializers, all wrapped {code, message, payload}):
@@ -18,11 +19,11 @@ import { ActiveSeasonWindow, HuntPassRotationIndex } from "./huntPassRotation";
 //   GET  /progression/{id}/{account}               -> {personal_progression, guild_progression}
 //   POST GauntletEndedLevelEndpoint (path unseen)  <- {gauntlet_id, players[], level, remaining_sec, data{}}
 // Retail rules (fandom wiki "Gauntlet"): clearing a level unlocks the next; a party may only queue a level every member
-// has unlocked; 3+ guildmates clearing a level unlock it for the whole guild.
+// has unlocked; 3+ guildmates clearing a level unlock it for the whole guild ([Revamped] 2026-10-26: we use 2+).
 // A season is the hunt pass window (huntPassRotation.ts, two weeks); progress is keyed by that window, so it resets with it.
 // ponytail: the client carries Season 01-05 content (wiki); only season 1 is verified in game. GAUNTLET_SEASON pins one.
 const GAUNTLET_SEASONS = 5;
-const GUILD_UNLOCK_MEMBERS = 3;
+const GUILD_UNLOCK_MEMBERS = 2;
 // CombineGauntletSeasonAndLevelNumber: season 1 level 1 arrives as 10000001.
 const COMBINED_LEVEL_BASE = 10_000_000;
 
@@ -89,6 +90,12 @@ export async function GetPartyLevelAccess(Accounts: string[]) {
     return PartyLevelAccess([...Progress.values()].map((P) => Math.max(P.personal, P.guild)));
 }
 
+// Retail (wiki Gauntlet): a Crest for the first clear of level 1 and of every 5th level, spent in the Research Lab.
+// ponytail: paid only when the milestone raises the player's season best; a milestone first cleared below an earlier
+// best (reached through a guild unlock) pays nothing. Track cleared levels per player if that matters.
+// The guild bonus Crests (Research Lab Progress tab) are not modelled.
+export const IsCrestMilestone = (Level: number) => Level === 1 || Level % 5 === 0;
+
 // A level success from the game server. Clears only ever raise a best ($max), so repeats are harmless.
 export async function RecordGauntletClear(Body: any, NowMs = Date.now()): Promise<string> {
     const Season = GauntletSeason(NowMs);
@@ -98,13 +105,19 @@ export async function RecordGauntletClear(Body: any, NowMs = Date.now()): Promis
     if (Level === undefined || Players.length === 0 || Players.length > 4) return `ignored: level=${Body?.level} players=${Players.length}`;
     const C = await Cols();
     const At = new Date(NowMs);
+    const Crested: string[] = [];
     for (const Player of Players) {
-        await C.Clears.updateOne({ _id: `${Season.index}:${Player}` }, { $max: { best: Level }, $set: { updatedAt: At }, $setOnInsert: { season: Season.index, accountId: Player } }, { upsert: true });
+        const Before = await C.Clears.findOneAndUpdate({ _id: `${Season.index}:${Player}` }, { $max: { best: Level }, $set: { updatedAt: At }, $setOnInsert: { season: Season.index, accountId: Player } }, { upsert: true, returnDocument: "before" });
+        // The atomic before-image makes a repeat or concurrent clear of the same level pay nothing.
+        if (IsCrestMilestone(Level) && Level > (Before?.best ?? 0)) {
+            await AddCurrency(Player, "CURRENCY_GAUNTLET_COIN", 1);
+            Crested.push(Player);
+        }
     }
     const Guilds = GuildsUnlocking(await GuildsOf(C, Players), Players);
     for (const Guild of Guilds) {
         await C.GuildClears.updateOne({ _id: `${Season.index}:${Guild}` }, { $max: { best: Level }, $set: { updatedAt: At }, $setOnInsert: { season: Season.index, guildId: Guild } }, { upsert: true });
     }
-    logger.info(`[Gauntlet] clear ${Season.id} level=${Level} players=${Players.join(",")}${Guilds.length ? ` guild unlock=${Guilds.join(",")}` : ""}`);
+    logger.info(`[Gauntlet] clear ${Season.id} level=${Level} players=${Players.join(",")}${Guilds.length ? ` guild unlock=${Guilds.join(",")}` : ""}${Crested.length ? ` crest=${Crested.join(",")}` : ""}`);
     return "recorded";
 }

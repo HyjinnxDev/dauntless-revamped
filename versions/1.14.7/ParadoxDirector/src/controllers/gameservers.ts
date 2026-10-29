@@ -505,11 +505,16 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     const LogStream = fs.createWriteStream(LogPath, { flags: "a" });
     // A log write error (disk full, a late write after end) must not become an uncaught exception.
     LogStream.on("error", (err) => logger.warn(`gameserver log ${LogPath}: ${err.message}`));
+    // [2026-10-26] The server never applies the row's GameModeOverride itself: story missions ran the map's
+    // default BPGM_ArchonEscalation (no Behemoth, no objectives). The DLL appends it to the map URL as ?game=.
+    const RowGameMode = MatchmakerHuntId != undefined ? FindMatchmakerRow(MatchmakerHuntId)?.GameModeOverride : undefined;
+    const GameMode = typeof RowGameMode === "string" && /^\/Game\/[\w/]+\.\w+$/.test(RowGameMode) ? RowGameMode : undefined;
     LogStream.write(
         `=== Gameserver launch ${new Date().toLocaleString()} (local time) ===\n` +
         `port=${Port} map=${Map} behemoth=${Behemoth ?? "NO_BEHEMOTH"} ` +
         `mmHunt=${MatchmakerHuntId ?? "NO_MM_HUNTID"} ` +
         (GauntletLevel != undefined ? `gauntletLevel=${GauntletLevel} ` : "") +
+        (GameMode != undefined ? `game=${GameMode} ` : "") +
         `players=${ExpectedPlayers != undefined ? TransformExpectedPlayerArgs(ExpectedPlayers) : "NO_EXPECTED_PLAYERS"}\n\n`
     );
 
@@ -521,6 +526,7 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
         ...process.env,
         MYSTICPARADOX_GAMESERVER_LAUNCH_ID: Id,
         ...(ArenaWeekMatch ? { MYSTICPARADOX_TRIALS_WEEK: ArenaWeekMatch[1] } : {}),
+        ...(GameMode != undefined ? { MYSTICPARADOX_GAME_MODE: GameMode } : {}),
         // [2026-10-20] The DLL appends ?GauntletLevel=N to the map URL; BPGM_ArchonGauntlet picks its lineup from it.
         ...(GauntletLevel != undefined ? { MYSTICPARADOX_GAUNTLET_LEVEL: String(GauntletLevel) } : {})
     };
