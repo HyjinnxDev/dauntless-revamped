@@ -432,53 +432,75 @@ export type InventoryTransactionOptions = {
     source?: string;
 };
 
-// [2026-10-13] Bounties re-enabled with a daily TOKEN_BOUNTY_DRAFT stack that does NOT stack across days.
+// [2026-10-13] Bounties re-enabled with a daily TOKEN_BOUNTY_DRAFT stack (banked across days since 2026-10-29, below).
 // [2026-10-15] 10 a day, and the backend refill below is now the ONLY source: every UBountyComponent grant of a bounty
 // token is dropped (see IsGameBountyTokenGrant), including the TOKEN_BOUNTY_DRAFT_PREMIUM x1 that each claimed bounty
 // paid out through item_grant_data.
 export const BOUNTY_TOKENS_DAILY = 10;
+// [Revamped 2026-10-29] Banked: unused tokens carry over and each day adds BOUNTY_TOKENS_DAILY, up to this cap. Only the
+// daily add stops at the cap; chests, commissions and Platinum bundles still add on top.
+export const BOUNTY_TOKENS_BANK_CAP = 50;
 
-// The game never grants the daily tokens on 1.14.7 (measured: no grant POST at login), so the backend sets the stack to
-// BOUNTY_TOKENS_DAILY once per UTC day when the inventory is read. The day is kept as a cooldown entry nobody else reads.
+// The game never grants the daily tokens on 1.14.7 (measured: no grant POST at login), so the backend adds them once per
+// UTC day per character when the inventory is read. The day is kept as a cooldown entry nobody else reads.
+// [Revamped 2026-10-29] Keyed per character (the old user-wide "mp_bounty_token_refill" skipped a second character). A
+// character with no entry under the new key is topped up to the cap once: the make-good for tokens the old daily reset
+// (which set the stack to 10, wiping leftovers and chest tokens) took.
 const BOUNTY_REFILL_COOLDOWN_ID = "mp_bounty_token_refill";
+const BOUNTY_BANK_COOLDOWN_PREFIX = "mp_bounty_token_bank:";
+
+export function BankedBountyTokens(Held: number, FirstBank: boolean): number {
+    if(FirstBank) return Math.max(Held, BOUNTY_TOKENS_BANK_CAP);
+    return Held >= BOUNTY_TOKENS_BANK_CAP ? Held : Math.min(Held + BOUNTY_TOKENS_DAILY, BOUNTY_TOKENS_BANK_CAP);
+}
 
 async function RefillBountyTokensDaily(UserId: string, CharacterId: string){
     const Now = new Date().toISOString();
+    const CooldownId = BOUNTY_BANK_COOLDOWN_PREFIX + CharacterId;
     const Cooldowns = await GetRepositories().cooldownStates.get(UserId);
-    const Last = Cooldowns?.entries.find((Entry) => Entry.id === BOUNTY_REFILL_COOLDOWN_ID);
+    const Last = Cooldowns?.entries.find((Entry) => Entry.id === CooldownId);
     if(Last != undefined && Last.startedDate.slice(0, 10) === Now.slice(0, 10)){
         return;
     }
 
-    const Inventory = await GetRepositories().inventories.findByCharacterId(CharacterId);
-    if(Inventory == undefined){
-        return;
-    }
-    const StackedItems: any[] = JSON.parse(Inventory.stackedItems);
-    const Stack = StackedItems.find((Item) => Item?.catalogId === "TOKEN_BOUNTY_DRAFT");
-    if(Stack == undefined){
-        StackedItems.push({ catalogId: "TOKEN_BOUNTY_DRAFT", quantity: BOUNTY_TOKENS_DAILY });
-    }
-    else{
-        // [Revamped 2026-10-26] Top up, never cut: Platinum-bought tokens above the daily amount survive the refill.
-        Stack.quantity = Math.max(Number(Stack.quantity) || 0, BOUNTY_TOKENS_DAILY);
-    }
-    const Updated = await GetRepositories().inventories.updateBothIfRevisionMatches(
-        CharacterId, Inventory.instancedItems, JSON.stringify(StackedItems), Inventory.revision ?? 0);
-    if(Updated == undefined){
-        return; // revision conflict - the next read retries
-    }
-
-    const Entries = (Cooldowns?.entries ?? []).filter((Entry) => Entry.id !== BOUNTY_REFILL_COOLDOWN_ID);
-    Entries.push({ id: BOUNTY_REFILL_COOLDOWN_ID, startedDate: Now, updatedAt: Now });
-    await GetRepositories().cooldownStates.saveIfVersion({
+    // Claim the day before granting: an additive grant must never run twice for one day.
+    const Entries = (Cooldowns?.entries ?? []).filter((Entry) => Entry.id !== CooldownId && Entry.id !== BOUNTY_REFILL_COOLDOWN_ID);
+    Entries.push({ id: CooldownId, startedDate: Now, updatedAt: Now });
+    const Claimed = await GetRepositories().cooldownStates.saveIfVersion({
         userId: UserId,
         entries: Entries,
         updateVersion: (Cooldowns?.updateVersion ?? 0) + 1,
         createdAt: Cooldowns?.createdAt ?? Now,
         updatedAt: Now,
     }, Cooldowns?.updateVersion);
-    logger.info(`[BountyTokens] set TOKEN_BOUNTY_DRAFT to ${BOUNTY_TOKENS_DAILY} for userId ${UserId} characterId ${CharacterId}`);
+    if(Claimed == undefined){
+        return; // version conflict - a concurrent read claimed it, or the next read retries
+    }
+
+    for(let Attempt = 0; Attempt < 3; Attempt++){
+        const Inventory = await GetRepositories().inventories.findByCharacterId(CharacterId);
+        if(Inventory == undefined){
+            return;
+        }
+        const StackedItems: any[] = JSON.parse(Inventory.stackedItems);
+        let Stack = StackedItems.find((Item) => Item?.catalogId === "TOKEN_BOUNTY_DRAFT");
+        if(Stack == undefined){
+            Stack = { catalogId: "TOKEN_BOUNTY_DRAFT", quantity: 0 };
+            StackedItems.push(Stack);
+        }
+        const Held = Number(Stack.quantity) || 0;
+        Stack.quantity = BankedBountyTokens(Held, Last == undefined);
+        if(Stack.quantity === Held){
+            return;
+        }
+        const Updated = await GetRepositories().inventories.updateBothIfRevisionMatches(
+            CharacterId, Inventory.instancedItems, JSON.stringify(StackedItems), Inventory.revision ?? 0);
+        if(Updated != undefined){
+            logger.info(`[BountyTokens] TOKEN_BOUNTY_DRAFT ${Held} -> ${Stack.quantity}${Last == undefined ? " (first bank, make-good)" : ""} for userId ${UserId} characterId ${CharacterId}`);
+            return;
+        }
+    }
+    logger.warn(`[BountyTokens] revision conflict 3x, day's tokens lost for userId ${UserId} characterId ${CharacterId}`);
 }
 
 export function IsGameBountyTokenGrant(catalogId: unknown, source: string | undefined): boolean {
