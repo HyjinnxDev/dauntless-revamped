@@ -299,6 +299,12 @@ const CombatMeritSkus = (IdPrefix: string, CurrencyId: string, Bundles: readonly
     CurrencyId, Price, "/Game/UI/Textures/StoreImagesSquare/ui_combat_merits_currency_icon_store.ui_combat_merits_currency_icon_store", Tags));
 const COMBAT_MERIT_PLATINUM_SKUS = CombatMeritSkus("bundle", "id_currency_platinum", [[250, 100], [1000, 350]], ["webstore", "supplies_supplies", "platinum_store_house"]);
 const COMBAT_MERIT_CACHE_SKUS = CombatMeritSkus("rewardcache", "id_currency_seasonal_coin", [[250, 1500], [1000, 5000]], ["season_store", "season_store_general", "reward_cache_house"]);
+// [Revamped 2026-10-29] Aetherdust sold in both stores, priced off the Middleman's +1 cell (50 Platinum or 40 dust).
+const AetherdustSkus = (IdPrefix: string, CurrencyId: string, Bundles: readonly (readonly [number, number])[], Tags: string[]) => Bundles.map(([Quantity, Price]) => BundleSku(
+    `${IdPrefix}_aetherdust_${Quantity}`, "Aetherdust", "Spend at the Middleman on cells and fusion.", "CURRENCY_CELLDUST", Quantity,
+    CurrencyId, Price, "/Game/UI/Textures/Icons/Currencies/ui_icon_currency_aetherdust.ui_icon_currency_aetherdust", Tags));
+const AETHERDUST_PLATINUM_SKUS = AetherdustSkus("bundle", "id_currency_platinum", [[100, 125], [500, 550]], ["webstore", "supplies_supplies", "platinum_store_house"]);
+const AETHERDUST_CACHE_SKUS = AetherdustSkus("rewardcache", "id_currency_seasonal_coin", [[100, 1800], [500, 8000]], ["season_store", "season_store_general", "reward_cache_house"]);
 
 // The client only shows season43's Elite; which pass it unlocks depends on the player (GetStoreSkus' servedSlot).
 const HUNT_PASS_SKU_TAG = HuntPassPassSkuTag(SEASON_PASS_SLOT);
@@ -310,8 +316,8 @@ const STORE_SKUS: Record<string, StoreSku[]> = {
     exchange_vendor_slot_2: EXCHANGE_SLOT_SKUS.slot2,
     exchange_vendor_slot_3: EXCHANGE_SLOT_SKUS.slot3,
     ladyluckstore: LADYLUCK_SKUS,
-    season_store: [...REWARD_CACHE_SKUS, ...AETHERSPARK_SKUS, ...COMBAT_MERIT_CACHE_SKUS],
-    webstore: [...PlatinumSection("webstore"), ...BOUNTY_TOKEN_SKUS, ...COMBAT_MERIT_PLATINUM_SKUS],
+    season_store: [...REWARD_CACHE_SKUS, ...AETHERSPARK_SKUS, ...COMBAT_MERIT_CACHE_SKUS, ...AETHERDUST_CACHE_SKUS],
+    webstore: [...PlatinumSection("webstore"), ...BOUNTY_TOKEN_SKUS, ...COMBAT_MERIT_PLATINUM_SKUS, ...AETHERDUST_PLATINUM_SKUS],
     dyes: PlatinumSection("dyes"),
     hp_level_skip_rank: PlatinumSection("hp_level_skip_rank"),
     huntpass_store: PlatinumSection("huntpass_store"),
