@@ -303,8 +303,8 @@ const COMBAT_MERIT_CACHE_SKUS = CombatMeritSkus("rewardcache", "id_currency_seas
 const AetherdustSkus = (IdPrefix: string, CurrencyId: string, Bundles: readonly (readonly [number, number])[], Tags: string[]) => Bundles.map(([Quantity, Price]) => BundleSku(
     `${IdPrefix}_aetherdust_${Quantity}`, "Aetherdust", "Spend at the Middleman on cells and fusion.", "CURRENCY_CELLDUST", Quantity,
     CurrencyId, Price, "/Game/UI/Textures/Icons/Currencies/ui_icon_currency_aetherdust.ui_icon_currency_aetherdust", Tags));
-const AETHERDUST_PLATINUM_SKUS = AetherdustSkus("bundle", "id_currency_platinum", [[100, 125], [500, 550]], ["webstore", "supplies_supplies", "platinum_store_house"]);
-const AETHERDUST_CACHE_SKUS = AetherdustSkus("rewardcache", "id_currency_seasonal_coin", [[100, 1800], [500, 8000]], ["season_store", "season_store_general", "reward_cache_house"]);
+const AETHERDUST_PLATINUM_SKUS = AetherdustSkus("bundle", "id_currency_platinum", [[120, 125], [600, 550]], ["webstore", "supplies_supplies", "platinum_store_house"]);
+const AETHERDUST_CACHE_SKUS = AetherdustSkus("rewardcache", "id_currency_seasonal_coin", [[120, 1800], [600, 8000]], ["season_store", "season_store_general", "reward_cache_house"]);
 
 // The client only shows season43's Elite; which pass it unlocks depends on the player (GetStoreSkus' servedSlot).
 const HUNT_PASS_SKU_TAG = HuntPassPassSkuTag(SEASON_PASS_SLOT);

@@ -36,7 +36,7 @@ test("Reward Cache exposes the deterministic 163-item reconstructed rotation", (
     assert.deepEqual(GetStoreSkus("season_store").filter((Sku) => Sku.tags.includes("reward_cache_house")).map((Sku) => [Sku.items[0].catalogId, Sku.items[0].quantity, Sku.prices[0].price]), [
         ["CURRENCY_PJM_PRESTIGE_EMPTY", 100, 2000], ["CURRENCY_PJM_PRESTIGE_EMPTY", 500, 8000],
         ["CURRENCY_PJM_WEAPON", 250, 1500], ["CURRENCY_PJM_WEAPON", 1000, 5000],
-        ["CURRENCY_CELLDUST", 100, 1800], ["CURRENCY_CELLDUST", 500, 8000],
+        ["CURRENCY_CELLDUST", 120, 1800], ["CURRENCY_CELLDUST", 600, 8000],
     ]);
     assert.equal(Skus.length, 163);
     assert.equal(new Set(Skus.map((Sku) => Sku.id)).size, 163);
@@ -372,7 +372,7 @@ test("platinum offers never overlap Lady Luck's Store or the Reward Cache", () =
     // [Revamped 2026-10-20] except Patrol Keys, deliberately sold as 1 and 25 bundles.
     // [Revamped 2026-10-26] and Bounty Tokens, sold as 5/14/32 bundles.
     // [Revamped 2026-10-27] and Combat Merits, sold as 250/1000 bundles.
-    // [Revamped 2026-10-29] and Aetherdust, sold as 100/500 bundles.
+    // [Revamped 2026-10-29] and Aetherdust, sold as 120/600 bundles.
     const Unique = PlatinumGrants.filter((CatalogId) => !["TOKEN_DAILY_PATROL_BONUS_PURCHASED", "TOKEN_BOUNTY_DRAFT", "CURRENCY_PJM_WEAPON", "CURRENCY_CELLDUST"].includes(CatalogId));
     assert.equal(new Set(Unique).size, Unique.length);
 });
