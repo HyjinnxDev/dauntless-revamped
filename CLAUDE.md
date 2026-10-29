@@ -2,6 +2,17 @@
 
 Private monorepo (`HyjinnxDev/dauntless-revamped`): the Revamped launcher plus the server/runtime for each supported Dauntless version. This is the only working copy; old clones are renamed `*.old` and stale.
 
+## Wiki (`docs/wiki/`) - read first, keep current
+
+`docs/wiki/` documents what every source file, route, collection, env var, IPC channel and log tag does. Start at `docs/wiki/index.md`.
+
+- **Before working** on an area, read its wiki page(s) instead of re-deriving structure from code. Trust it for "where is X / what does X do", then read only the files you will change. If the wiki and code disagree, the code wins: fix the page in the same change.
+- **When you add, rename, move or delete a file**, or change a route, env var, Mongo collection/index, IPC channel, CLI flag, port, timer/default or log tag, update the owning page's file-reference table / section in the same change. New area = new page + a row in `index.md`.
+- **Behaviour changes** (new feature, changed rule, fixed gotcha): update the narrative section of the page, not just the table. Record non-obvious gotchas under the page's `Gotchas`.
+- Update the `> Verified against code YYYY-MM-DD.` line on pages you checked end to end.
+- **Check coverage** after file changes: `node docs/wiki/check-coverage.mjs [path-prefix]` lists source files no page mentions (by `parent/name`); it should print `0 of N`. Tests, `node_modules`, SDK and `game-data` are excluded.
+- Style: terse, present tense, symbol names not line numbers, tables for references. Never put secrets, keys, tokens or real player data in the wiki.
+
 ## Layout
 
 | Path | What |
