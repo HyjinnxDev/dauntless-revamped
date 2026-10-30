@@ -5593,12 +5593,24 @@ namespace JourneyTestBranch {
                 + " mods=" + std::to_string(Ge->Modifiers.Num()) + Mods + " executions=[" + Execs + "]");
         }
 
-        // Every 5 s for 10 minutes: master GE class paths from live/default journey components, then any wanted
-        // gameplay-effect class that has loaded since the last pass.
+        static int s_Logged = 0;
+        static bool TouchesPerkStat(SDK::UGameplayEffect* Ge) {
+            static const std::set<std::string> kStats = {
+                "MaxHealth", "MaxStamina", "StaminaRegen", "CombatPlayRateRateModifier", "BaseMovementSpeed",
+                "PartDamageMultiplier", "PartDamagePerHitBonus", "DamageMultiplierVsStaggeredTargets", "CriticalStrikeChance",
+                "ConsumablePylonEffectivenessMultiplier", "HealAmount", "HealRadius", "BaseWeaponDamageMultiplier",
+                "CurrentHealthLimitedToPercentOfMax", "ChanceToReduceIncomingDamage" };
+            for (int32_t i = 0; i < Ge->Modifiers.Num(); ++i)
+                if (kStats.count(AttrName(reinterpret_cast<const uint8_t*>(&Ge->Modifiers[i].Attribute)))) return true;
+            return false;
+        }
+
+        // Every 5 s for 30 minutes (long enough for a hunt): master GE class paths from live/default journey
+        // components, then wanted or perk-stat gameplay-effect classes that have loaded since the last pass.
         static void Scan() {
             static uint64_t s_NextMs = 0, s_EndMs = 0;
             const uint64_t Now = GetTickCount64();
-            if (!s_EndMs) s_EndMs = Now + 10 * 60 * 1000;
+            if (!s_EndMs) s_EndMs = Now + 30 * 60 * 1000;
             if (Now < s_NextMs || Now > s_EndMs) return;
             s_NextMs = Now + 5000;
             static std::set<std::string> s_Masters;
@@ -5617,12 +5629,17 @@ namespace JourneyTestBranch {
                     continue;
                 }
                 if (Obj->IsDefaultObject() || !Obj->IsA(SDK::UClass::StaticClass())) continue;
-                const std::string Name = Obj->GetName();
-                if (!s_Wanted.count(Name) || s_Dumped.count(Name)) continue;
                 auto* Cls = static_cast<SDK::UClass*>(Obj);
                 if (!Cls->ClassDefaultObject || !Cls->ClassDefaultObject->IsA(SDK::UGameplayEffect::StaticClass())) continue;
+                const std::string Name = Obj->GetName();
+                if (s_Dumped.count(Name)) continue;
+                // Wanted (node/master) classes, plus any other loaded effect touching a stat the planned perks need.
+                if (!s_Wanted.count(Name) && !TouchesPerkStat(static_cast<SDK::UGameplayEffect*>(Cls->ClassDefaultObject))) {
+                    s_Dumped.insert(Name);   // checked once
+                    continue;
+                }
                 s_Dumped.insert(Name);
-                LogEffectClass(Cls);
+                if (s_Logged++ < 400) LogEffectClass(Cls);
             }
         }
 
