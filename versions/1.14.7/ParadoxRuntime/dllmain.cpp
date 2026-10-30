@@ -5584,8 +5584,13 @@ namespace JourneyTestBranch {
                 else if (Type == 3) How = "setbycaller name=" + Mag.SetByCallerMagnitude.DataName.ToString() + " tag=" + Mag.SetByCallerMagnitude.DataTag.TagName.ToString();
                 Mods += " {" + AttrName(reinterpret_cast<const uint8_t*>(&Mod.Attribute)) + " op=" + std::to_string(static_cast<int>(Mod.ModifierOp)) + " " + How + "}";
             }
+            std::string Execs;
+            for (int32_t i = 0; i < Ge->Executions.Num(); ++i) {
+                SDK::UClass* Calc = Ge->Executions[i].CalculationClass.Get();
+                Execs += std::string(i ? "," : "") + (Calc ? Calc->GetName() : "null");
+            }
             MpLog("[JourneyEffects] effect " + Cls->GetName() + " duration=" + std::to_string(static_cast<int>(Ge->DurationPolicy))
-                + " mods=" + std::to_string(Ge->Modifiers.Num()) + Mods);
+                + " mods=" + std::to_string(Ge->Modifiers.Num()) + Mods + " executions=[" + Execs + "]");
         }
 
         // Every 5 s for 10 minutes: master GE class paths from live/default journey components, then any wanted
@@ -5604,7 +5609,10 @@ namespace JourneyTestBranch {
                     const std::string Path = SoftPath(&static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
                     if (s_Masters.insert(Path).second) {
                         Want(Path);
-                        MpLog("[JourneyEffects] component " + Obj->GetName() + " masterGE=" + Path);
+                        // The client never loads the master GE itself; load it so the next pass can dump it.
+                        SDK::UClass* Loaded = Path == "None" ? nullptr
+                            : SDK::UKismetSystemLibrary::LoadClassAsset_Blocking(static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
+                        MpLog("[JourneyEffects] component " + Obj->GetName() + " masterGE=" + Path + (Loaded ? " (loaded)" : ""));
                     }
                     continue;
                 }
