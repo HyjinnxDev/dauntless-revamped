@@ -5518,12 +5518,114 @@ namespace JourneyTestBranch {
             + " template type=" + std::to_string(static_cast<int>(Template->NodeType)) + " lookup=" + (Found ? "ok" : "FAILED") + ")");
     }
 
+    // [Revamped 2026-10-31] Read-only [JourneyEffects] probe, same flag: how existing nodes grant stats, so new perk
+    // nodes can. Logs every row's GameplayModifiers classes / GameplayAttributeValues, the components'
+    // PlayerJourneyMasterGEClass, and, as those gameplay-effect classes load, each modifier (attribute, op, magnitude).
+    namespace Effects {
+        static std::set<std::string> s_Wanted, s_Dumped;   // gameplay-effect class names (after the last '.')
+
+        static std::string SoftPath(const void* Soft) {    // TSoftObjectPtr/TSoftClassPtr -> AssetPathName
+            return reinterpret_cast<const SDK::FName*>(static_cast<const uint8_t*>(Soft) + 0x10)->ToString();
+        }
+        static void Want(const std::string& Path) {
+            const size_t Dot = Path.find_last_of('.');
+            if (Path != "None" && !Path.empty()) s_Wanted.insert(Dot == std::string::npos ? Path : Path.substr(Dot + 1));
+        }
+        static std::string SoftList(const void* Arr, bool Track) {   // TArray<TSoftClassPtr<UClass>>, 0x28 each
+            auto* A = static_cast<const RawArray*>(Arr);
+            std::string Out;
+            for (int32_t i = 0; i < A->Num; ++i) {
+                const std::string Path = SoftPath(A->Data + i * 0x28);
+                if (Track) Want(Path);
+                Out += (i ? "," : "") + Path;
+            }
+            return Out;
+        }
+        static std::string AttrName(const uint8_t* Attribute) {      // FGameplayAttribute: name, else field path[0]
+            auto* Name = reinterpret_cast<const SDK::FString*>(Attribute);
+            if (Name->Num() > 1) return Name->ToString();
+            auto* Path = reinterpret_cast<const RawArray*>(Attribute + 0x20);
+            return Path->Num > 0 ? reinterpret_cast<const SDK::FName*>(Path->Data)->ToString() : "?";
+        }
+
+        static void LogRows(SDK::UDataTable* Table) {
+            int Logged = 0;
+            for (auto& Pair : Table->RowMap) {
+                auto* Row = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
+                const auto& M = Row->GameplayModifiers;
+                if (!M.BuffClasses.Num() && !M.GameplayEffectClasses.Num() && !M.GameplayAbilityClasses.Num()
+                    && !M.KeywordBonusClasses.Num() && !Row->GameplayAttributeValues.Num()) continue;
+                std::string Attrs;
+                for (auto& A : Row->GameplayAttributeValues) Attrs += A.Key().ToString() + "=" + std::to_string(A.Value()) + " ";
+                MpLog("[JourneyEffects] node=" + Pair.Key().ToString() + " \"" + Row->DisplayName.ToString() + "\""
+                    + " buffs=[" + SoftList(&M.BuffClasses, false) + "] effects=[" + SoftList(&M.GameplayEffectClasses, true)
+                    + "] abilities=[" + SoftList(&M.GameplayAbilityClasses, false) + "] keywords=" + std::to_string(M.KeywordBonusClasses.Num())
+                    + " attrs={" + Attrs + "}");
+                ++Logged;
+            }
+            MpLog("[JourneyEffects] " + std::to_string(Logged) + " of " + std::to_string(Table->RowMap.Num()) + " rows carry modifiers");
+        }
+
+        static void LogEffectClass(SDK::UClass* Cls) {
+            auto* Ge = static_cast<SDK::UGameplayEffect*>(Cls->ClassDefaultObject);
+            std::string Mods;
+            for (int32_t i = 0; i < Ge->Modifiers.Num(); ++i) {
+                const auto& Mod = Ge->Modifiers[i];
+                const auto& Mag = Mod.ModifierMagnitude;
+                const int Type = static_cast<int>(Mag.MagnitudeCalculationType);
+                const auto* MagBytes = reinterpret_cast<const uint8_t*>(&Mag);
+                std::string How;
+                if (Type == 0) How = "scalable=" + std::to_string(Mag.ScalableFloatMagnitude.Value) + " curve=" + Mag.ScalableFloatMagnitude.Curve.RowName.ToString();
+                else if (Type == 1) How = "attribute coeff=" + std::to_string(*reinterpret_cast<const float*>(MagBytes + 0x28)) + " of " + AttrName(MagBytes + 0x28 + 0x60);
+                else if (Type == 2) {
+                    auto* Calc = *reinterpret_cast<SDK::UClass* const*>(MagBytes + 0x120);
+                    How = "custom=" + (Calc ? Calc->GetName() : std::string("null"));
+                }
+                else if (Type == 3) How = "setbycaller name=" + Mag.SetByCallerMagnitude.DataName.ToString() + " tag=" + Mag.SetByCallerMagnitude.DataTag.TagName.ToString();
+                Mods += " {" + AttrName(reinterpret_cast<const uint8_t*>(&Mod.Attribute)) + " op=" + std::to_string(static_cast<int>(Mod.ModifierOp)) + " " + How + "}";
+            }
+            MpLog("[JourneyEffects] effect " + Cls->GetName() + " duration=" + std::to_string(static_cast<int>(Ge->DurationPolicy))
+                + " mods=" + std::to_string(Ge->Modifiers.Num()) + Mods);
+        }
+
+        // Every 5 s for 10 minutes: master GE class paths from live/default journey components, then any wanted
+        // gameplay-effect class that has loaded since the last pass.
+        static void Tick() {
+            static uint64_t s_NextMs = 0, s_EndMs = 0;
+            const uint64_t Now = GetTickCount64();
+            if (!s_EndMs) s_EndMs = Now + 10 * 60 * 1000;
+            if (Now < s_NextMs || Now > s_EndMs) return;
+            s_NextMs = Now + 5000;
+            static std::set<std::string> s_Masters;
+            for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+                SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                if (!Obj) continue;
+                if (Obj->IsA(SDK::UPlayerJourneyComponent::StaticClass())) {
+                    const std::string Path = SoftPath(&static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
+                    if (s_Masters.insert(Path).second) {
+                        Want(Path);
+                        MpLog("[JourneyEffects] component " + Obj->GetName() + " masterGE=" + Path);
+                    }
+                    continue;
+                }
+                if (Obj->IsDefaultObject() || !Obj->IsA(SDK::UClass::StaticClass())) continue;
+                const std::string Name = Obj->GetName();
+                if (!s_Wanted.count(Name) || s_Dumped.count(Name)) continue;
+                auto* Cls = static_cast<SDK::UClass*>(Obj);
+                if (!Cls->ClassDefaultObject || !Cls->ClassDefaultObject->IsA(SDK::UGameplayEffect::StaticClass())) continue;
+                s_Dumped.insert(Name);
+                LogEffectClass(Cls);
+            }
+        }
+    }
+
     // Once a second until the table is loaded; one attempt on it. Game thread only (client tick, server engine tick).
     static void Tick() {
         static const bool s_Enabled = MpExeRelativeFlagPresent(L"JOURNEY_TEST_BRANCH.flag");
         static bool s_Done = false;
         static uint64_t s_NextMs = 0;
-        if (!s_Enabled || s_Done || !SDK::UObject::GObjects) return;
+        if (!s_Enabled || !SDK::UObject::GObjects) return;
+        if (s_Done) { Effects::Tick(); return; }
         const uint64_t Now = GetTickCount64();
         if (Now < s_NextMs) return;
         s_NextMs = Now + 1000;
@@ -5546,6 +5648,7 @@ namespace JourneyTestBranch {
             }
             if (!Parent || !Template) continue;
             s_Done = true;
+            Effects::LogRows(Dt);
             Patch(Dt, Parent, Template);
             return;
         }
