@@ -114,6 +114,7 @@ Search by symbol or `[Tag]`; the file has long dated history comments above most
 | Trials | `SchedulerInitializeHook`, `PatchArenaScheduleForCurrentTime`, `ApplyTrialsScheduleOffset`, `TrialsRotationMinutes`, `TrialsLaunchWeekOverride` | S | Rewrites all 181 arena schedule rows into contiguous windows (default 10080 min = 7 days, `TRIALS_ROTATION_MINUTES`) before the scheduler copies them; an arena process is pinned to `MYSTICPARADOX_TRIALS_WEEK`. |
 | Headless server | `InstallServerHeadlessSetup`, `StartServerWindowHider`, `InstallServerWindowSuppressionHooks`, `InstallHeadlessAudioHook` | S | Logs `[InitRole]`, leaves the nullrhi cache to the engine, hides any window (`SHOW_SERVER_WINDOW.flag` keeps it). |
 | Banked XP and reforge objectives | `MpBankedXpQuestTick`, `MpBankedXpQuestScan`, `MpReforgeObjectiveSync` | S | Hub, every 5 s: in-progress "earn N banked XP" quest objectives raised to the player's banked weapon XP; in-progress Slayer's Path reforge objectives (`ObjectiveData_PrestigeTrackXP`) raised to the player's reforge count (`PrestigeTrack_Weapon_*` total of that weapon, summed when `bAnyWeaponTrack`) and completed at `PrestigeCount`. The game only counts reforges made while an objective is listening (`+0x1D66CF0` ignores the prestige level). |
+| Slayer's Path test branch | `JourneyTestBranch::Tick`, `Patch`, `AddRow`, `CloneRow` | C+S | `JOURNEY_TEST_BRANCH.flag` only. Once the `PlayerJourneyNodeData` table holding `Slayer_00` loads: two Dojo clones with own text and no costs/objectives/rewards appended to `RowMap` (raw TSet append past any freed slots; refuses unless every live row sits in the bucket the engine's `GetTypeHash(FName)` gives: `GetTypeHash(FNameEntryHandle)` (+0x2659480) + `Number`, as `UDataTable::FindRow` +0x18E6C70 computes it; not plain `ComparisonIndex + Number`) and chained under `Slayer_00`. The tree screen lays nodes out from `ChildNodes`. |
 | Voice proximity / hunt state / stats | `MpPlayerStateAccountId`, `MpVoiceProximityTick`, `MpHuntJoinTick`, `MpHuntStatsTick` | S | Hub: account id + position of every client to the relay ~5/s. Hunt: late-join HP rescale, `MYSTICPARADOX_HUNT_STATE` stdout line, per-player damage post on kill. |
 | Progression probes | `InstallProgressionDiagnostics`, `InstallProgressionCacheProbe`, `InstallProgressionReadinessProbe`, `CallHuntPassSeasonQuery`, `CallFindActiveHuntPassRow` | S | Read-only progression/hunt-pass readiness probes; the boot hunt-pass query only with `CALL_HUNTPASS_QUERY.flag`. Six riskier probes (`InstallActiveHuntPassDriver`, `InstallLoadCompleteProbe` except with `HUNTPASS_PROBE.flag`, `InstallFindRowProbe`, `InstallConfigCompleteProbe`, `InstallGameInstanceQueryHook`, `InstallMasteryProbe`) are not installed. |
 | Interaction callout guards | `InstallInteractionCalloutSetDisabledGuard`, `InstallInteractionCalloutClassGuards`, `InteractionCalloutHideHoldTextHook` | S | Null-widget guards for `UInteractionCalloutWidget` on headless servers. |
@@ -248,7 +249,7 @@ Once a second from `MpHuntJoinTick` on hunt servers: for every `AArchonPlayerSta
 
 ## Flags beside the game exe
 
-`MpExeRelativeFlagPresent(L"X.flag")` = file `<dir of Dauntless-Win64-Shipping.exe>\X.flag` exists. Most are read once and cached, so create them before launch. 108 names. Default = behaviour with no file.
+`MpExeRelativeFlagPresent(L"X.flag")` = file `<dir of Dauntless-Win64-Shipping.exe>\X.flag` exists. Most are read once and cached, so create them before launch. 109 names. Default = behaviour with no file.
 
 ### Production switches (fix on, file turns it off)
 
@@ -309,6 +310,7 @@ Once a second from `MpHuntJoinTick` on hunt servers: for every `AArchonPlayerSta
 | Flag / file | Role | Effect |
 |---|---|---|
 | `ENABLE_PARTY_DROP_IN.flag` | C+S | Party drop-in arrival (other players' arrival triggers routed to everyone). |
+| `JOURNEY_TEST_BRANCH.flag` | C+S | Slayer's Path test branch: `JourneyTestBranch` adds rows `Revamped_TestBranch_01 -> _02` under `Slayer_00`. |
 | `ENABLE_SYNTHETIC_NETID.flag` | S | Give the phantom local player a synthetic net id. |
 | `ENABLE_PHANTOM_LOAD_SKIP.flag` | S | Skip the phantom's player-data load (known to fail differently). |
 | `ENABLE_PLAYERSTATE_OWNER_ROUTE.flag` | S | Route PlayerState owner-only. |
@@ -505,6 +507,7 @@ All go to `mysticparadox_dll_port<N>.log` beside the exe unless noted. `[Init]`,
 | `[ProjTickFix]` | dllmain.cpp | S: tick enabled on a projectile (first 20). |
 | `[ProxVoice]` | dllmain.cpp | S: hub reporting a player id to the voice relay. |
 | `[QoSFix]` | dllmain.cpp | C: latency-test host resolved to loopback. |
+| `[JourneyTestBranch]` | dllmain.cpp | C+S: Slayer's Path table `RowMap` header (`slots`, `free`, `bits`, `hash`) + `layout ok` or why skipped, then rows added (`rows`, `Slayer_00 children`, `lookup=ok`). |
 | `[ReforgeObjective]` | dllmain.cpp | S: Slayer's Path reforge objective raised (`amount a->b/required`). |
 | `[RelicClickDiagnostic]` | dllmain.cpp | Relic choice click rejected/armed. |
 | `[RepConnDiag]`, `[RepFields]`, `[RepFreq]`, `[SendPath]` | dllmain.cpp | S: replication diagnostics. |

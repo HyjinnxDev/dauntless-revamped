@@ -2,7 +2,7 @@
 
 > Verified against code 2026-10-24.
 
-File-by-file reference (every source file, every hook with its RVA, all 108 `*.flag` switches, env vars, stdout
+File-by-file reference (every source file, every hook with its RVA, all 109 `*.flag` switches, env vars, stdout
 markers and the full log-tag table): [runtime-files](runtime-files.md).
 
 ## What it is
@@ -57,7 +57,7 @@ Everything lives in `versions/1.14.7/ParadoxRuntime/`. Full table in [runtime-fi
 - `MH_Initialize`, then `MH_CreateHook` / `MH_EnableHook` on `BaseAddress + RVA` (or a named Win32 API). Most results are logged (`create=... enable=...`).
 - Key hooks: `UObject::ProcessEvent` (`0x02861880`, `ProcessEventClientHook` / `ProcessEventHook`), `FCurlHttpRequest::ProcessRequest` (`0x032C5FE0`), `UEngine::Tick` (`0x03E10AB0`, server), `FCommandLine::Get` (`0x025E8F70`), `ApplyPlayerRole`, `HasFinishedLoading`, `IsEOSEnabled`, replication-graph routing, and exit/exception APIs for crash forensics. Full tables with every RVA: [runtime-files](runtime-files.md#hooks-installed).
 - Some code patches are byte-guarded (`MpPatchBytesVerified` checks expected bytes first and fails closed): the 1-second party poll, the inventory resync cap, the 5 s crash-report wait, the WARP gate and the opt-in Move10 patches.
-- Behaviour is switched with **`*.flag` files next to the game exe** (108 names). `DISABLE_*.flag` turns a default fix off; `ENABLE_*`/probe flags turn on opt-in or diagnostic code. `VERBOSE_DIAG.flag` and debug damage also need env `MYSTICPARADOX_RUNTIME_PROFILE=development`. A few flags are read only by dead code (`URL_LOG.flag`, `XMPP_TRACE.flag`, `CHARACTER_ASSOC_PROBE.flag`) or ignored (`DISABLE_EAC_LOAD.flag`).
+- Behaviour is switched with **`*.flag` files next to the game exe** (109 names). `DISABLE_*.flag` turns a default fix off; `ENABLE_*`/probe flags turn on opt-in or diagnostic code. `VERBOSE_DIAG.flag` and debug damage also need env `MYSTICPARADOX_RUNTIME_PROFILE=development`. A few flags are read only by dead code (`URL_LOG.flag`, `XMPP_TRACE.flag`, `CHARACTER_ASSOC_PROBE.flag`) or ignored (`DISABLE_EAC_LOAD.flag`).
 
 ### 4. Talking to the backend
 
