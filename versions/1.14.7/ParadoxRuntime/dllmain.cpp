@@ -5557,8 +5557,8 @@ namespace JourneyTestBranch {
                     && !M.KeywordBonusClasses.Num() && !Row->GameplayAttributeValues.Num()) continue;
                 std::string Attrs;
                 for (auto& A : Row->GameplayAttributeValues) Attrs += A.Key().ToString() + "=" + std::to_string(A.Value()) + " ";
-                MpLog("[JourneyEffects] node=" + Pair.Key().ToString() + " \"" + Row->DisplayName.ToString() + "\""
-                    + " buffs=[" + SoftList(&M.BuffClasses, false) + "] effects=[" + SoftList(&M.GameplayEffectClasses, true)
+                MpLog("[JourneyEffects] node=" + Pair.Key().ToString()
+                    + " buffs=["+ SoftList(&M.BuffClasses, false) + "] effects=[" + SoftList(&M.GameplayEffectClasses, true)
                     + "] abilities=[" + SoftList(&M.GameplayAbilityClasses, false) + "] keywords=" + std::to_string(M.KeywordBonusClasses.Num())
                     + " attrs={" + Attrs + "}");
                 ++Logged;
@@ -5590,7 +5590,7 @@ namespace JourneyTestBranch {
 
         // Every 5 s for 10 minutes: master GE class paths from live/default journey components, then any wanted
         // gameplay-effect class that has loaded since the last pass.
-        static void Tick() {
+        static void Scan() {
             static uint64_t s_NextMs = 0, s_EndMs = 0;
             const uint64_t Now = GetTickCount64();
             if (!s_EndMs) s_EndMs = Now + 10 * 60 * 1000;
@@ -5616,6 +5616,21 @@ namespace JourneyTestBranch {
                 s_Dumped.insert(Name);
                 LogEffectClass(Cls);
             }
+        }
+
+        // A probe must never take the game down (0.2.73 crashed reading a row's FText): a fault ends it.
+        static bool s_Faulted = false;
+        static void LogFault(const char* Where) { MpLog(std::string("[JourneyEffects] fault in ") + Where + " - probe off"); }
+        static void LogRowsGuarded(SDK::UDataTable* Table) {
+            __try { LogRows(Table); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
+            if (s_Faulted) LogFault("LogRows");
+        }
+        static void Tick() {
+            if (s_Faulted) return;
+            __try { Scan(); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
+            if (s_Faulted) LogFault("Scan");
         }
     }
 
@@ -5648,7 +5663,7 @@ namespace JourneyTestBranch {
             }
             if (!Parent || !Template) continue;
             s_Done = true;
-            Effects::LogRows(Dt);
+            Effects::LogRowsGuarded(Dt);
             Patch(Dt, Parent, Template);
             return;
         }

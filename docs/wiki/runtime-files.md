@@ -507,7 +507,7 @@ All go to `mysticparadox_dll_port<N>.log` beside the exe unless noted. `[Init]`,
 | `[ProjTickFix]` | dllmain.cpp | S: tick enabled on a projectile (first 20). |
 | `[ProxVoice]` | dllmain.cpp | S: hub reporting a player id to the voice relay. |
 | `[QoSFix]` | dllmain.cpp | C: latency-test host resolved to loopback. |
-| `[JourneyEffects]` | dllmain.cpp | C+S, `JOURNEY_TEST_BRANCH.flag`: read-only. Each node row's `GameplayModifiers` classes / `GameplayAttributeValues`, each `PlayerJourneyComponent`'s `masterGE`, and each of those gameplay-effect classes' modifiers (attribute, op, scalable / attribute / custom / set-by-caller magnitude) once loaded (5 s polls for 10 min). |
+| `[JourneyEffects]` | dllmain.cpp | C+S, `JOURNEY_TEST_BRANCH.flag`: read-only. Each node row's `GameplayModifiers` classes / `GameplayAttributeValues`, each `PlayerJourneyComponent`'s `masterGE`, and each of those gameplay-effect classes' modifiers (attribute, op, scalable / attribute / custom / set-by-caller magnitude) once loaded (5 s polls for 10 min). Both passes run under `__try`; a fault logs `fault in ... - probe off`. |
 | `[JourneyTestBranch]` | dllmain.cpp | C+S: Slayer's Path table `RowMap` header (`slots`, `free`, `bits`, `hash`) + `layout ok` or why skipped, then rows added (`rows`, `Slayer_00 children`, `lookup=ok`). |
 | `[ReforgeObjective]` | dllmain.cpp | S: Slayer's Path reforge objective raised (`amount a->b/required`). |
 | `[RelicClickDiagnostic]` | dllmain.cpp | Relic choice click rejected/armed. |
