@@ -5356,13 +5356,12 @@ namespace VoiceSettings {
     }
 }
 
-// [Revamped 2026-10-31] Slayer's Path test branch (JOURNEY_TEST_BRANCH.flag, client and server). Proves the tree
-// can grow: adds rows Revamped_TestBranch_01 -> _02 to the Archon.PlayerJourneyNodeData table as a new child of
-// Slayer_00, before the player's journey is built. The screen places nodes from ChildNodes and the row's layout
-// fields (ChildNodeLayoutRule, DepthDistanceScale, ...), so a new row needs no widget work. Rows clone Dojo (icon,
-// widget, layout) with their own text and no costs, objectives or rewards. The server needs the flag too, or
-// ServerUnlockNode has no row to unlock. The backend stores any node id the server saves.
-namespace JourneyTestBranch {
+// [Revamped 2026-10-31] Revamped Slayer's Path trees (JOURNEY_TREES.flag, client and server). Adds rows to the
+// Archon.PlayerJourneyNodeData table before the player's journey is built: a hub per tree under Slayer_00 and a
+// 5-tier chain per perk under it. The screen places nodes from ChildNodes and the row's layout fields
+// (ChildNodeLayoutRule, DepthDistanceScale, ...), so new rows need no widget work. Client and server both need the
+// rows (the server's ServerUnlockNode looks them up); the backend stores any node id the server saves.
+namespace JourneyTrees {
     // UDataTable::RowMap, TMap<FName, uint8*> as UE 4.26 lays out a TSet: sparse array + bit array + hash.
     struct RowMapElem { SDK::FName Key; uint8_t* Row; int32_t HashNextId; int32_t HashIndex; };
     struct RawRowMap {
@@ -5485,187 +5484,136 @@ namespace JourneyTestBranch {
         return Row;
     }
 
-    static void Patch(SDK::UDataTable* Table, SDK::FPlayerJourneyNodeData* Parent, const SDK::FPlayerJourneyNodeData* Template) {
+    // A perk is a 5-tier chain. Tier t clones Source formatted with t (0-4) for icon, node type and layout, and runs
+    // that source's gameplay effects Apps[t] times: the Slayer's Path effects add a fixed amount per application
+    // (pjm_max_health_ge +20, pjm_max_stamina_ge +2, pjm_stamina_regen_ge +2%, strikers attack speed +1%) and
+    // stack, so Desc is the running total including earlier tiers. All new nodes stack with the original ones.
+    struct PerkSpec { const wchar_t* Id; const wchar_t* Name; const char* Source; int Apps[5]; const wchar_t* Desc[5]; };
+    struct TreeSpec { const wchar_t* Id; const wchar_t* Name; const wchar_t* Desc; const PerkSpec* Perks; int Count; };
+
+    static const PerkSpec kStatsPerks[] = {
+        { L"Health", L"Health", "HealthUpgrade_%02d", { 1, 1, 2, 1, 3 },
+          { L"+20 max health.", L"+40 max health.", L"+80 max health.", L"+100 max health.", L"+160 max health." } },
+        { L"Stamina", L"Stamina", "StaminaUpgrade_%02d", { 3, 2, 3, 2, 3 },
+          { L"+6 max stamina.", L"+10 max stamina.", L"+16 max stamina.", L"+20 max stamina.", L"+26 max stamina." } },
+        { L"StaminaRegen", L"Stamina Regen", "StaminaRegenUpgrade_%02d", { 1, 1, 1, 1, 1 },
+          { L"+2% stamina regeneration.", L"+4% stamina regeneration.", L"+6% stamina regeneration.",
+            L"+8% stamina regeneration.", L"+10% stamina regeneration." } },
+        { L"AttackSpeed", L"Attack Speed", "WeaponEmpow_AC_%d", { 1, 1, 1, 1, 1 },
+          { L"+1% attack speed.", L"+2% attack speed.", L"+3% attack speed.", L"+4% attack speed.", L"+5% attack speed." } },
+    };
+    static const TreeSpec kTrees[] = {
+        { L"Stats", L"REVAMPED: STATS", L"New combat stat perks. Every tier stacks with the original Slayer's Path nodes.",
+          kStatsPerks, static_cast<int>(sizeof(kStatsPerks) / sizeof(kStatsPerks[0])) },
+    };
+    // Per tier, CURRENCY_PJM_WEAPON then CURRENCY_NOTES (Rams) at 75x: the existing nodes' curve.
+    static const int32_t kTierCost[5] = { 25, 150, 300, 450, 750 };
+    static const wchar_t* const kRoman[5] = { L"I", L"II", L"III", L"IV", L"V" };
+
+    using RowIndex = std::unordered_map<std::string, SDK::FPlayerJourneyNodeData*>;
+
+    static void SetArray(void* Field, const uint8_t* Bytes, int32_t Count, size_t ElemSize) {
+        auto* A = reinterpret_cast<RawArray*>(Field);
+        A->Data = static_cast<uint8_t*>(EngineRealloc(nullptr, Count * ElemSize));
+        memcpy(A->Data, Bytes, Count * ElemSize);
+        A->Num = A->Max = Count;
+    }
+
+    // TextFor caches by pointer, so built strings live here for the session.
+    static const uint8_t* Text(const std::wstring& Value) {
+        static std::deque<std::wstring> s_Strings;
+        return CreditsBranding::TextFor(s_Strings.emplace_back(Value).c_str());
+    }
+
+    static std::string SourceId(const PerkSpec& Perk, int Tier) {
+        char Buf[64];
+        snprintf(Buf, sizeof(Buf), Perk.Source, Tier);
+        return Buf;
+    }
+
+    // Everything the trees copy from, checked before any row is added so a patch is all or nothing.
+    static std::string MissingSource(const RowIndex& Rows) {
+        for (const char* Id : { "Slayer_00", "Dojo", "HealthUpgrade_00" }) if (!Rows.count(Id)) return Id;
+        if (Rows.at("HealthUpgrade_00")->CurrencyCosts.Num() != 2) return "HealthUpgrade_00 costs";
+        for (const TreeSpec& Tree : kTrees) {
+            for (int p = 0; p < Tree.Count; ++p) {
+                for (int t = 0; t < 5; ++t) {
+                    auto It = Rows.find(SourceId(Tree.Perks[p], t));
+                    if (It == Rows.end()) return SourceId(Tree.Perks[p], t);
+                    auto* Effects = reinterpret_cast<const RawArray*>(&It->second->GameplayModifiers.GameplayEffectClasses);
+                    if (Effects->Num <= 0) return SourceId(Tree.Perks[p], t) + " effects";
+                    for (int32_t e = 0; e < Effects->Num; ++e)   // FSoftObjectPath::SubPathString must be empty to copy
+                        if (*reinterpret_cast<void* const*>(Effects->Data + e * 0x28 + 0x18)) return SourceId(Tree.Perks[p], t) + " subpath";
+                }
+            }
+        }
+        return "";
+    }
+
+    static void Patch(SDK::UDataTable* Table, const RowIndex& Rows) {
         auto* M = reinterpret_cast<RawRowMap*>(&Table->RowMap);
-        const std::string Problem = LayoutProblem(M);
-        MpLog("[JourneyTestBranch] " + Table->GetName() + " RowMap " + Header(M)
-            + (Problem.empty() ? std::string(" layout ok") : " layout not as expected: " + Problem + " - skipped"));
+        std::string Problem = LayoutProblem(M);
+        if (Problem.empty()) {
+            const std::string Missing = MissingSource(Rows);
+            if (!Missing.empty()) Problem = "source row missing: " + Missing;
+        }
+        MpLog("[JourneyTrees] " + Table->GetName() + " RowMap " + Header(M)
+            + (Problem.empty() ? std::string(" ok") : " - skipped: " + Problem));
         if (!Problem.empty()) return;
-        const SDK::FName First = VoiceSettings::NameOf(L"Revamped_TestBranch_01");
-        const SDK::FName Second = VoiceSettings::NameOf(L"Revamped_TestBranch_02");
-        const uint8_t* FirstName = CreditsBranding::TextFor(L"REVAMPED TEST BRANCH");
-        const uint8_t* FirstText = CreditsBranding::TextFor(L"If you can read this, new Slayer's Path branches work.");
-        const uint8_t* SecondName = CreditsBranding::TextFor(L"TEST BRANCH: SECOND NODE");
-        const uint8_t* SecondText = CreditsBranding::TextFor(L"A new branch can be more than one node deep.");
-        if (!FirstName || !FirstText || !SecondName || !SecondText) {
-            MpLog("[JourneyTestBranch] could not create node texts - skipped");
-            return;
-        }
-        if (Find(M, First) || Find(M, Second)) {
-            MpLog("[JourneyTestBranch] rows already present - skipped");
-            return;
-        }
-        auto* FirstRow = CloneRow(Template, FirstName, FirstText);
-        auto* SecondRow = CloneRow(Template, SecondName, SecondText);
-        AddRow(M, First, reinterpret_cast<uint8_t*>(FirstRow));
-        AddRow(M, Second, reinterpret_cast<uint8_t*>(SecondRow));
-        AddChild(Parent, Table, First);
-        AddChild(FirstRow, Table, Second);
-        const bool Found = Find(M, First) == reinterpret_cast<uint8_t*>(FirstRow)
-            && Find(M, Second) == reinterpret_cast<uint8_t*>(SecondRow);
-        MpLog("[JourneyTestBranch] " + Table->GetName() + ": Slayer_00 -> Revamped_TestBranch_01 -> _02 added (rows="
-            + std::to_string(M->Num) + " Slayer_00 children=" + std::to_string(Parent->ChildNodes.Num())
-            + " template type=" + std::to_string(static_cast<int>(Template->NodeType)) + " lookup=" + (Found ? "ok" : "FAILED") + ")");
-    }
 
-    // [Revamped 2026-10-31] Read-only [JourneyEffects] probe, same flag: how existing nodes grant stats, so new perk
-    // nodes can. Logs every row's GameplayModifiers classes / GameplayAttributeValues, the components'
-    // PlayerJourneyMasterGEClass, and, as those gameplay-effect classes load, each modifier (attribute, op, magnitude).
-    namespace Effects {
-        static std::set<std::string> s_Wanted, s_Dumped;   // gameplay-effect class names (after the last '.')
+        SDK::FPlayerJourneyNodeData* Root = Rows.at("Slayer_00");
+        const auto* Costs = reinterpret_cast<const RawArray*>(&Rows.at("HealthUpgrade_00")->CurrencyCosts);
+        constexpr size_t kCostSize = sizeof(SDK::FArchonCurrencyCost);
+        int Added = 0;
+        for (const TreeSpec& Tree : kTrees) {
+            const std::wstring HubId = std::wstring(L"Revamped_") + Tree.Id;
+            const SDK::FName HubName = VoiceSettings::NameOf(HubId.c_str());
+            if (Find(M, HubName)) { MpLog("[JourneyTrees] " + SDK::FString(HubId.c_str()).ToString() + " already present - skipped"); continue; }
+            auto* Hub = CloneRow(Rows.at("Dojo"), Text(Tree.Name), Text(Tree.Desc));
+            Hub->bAutoUnlockIfParentUnlocked = true;   // free entry point, like Slayer_00
+            AddRow(M, HubName, reinterpret_cast<uint8_t*>(Hub));
+            AddChild(Root, Table, HubName);
+            ++Added;
+            for (int p = 0; p < Tree.Count; ++p) {
+                const PerkSpec& Perk = Tree.Perks[p];
+                SDK::FPlayerJourneyNodeData* Parent = Hub;
+                for (int t = 0; t < 5; ++t) {
+                    const SDK::FPlayerJourneyNodeData* Source = Rows.at(SourceId(Perk, t));
+                    auto* Row = CloneRow(Source, Text(std::wstring(Perk.Name) + L" " + kRoman[t]), Text(Perk.Desc[t]));
 
-        static std::string SoftPath(const void* Soft) {    // TSoftObjectPtr/TSoftClassPtr -> AssetPathName
-            return reinterpret_cast<const SDK::FName*>(static_cast<const uint8_t*>(Soft) + 0x10)->ToString();
-        }
-        static void Want(const std::string& Path) {
-            const size_t Dot = Path.find_last_of('.');
-            if (Path != "None" && !Path.empty()) s_Wanted.insert(Dot == std::string::npos ? Path : Path.substr(Dot + 1));
-        }
-        static std::string SoftList(const void* Arr, bool Track) {   // TArray<TSoftClassPtr<UClass>>, 0x28 each
-            auto* A = static_cast<const RawArray*>(Arr);
-            std::string Out;
-            for (int32_t i = 0; i < A->Num; ++i) {
-                const std::string Path = SoftPath(A->Data + i * 0x28);
-                if (Track) Want(Path);
-                Out += (i ? "," : "") + Path;
-            }
-            return Out;
-        }
-        static std::string AttrName(const uint8_t* Attribute) {      // FGameplayAttribute: name, else field path[0]
-            auto* Name = reinterpret_cast<const SDK::FString*>(Attribute);
-            if (Name->Num() > 1) return Name->ToString();
-            auto* Path = reinterpret_cast<const RawArray*>(Attribute + 0x20);
-            return Path->Num > 0 ? reinterpret_cast<const SDK::FName*>(Path->Data)->ToString() : "?";
-        }
-
-        static void LogRows(SDK::UDataTable* Table) {
-            int Logged = 0;
-            for (auto& Pair : Table->RowMap) {
-                auto* Row = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
-                const auto& M = Row->GameplayModifiers;
-                if (!M.BuffClasses.Num() && !M.GameplayEffectClasses.Num() && !M.GameplayAbilityClasses.Num()
-                    && !M.KeywordBonusClasses.Num() && !Row->GameplayAttributeValues.Num()) continue;
-                std::string Attrs;
-                for (auto& A : Row->GameplayAttributeValues) Attrs += A.Key().ToString() + "=" + std::to_string(A.Value()) + " ";
-                MpLog("[JourneyEffects] node=" + Pair.Key().ToString()
-                    + " buffs=["+ SoftList(&M.BuffClasses, false) + "] effects=[" + SoftList(&M.GameplayEffectClasses, true)
-                    + "] abilities=[" + SoftList(&M.GameplayAbilityClasses, false) + "] keywords=" + std::to_string(M.KeywordBonusClasses.Num())
-                    + " attrs={" + Attrs + "}");
-                ++Logged;
-            }
-            MpLog("[JourneyEffects] " + std::to_string(Logged) + " of " + std::to_string(Table->RowMap.Num()) + " rows carry modifiers");
-        }
-
-        static void LogEffectClass(SDK::UClass* Cls) {
-            auto* Ge = static_cast<SDK::UGameplayEffect*>(Cls->ClassDefaultObject);
-            std::string Mods;
-            for (int32_t i = 0; i < Ge->Modifiers.Num(); ++i) {
-                const auto& Mod = Ge->Modifiers[i];
-                const auto& Mag = Mod.ModifierMagnitude;
-                const int Type = static_cast<int>(Mag.MagnitudeCalculationType);
-                const auto* MagBytes = reinterpret_cast<const uint8_t*>(&Mag);
-                std::string How;
-                if (Type == 0) How = "scalable=" + std::to_string(Mag.ScalableFloatMagnitude.Value) + " curve=" + Mag.ScalableFloatMagnitude.Curve.RowName.ToString();
-                else if (Type == 1) How = "attribute coeff=" + std::to_string(*reinterpret_cast<const float*>(MagBytes + 0x28)) + " of " + AttrName(MagBytes + 0x28 + 0x60);
-                else if (Type == 2) {
-                    auto* Calc = *reinterpret_cast<SDK::UClass* const*>(MagBytes + 0x120);
-                    How = "custom=" + (Calc ? Calc->GetName() : std::string("null"));
-                }
-                else if (Type == 3) How = "setbycaller name=" + Mag.SetByCallerMagnitude.DataName.ToString() + " tag=" + Mag.SetByCallerMagnitude.DataTag.TagName.ToString();
-                Mods += " {" + AttrName(reinterpret_cast<const uint8_t*>(&Mod.Attribute)) + " op=" + std::to_string(static_cast<int>(Mod.ModifierOp)) + " " + How + "}";
-            }
-            std::string Execs;
-            for (int32_t i = 0; i < Ge->Executions.Num(); ++i) {
-                SDK::UClass* Calc = Ge->Executions[i].CalculationClass.Get();
-                Execs += std::string(i ? "," : "") + (Calc ? Calc->GetName() : "null");
-            }
-            MpLog("[JourneyEffects] effect " + Cls->GetName() + " duration=" + std::to_string(static_cast<int>(Ge->DurationPolicy))
-                + " mods=" + std::to_string(Ge->Modifiers.Num()) + Mods + " executions=[" + Execs + "]");
-        }
-
-        static int s_Logged = 0;
-        static bool TouchesPerkStat(SDK::UGameplayEffect* Ge) {
-            static const std::set<std::string> kStats = {
-                "MaxHealth", "MaxStamina", "StaminaRegen", "CombatPlayRateRateModifier", "BaseMovementSpeed",
-                "PartDamageMultiplier", "PartDamagePerHitBonus", "DamageMultiplierVsStaggeredTargets", "CriticalStrikeChance",
-                "ConsumablePylonEffectivenessMultiplier", "HealAmount", "HealRadius", "BaseWeaponDamageMultiplier",
-                "CurrentHealthLimitedToPercentOfMax", "ChanceToReduceIncomingDamage" };
-            for (int32_t i = 0; i < Ge->Modifiers.Num(); ++i)
-                if (kStats.count(AttrName(reinterpret_cast<const uint8_t*>(&Ge->Modifiers[i].Attribute)))) return true;
-            return false;
-        }
-
-        // Every 5 s for 30 minutes (long enough for a hunt): master GE class paths from live/default journey
-        // components, then wanted or perk-stat gameplay-effect classes that have loaded since the last pass.
-        static void Scan() {
-            static uint64_t s_NextMs = 0, s_EndMs = 0;
-            const uint64_t Now = GetTickCount64();
-            if (!s_EndMs) s_EndMs = Now + 30 * 60 * 1000;
-            if (Now < s_NextMs || Now > s_EndMs) return;
-            s_NextMs = Now + 5000;
-            static std::set<std::string> s_Masters;
-            for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
-                SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
-                if (!Obj) continue;
-                if (Obj->IsA(SDK::UPlayerJourneyComponent::StaticClass())) {
-                    const std::string Path = SoftPath(&static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
-                    if (s_Masters.insert(Path).second) {
-                        Want(Path);
-                        // The client never loads the master GE itself; load it so the next pass can dump it.
-                        SDK::UClass* Loaded = Path == "None" ? nullptr
-                            : SDK::UKismetSystemLibrary::LoadClassAsset_Blocking(static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
-                        MpLog("[JourneyEffects] component " + Obj->GetName() + " masterGE=" + Path + (Loaded ? " (loaded)" : ""));
+                    std::vector<uint8_t> CostBytes(Costs->Data, Costs->Data + 2 * kCostSize);
+                    for (int c = 0; c < 2; ++c) {
+                        auto* Cost = reinterpret_cast<SDK::FArchonCurrencyCost*>(CostBytes.data() + c * kCostSize);
+                        Cost->Amount = Cost->Currency.RowName.GetRawString() == "CURRENCY_NOTES" ? kTierCost[t] * 75 : kTierCost[t];
                     }
-                    continue;
+                    SetArray(&Row->CurrencyCosts, CostBytes.data(), 2, kCostSize);
+
+                    const auto* Effects = reinterpret_cast<const RawArray*>(&Source->GameplayModifiers.GameplayEffectClasses);
+                    std::vector<uint8_t> EffectBytes;
+                    for (int a = 0; a < Perk.Apps[t]; ++a) EffectBytes.insert(EffectBytes.end(), Effects->Data, Effects->Data + Effects->Num * 0x28);
+                    SetArray(&Row->GameplayModifiers.GameplayEffectClasses, EffectBytes.data(), Effects->Num * Perk.Apps[t], 0x28);
+
+                    const std::wstring Id = HubId + L"_" + Perk.Id + L"_" + std::to_wstring(t + 1);
+                    const SDK::FName Name = VoiceSettings::NameOf(Id.c_str());
+                    AddRow(M, Name, reinterpret_cast<uint8_t*>(Row));
+                    AddChild(Parent, Table, Name);
+                    Parent = Row;
+                    ++Added;
                 }
-                if (Obj->IsDefaultObject() || !Obj->IsA(SDK::UClass::StaticClass())) continue;
-                auto* Cls = static_cast<SDK::UClass*>(Obj);
-                if (!Cls->ClassDefaultObject || !Cls->ClassDefaultObject->IsA(SDK::UGameplayEffect::StaticClass())) continue;
-                const std::string Name = Obj->GetName();
-                if (s_Dumped.count(Name)) continue;
-                // Wanted (node/master) classes, plus any other loaded effect touching a stat the planned perks need.
-                if (!s_Wanted.count(Name) && !TouchesPerkStat(static_cast<SDK::UGameplayEffect*>(Cls->ClassDefaultObject))) {
-                    s_Dumped.insert(Name);   // checked once
-                    continue;
-                }
-                s_Dumped.insert(Name);
-                if (s_Logged++ < 400) LogEffectClass(Cls);
             }
         }
-
-        // A probe must never take the game down (0.2.73 crashed reading a row's FText): a fault ends it.
-        static bool s_Faulted = false;
-        static void LogFault(const char* Where) { MpLog(std::string("[JourneyEffects] fault in ") + Where + " - probe off"); }
-        static void LogRowsGuarded(SDK::UDataTable* Table) {
-            __try { LogRows(Table); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
-            if (s_Faulted) LogFault("LogRows");
-        }
-        static void Tick() {
-            if (s_Faulted) return;
-            __try { Scan(); }
-            __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
-            if (s_Faulted) LogFault("Scan");
-        }
+        const bool Found = Find(M, VoiceSettings::NameOf(L"Revamped_Stats_AttackSpeed_5")) != nullptr;
+        MpLog("[JourneyTrees] " + std::to_string(Added) + " rows added (rows=" + std::to_string(M->Num) + " Slayer_00 children="
+            + std::to_string(Root->ChildNodes.Num()) + " lookup=" + (Found ? "ok" : "FAILED") + ")");
     }
 
-    // Once a second until the table is loaded; one attempt on it. Game thread only (client tick, server engine tick).
+    // Once a second until the table holding Slayer_00 is loaded; one attempt on it. Game thread only (client tick,
+    // server engine tick).
     static void Tick() {
-        static const bool s_Enabled = MpExeRelativeFlagPresent(L"JOURNEY_TEST_BRANCH.flag");
+        static const bool s_Enabled = MpExeRelativeFlagPresent(L"JOURNEY_TREES.flag");
         static bool s_Done = false;
         static uint64_t s_NextMs = 0;
-        if (!s_Enabled || !SDK::UObject::GObjects) return;
-        if (s_Done) { Effects::Tick(); return; }
+        if (!s_Enabled || s_Done || !SDK::UObject::GObjects) return;
         const uint64_t Now = GetTickCount64();
         if (Now < s_NextMs) return;
         s_NextMs = Now + 1000;
@@ -5675,21 +5623,15 @@ namespace JourneyTestBranch {
             auto* Dt = static_cast<SDK::UDataTable*>(Obj);
             if (!Dt->RowStruct || Dt->RowStruct->GetName() != "PlayerJourneyNodeData") continue;
             if (Dt->RowStruct->Size != static_cast<int32_t>(sizeof(SDK::FPlayerJourneyNodeData))) {
-                MpLog("[JourneyTestBranch] row size " + std::to_string(Dt->RowStruct->Size) + " != SDK - skipped");
+                MpLog("[JourneyTrees] row size " + std::to_string(Dt->RowStruct->Size) + " != SDK - skipped");
                 s_Done = true;
                 return;
             }
-            SDK::FPlayerJourneyNodeData* Parent = nullptr;
-            SDK::FPlayerJourneyNodeData* Template = nullptr;
-            for (auto& Pair : Dt->RowMap) {
-                const std::string Key = Pair.Key().GetRawString();
-                if (Key == "Slayer_00") Parent = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
-                else if (Key == "Dojo") Template = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
-            }
-            if (!Parent || !Template) continue;
+            RowIndex Rows;
+            for (auto& Pair : Dt->RowMap) Rows[Pair.Key().GetRawString()] = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
+            if (!Rows.count("Slayer_00")) continue;
             s_Done = true;
-            Effects::LogRowsGuarded(Dt);
-            Patch(Dt, Parent, Template);
+            Patch(Dt, Rows);
             return;
         }
     }
@@ -6690,7 +6632,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     if (Globals::AmServer) MpVoiceProximityTick();
     if (Globals::AmServer) MpHuntJoinTick();
     if (Globals::AmServer) MpBankedXpQuestTick();
-    if (Globals::AmServer) JourneyTestBranch::Tick();
+    if (Globals::AmServer) JourneyTrees::Tick();
 
     // [2026-07-20] Server-side skeletal pose/socket fix (FORCE_SERVER_MESH_POSE.flag). Server-only; the
     // helper self-throttles + no-ops unless the flag is present. See its definition above.
@@ -15411,7 +15353,7 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
         VoiceIndicators::Tick();
         InventoryProbe::Tick();
         CineCam::Tick();
-        JourneyTestBranch::Tick();
+        JourneyTrees::Tick();
         JoinPopup::TickGuarded();
     }
     if (FunctionName.find("Pressed") != std::string::npos) JoinPopup::OnEvent(Object, FunctionName);
