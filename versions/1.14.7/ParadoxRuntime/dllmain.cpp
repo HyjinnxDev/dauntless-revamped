@@ -5506,6 +5506,10 @@ namespace JourneyTrees {
         { L"Stats", L"REVAMPED: STATS", L"New combat stat perks. Every tier stacks with the original Slayer's Path nodes.",
           kStatsPerks, static_cast<int>(sizeof(kStatsPerks) / sizeof(kStatsPerks[0])) },
     };
+    // Layout, relative to the cloned rows' own values: the source nodes' spacing put tiers far apart and perk chains
+    // close together (seen 2026-10-31), so chains are shortened and spread.
+    constexpr float kTierDepthScale = 0.55f;
+    constexpr float kChainBreadthScale = 1.7f;
     // Per tier, CURRENCY_PJM_WEAPON then CURRENCY_NOTES (Rams) at 75x: the existing nodes' curve.
     static const int32_t kTierCost[5] = { 25, 150, 300, 450, 750 };
     static const wchar_t* const kRoman[5] = { L"I", L"II", L"III", L"IV", L"V" };
@@ -5571,6 +5575,13 @@ namespace JourneyTrees {
             if (Find(M, HubName)) { MpLog("[JourneyTrees] " + SDK::FString(HubId.c_str()).ToString() + " already present - skipped"); continue; }
             auto* Hub = CloneRow(Rows.at("Dojo"), Text(Tree.Name), Text(Tree.Desc));
             Hub->bAutoUnlockIfParentUnlocked = true;   // free entry point, like Slayer_00
+            const auto* Tier = Rows.at(SourceId(Tree.Perks[0], 1));
+            MpLog("[JourneyTrees] layout before: hub rule=" + std::to_string(static_cast<int>(Hub->ChildNodeLayoutRule))
+                + " dist=" + std::to_string(static_cast<int>(Hub->DistanceRule)) + " breadth=" + std::to_string(Hub->BreadthDistanceScale)
+                + " depth=" + std::to_string(Hub->DepthDistanceScale) + " | tier rule=" + std::to_string(static_cast<int>(Tier->ChildNodeLayoutRule))
+                + " dist=" + std::to_string(static_cast<int>(Tier->DistanceRule)) + " breadth=" + std::to_string(Tier->BreadthDistanceScale)
+                + " depth=" + std::to_string(Tier->DepthDistanceScale));
+            Hub->BreadthDistanceScale *= kChainBreadthScale;
             AddRow(M, HubName, reinterpret_cast<uint8_t*>(Hub));
             AddChild(Root, Table, HubName);
             ++Added;
@@ -5580,6 +5591,8 @@ namespace JourneyTrees {
                 for (int t = 0; t < 5; ++t) {
                     const SDK::FPlayerJourneyNodeData* Source = Rows.at(SourceId(Perk, t));
                     auto* Row = CloneRow(Source, Text(std::wstring(Perk.Name) + L" " + kRoman[t]), Text(Perk.Desc[t]));
+                    Row->DepthDistanceScale *= kTierDepthScale;
+                    Row->BreadthDistanceScale *= kChainBreadthScale;
 
                     std::vector<uint8_t> CostBytes(Costs->Data, Costs->Data + 2 * kCostSize);
                     for (int c = 0; c < 2; ++c) {
