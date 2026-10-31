@@ -531,16 +531,16 @@ systemRouter.get(/^\/leaderboard\/get_leaderboard\//i, HasParadoxBackendAuth, (r
     res.status(200).json(GauntletEnvelope({ entries: [] }));
 });
 
-// [2026-10-21] Level success (GauntletEndedLevelEndpoint) and guild reward claims. Their paths come from the ini and
-// have never been seen, so every Gauntlet-host write lands here; a success is recognised by its body
-// {gauntlet_id, players[], level, remaining_sec, data}. Only the game server may record a clear.
+// [2026-10-21] Level success (GauntletEndedLevelEndpoint) and guild reward claims. Every Gauntlet-host write lands here;
+// a success is recognised by its body {gauntlet_id, players[], level, remaining_sec, data}. Only the game server may record a clear.
+// [Revamped 2026-10-31] The success is PUT /process_run (it 404'd while this caught POST only), so both verbs land here.
 // ponytail: the path is logged so a real route can replace this catch-all once seen.
-systemRouter.post(/^\//, (req: any, _res, next) => next(IsGauntletOrigin(req) ? undefined : "route"), HasParadoxBackendAuth, async (req: any, res) => {
+for (const Verb of ["post", "put"] as const) systemRouter[Verb](/^\//, (req: any, _res, next) => next(IsGauntletOrigin(req) ? undefined : "route"), HasParadoxBackendAuth, async (req: any, res) => {
     const IsSuccess = Array.isArray(req.body?.players) && req.body?.level !== undefined;
     const Result = !IsSuccess ? "not a level success"
         : req.AuthData?.IsGameserver ? await RecordGauntletClear(req.body)
         : "ignored: not from the game server";
-    logger.info(`[Gauntlet] POST ${req.path} body=${JSON.stringify(req.body ?? null).slice(0, 1000)} -> ${Result}`);
+    logger.info(`[Gauntlet] ${req.method} ${req.path} body=${JSON.stringify(req.body ?? null).slice(0, 1000)} -> ${Result}`);
     res.status(200).json(GauntletEnvelope({}));
 });
 
