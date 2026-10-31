@@ -5506,8 +5506,9 @@ namespace JourneyTrees {
         { L"Stats", L"REVAMPED: STATS", L"New combat stat perks. Every tier stacks with the original Slayer's Path nodes.",
           kStatsPerks, static_cast<int>(sizeof(kStatsPerks) / sizeof(kStatsPerks[0])) },
     };
-    // Layout, relative to the cloned rows' own values: the source nodes' spacing put tiers far apart and perk chains
-    // close together (seen 2026-10-31), so chains are shortened and spread.
+    // Layout (all source rows: Linear, Relative, 1.0): the default spacing put tiers far apart and perk chains close
+    // together (seen 2026-10-31). Relative depth multiplies the parent's distance, so it compounds down a chain: it is
+    // scaled once, at tier II, and every later gap keeps that length. Hub -> tier I keeps its full fan-out length.
     constexpr float kTierDepthScale = 0.55f;
     constexpr float kChainBreadthScale = 1.7f;
     // Per tier, CURRENCY_PJM_WEAPON then CURRENCY_NOTES (Rams) at 75x: the existing nodes' curve.
@@ -5591,7 +5592,7 @@ namespace JourneyTrees {
                 for (int t = 0; t < 5; ++t) {
                     const SDK::FPlayerJourneyNodeData* Source = Rows.at(SourceId(Perk, t));
                     auto* Row = CloneRow(Source, Text(std::wstring(Perk.Name) + L" " + kRoman[t]), Text(Perk.Desc[t]));
-                    Row->DepthDistanceScale *= kTierDepthScale;
+                    if (t == 1) Row->DepthDistanceScale *= kTierDepthScale;
                     Row->BreadthDistanceScale *= kChainBreadthScale;
 
                     std::vector<uint8_t> CostBytes(Costs->Data, Costs->Data + 2 * kCostSize);
