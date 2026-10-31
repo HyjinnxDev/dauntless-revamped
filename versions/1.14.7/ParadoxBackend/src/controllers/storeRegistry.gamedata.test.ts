@@ -500,7 +500,7 @@ test("Middleman offers: one +1/+2/+3 cell at tiered Platinum or Aetherdust price
     ]);
     // Purchase currency arrives as the raw id (Middleman) or the slug (other stores).
     for (const Currency of ["id_currency_platinum", "platinum"]) assert.deepEqual(PricesForCurrency(This[0], Currency), [This[0].prices[0]]);
-    for (const Currency of ["CURRENCY_CELLDUST", "CURRENCYCELLDUST"]) assert.deepEqual(PricesForCurrency(This[0], Currency), [This[0].prices[1]]);
+    for (const Currency of ["CURRENCY_CELLDUST", "celldust"]) assert.deepEqual(PricesForCurrency(This[0], Currency), [This[0].prices[1]]);
     assert.deepEqual(PricesForCurrency(This[0], "None"), []);
     assert.equal(new Set(This.map((S) => S.items[0].catalogId.replace(/_(UC|R|E)$/, ""))).size, 3);
     for (const Sku of This) {
@@ -512,11 +512,13 @@ test("Middleman offers: one +1/+2/+3 cell at tiered Platinum or Aetherdust price
     assert.equal(FindStoreSkuByIdOrCatalogId(GetStoreSkus("weekly_cell_offering")[0].id)?.storeTag, "weekly_cell_offering");
 });
 
-test("Research Lab sells all 21 trackers and every season's 15 cells for 1 Crest", () => {
+test("Research Lab sells all 21 trackers, every season's 15 cells and 2 bundles for 1 Crest", () => {
     const Skus = GetStoreSkus("gauntlet_store");
     const Tab = (T: string) => Skus.filter((Sku) => Sku.tags.includes(T));
     assert.equal(Tab("gauntlet_store_tab_trackers").length, 21);
     assert.equal(Tab("gauntlet_store_tab_cells").length, 15);
-    assert.equal(new Set(Skus.map((Sku) => Sku.items[0].catalogId)).size, 36);
+    // [Revamped 2026-10-31] consumable bundles in the Misc tab, 2 items x5 each
+    assert.deepEqual(Tab("gauntlet_store_tab_misc").map((Sku) => Sku.items.map((I) => `${I.catalogId}x${I.quantity}`)), [["QI_DAMAGE_PYLONx5", "QI_EXPOSE_POTIONx5"], ["QI_DEFENSE_PYLONx5", "QI_STAGGER_POTIONx5"]]);
+    assert.equal(new Set(Skus.map((Sku) => Sku.id)).size, 38);
     for (const Sku of Skus) assert.deepEqual(Sku.prices, [{ currencyId: "id_currency_gauntlet_coin", price: 1 }], Sku.id);
 });

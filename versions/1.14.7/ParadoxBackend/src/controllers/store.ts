@@ -203,7 +203,12 @@ export function RamsExchangeSku(NowMs = Date.now()): StoreSku {
 // gauntlet_store_view_model: gauntlet_store_tab_{progress,trackers,cells,misc,lastchance}). SKU ids are the client's
 // StoreItemsTable rows; items and the 1 Crest price per the fandom wiki (Gauntlet#Research_Lab). Server choice: every
 // season's cells are on sale from the start, so the Last Chance (_lc, Crumbling Crest) rows are not served.
-// ponytail: the two consumable bundles (sku_gauntlet_s1_consumables_a/b) are left out, their contents are unknown.
+// [Revamped 2026-10-31] The two consumable bundles (Misc tab): contents are unknown, so they hold the catalog items their
+// names point at, 5 of each (user's call).
+const GAUNTLET_BUNDLES: [string, string, [string, number][]][] = [
+    ["sku_gauntlet_s1_consumables_a", "Inspiring Insight Bundle", [["QI_DAMAGE_PYLON", 5], ["QI_EXPOSE_POTION", 5]]],
+    ["sku_gauntlet_s1_consumables_b", "Iron Assault Bundle", [["QI_DEFENSE_PYLON", 5], ["QI_STAGGER_POTION", 5]]],
+];
 const GAUNTLET_TRACKERS: [string, string, string][] = [
     ["sku_part_wt_gatherables", "PART_WT_GATHERABLES", "Gatherables"],
     ["sku_part_wt_dodges", "PART_WT_DODGES", "Dodges"],
@@ -266,6 +271,10 @@ function GauntletStoreSkus(): StoreSku[] {
     return [
         ...GAUNTLET_TRACKERS.map(([Id, CatalogId, Name], I) => Sku(Id, CatalogId, `"${Name}" Tracker`, "gauntlet_store_tab_trackers", I, true)),
         ...GAUNTLET_CELLS.map(([Id, CatalogId, Name], I) => Sku(Id, CatalogId, `+1 ${Name} Cell`, "gauntlet_store_tab_cells", I, false)),
+        ...GAUNTLET_BUNDLES.map(([Id, Name, Items], I) => ({
+            ...Sku(Id, Items[0][0], Name, "gauntlet_store_tab_misc", I, false),
+            items: Items.map(([catalogId, quantity]) => ({ catalogId, quantity, instanced: false })),
+        })),
     ];
 }
 
@@ -478,8 +487,9 @@ export type PurchaseResult =
     | { ok: true; result: any }
     | { ok: false; reason: "unknown_sku" | "unknown_currency" | "insufficient_balance" | "conflict" | "already_purchased_different_request" | "transaction_failed" | "nothing_to_grant" };
 
-// The client's currency path segment (/token/{currency}/{sku}): a price's currencyId without `id_currency_` and underscores.
-export const CurrencySlug = (CurrencyId: string) => CurrencyId.replace(/^id_currency_/, "").replace(/_/g, "");
+// The client's currency path segment (/token/{currency}/{sku}): a price's currencyId without `id_currency_`/`CURRENCY_`
+// and underscores, lowercased ("CURRENCY_CELLDUST" -> "celldust", as seen in /token/celldust/... 2026-10-30).
+export const CurrencySlug = (CurrencyId: string) => CurrencyId.replace(/^(id_currency_|CURRENCY_)/i, "").replace(/_/g, "").toLowerCase();
 // The Middleman sends the price's raw currencyId instead of the slug (/token/id_currency_platinum/...), so accept both.
 export const PricesForCurrency = (Sku: StoreSku, Currency?: string) => Sku.prices.length > 1
     ? Sku.prices.filter((p) => p.currencyId === Currency || CurrencySlug(p.currencyId) === Currency)
