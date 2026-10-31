@@ -146,6 +146,7 @@ if ($Setup) {
     LAUNCHER_UPDATE_ROOT = "$root\updates"; UPDATE_PUBLIC_BASE_URL = "https://paradox.test:$($ports.Https)"
     CRASH_REPORT_STORAGE_DIR = "$root\crash-reports"; LAUNCHER_LOG_STORAGE_DIR = "$root\launcher-logs"
     ADMIN_LOG_DIR = $logs; ADMIN_RESTART_SCRIPT = ''; ADMIN_DISCORD_REDIRECT_URI = ''
+    ALLOW_NO_AUTH_DEV_MODE = 'true'   # -Client logs in with the dev fallback (name = exchange code); live keeps it off
     GITHUB_CRASH_TOKEN = ''; GITHUB_CRASH_REPO = ''
     DISCORD_NEWS_BOT_TOKEN = ''; DISCORD_NEWS_CHANNEL_ID = ''; DISCORD_STATUS_CHANNEL_ID = ''; DISCORD_GUILD_ID = ''
     DISCORD_CLIENT_ID = ''; DISCORD_CLIENT_SECRET = ''
