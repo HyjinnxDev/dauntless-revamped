@@ -5701,14 +5701,16 @@ static void Tick() {
 // comes off the nameplate (chat keeps it) and a title line under the name says the role instead: "Server Owner"
 // in legendary orange with the name pulsing gold and glowing; "Server Admin" / "Server Moderator" in the plate's
 // own text style. Client only, game thread, from ProcessEventClientHook like the behemoth bar.
-// [Revamped 2026-10-19] Patreon name styles: a style tag ("[Legend] Name", backend staffRoles.ts GameNameTag,
-// picked per character in the launcher; since 2026-11-03 it replaces the staff tag) also comes off and styles the name:
+// [Revamped 2026-10-19] Patreon name styles (picked per character in the launcher) style the name:
 //   Wanderer  green
 //   Scout     red, dark edge + drop shadow, slow brightness pulse
 //   Slayer    purple, violet glow, ethereal breathing + lavender shimmer
 //   Legend    gold, orange glow + deep shadow, white-gold shimmer
 //   Emerald   (the Owner tier) emerald/aqua cycle with diamond-white sparkles, teal glow, breathing teal aura
-// A style replaces the owner's gold pulse and the staff title line (the backend sends no staff tag with a style).
+// A style replaces the owner's gold pulse; the title line keeps the staff title (or the style name for non-staff).
+// [Revamped 2026-11-03] Names carry no tags any more: the game caps a name at 20 characters, so "[Owner] [Emerald] "
+// left "Hy" of "Hyjinnx". Tier and style come from backend GET /mystic/name-tags (JoinPrompt.cpp MpNameTags), matched
+// on the plate's exact name; the big text is just the name, the small title line shows the tag.
 // DISABLE_STAFF_NAMEPLATES.flag beside the exe turns it off.
 // ponytail: re-reads plate text every kScanMs; hook UNamePlatesWidget::UpdateName instead if that ever costs.
 // ponytail: a plate whose tags go away mid-map keeps its font; fine while a style change only lands on map load.
@@ -5717,21 +5719,22 @@ namespace StaffNameplates {
 using BehemothHealthBar::Ref;
 enum class Tier { None, Mod, Admin, Owner };
 enum class Style { None, Wanderer, Scout, Slayer, Legend, Emerald };
-struct TierInfo { Tier T; const char* Prefix; const wchar_t* Title; const char* LogName; };
+struct TierInfo { Tier T; const wchar_t* Title; const char* LogName; };
 static const TierInfo kTiers[] = {
-    { Tier::Owner, "[Owner] ", L"Server Owner", "owner" },
-    { Tier::Admin, "[Admin] ", L"Server Admin", "admin" },
-    { Tier::Mod, "[Mod] ", L"Server Moderator", "moderator" },
+    { Tier::Owner, L"Server Owner", "owner" },
+    { Tier::Admin, L"Server Admin", "admin" },
+    { Tier::Mod, L"Server Moderator", "moderator" },
 };
-struct StyleInfo { Style S; const char* Prefix; const char* LogName; };
+struct StyleInfo { Style S; const wchar_t* Title; const char* LogName; };
 static const StyleInfo kStyles[] = {
-    { Style::Wanderer, "[Wanderer] ", "wanderer" },
-    { Style::Scout, "[Scout] ", "scout" },
-    { Style::Slayer, "[Slayer] ", "slayer" },
-    { Style::Legend, "[Legend] ", "legend" },
-    { Style::Emerald, "[Emerald] ", "emerald" },
+    { Style::Wanderer, L"Wanderer", "wanderer" },
+    { Style::Scout, L"Scout", "scout" },
+    { Style::Slayer, L"Slayer", "slayer" },
+    { Style::Legend, L"Legend", "legend" },
+    { Style::Emerald, L"Emerald", "emerald" },
 };
-struct Plate { Ref W; const TierInfo* Info = nullptr; Style S = Style::None; std::string Name; bool FitLogged = false; };   // Name: plate text after stripping
+struct Tag { const TierInfo* Info = nullptr; const StyleInfo* Si = nullptr; };
+struct Plate { Ref W; const TierInfo* Info = nullptr; Style S = Style::None; bool FitLogged = false; };
 
 constexpr ULONGLONG kTickMs = 100, kScanMs = 1000;
 using C = SDK::FLinearColor;
@@ -5778,7 +5781,8 @@ static float Flash(ULONGLONG Now, ULONGLONG PeriodMs, ULONGLONG WidthMs) {
 }
 
 // One-time look per plate when its tier/style is first seen: the title line, outline glow, size and shadow.
-static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, Style S) {
+static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, const StyleInfo* Si) {
+    const Style S = Si ? Si->S : Style::None;
     SDK::UTextBlock* Tb = W->TextBlock_Name;
     SDK::FSlateFontInfo F = Tb->Font;   // copied bitwise; SetFont copies it natively
     bool FontChanged = false;
@@ -5812,9 +5816,9 @@ static void Decorate(SDK::UNamePlatesWidget* W, const TierInfo* Info, Style S) {
     // Outline/shadow make the name a few px wider than the slot the plate last gave it; with auto-wrap on, Slate
     // wraps it to that width and the plate only shows the first line, so the name looks cut off.
     Tb->SetAutoWrapText(false);
-    if (SDK::UTextBlock* Title = Info ? W->TextBlock_Title : nullptr) {
-        Title->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(Info->Title)));
-        if (Info->T == Tier::Owner) SetColor(Title, kOwnerTitle);
+    if (SDK::UTextBlock* Title = W->TextBlock_Title) {
+        Title->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(Info ? Info->Title : Si->Title)));
+        if (Info && Info->T == Tier::Owner) SetColor(Title, kOwnerTitle);
         Title->SetVisibility(SDK::ESlateVisibility::HitTestInvisible);
     }
     W->ForceLayoutPrepass();
@@ -5876,46 +5880,30 @@ static void Animate(SDK::UTextBlock* Tb, const Plate& P, ULONGLONG Now) {
     }
 }
 
-static void SetName(SDK::UTextBlock* Tb, const std::string& Utf8) {
-    std::wstring W(Utf8.size(), wchar_t{});
-    W.resize(MultiByteToWideChar(CP_UTF8, 0, Utf8.data(), static_cast<int>(Utf8.size()), W.data(), static_cast<int>(W.size())));
-    Tb->SetText(SDK::UKismetTextLibrary::Conv_StringToText(SDK::FString(W.c_str())));
-}
+// Display name -> tier/style, parsed from MpNameTags() whenever its body changes. Game thread only.
+static std::unordered_map<std::string, Tag> s_Tags;
+static std::string s_TagsBody;
 
-// Staff tag then style tag, both optional; returns where the bare name starts (0 = untagged).
-static size_t ParseTags(const std::string& Text, const TierInfo*& Info, const StyleInfo*& Si) {
-    size_t Pos = 0;
-    for (const TierInfo& Ti : kTiers) {
-        const size_t Len = std::strlen(Ti.Prefix);
-        if (Text.compare(0, Len, Ti.Prefix) == 0) { Info = &Ti; Pos = Len; break; }
+static void RefreshTags() {
+    std::string Body = MpNameTags();
+    if (Body == s_TagsBody) return;
+    s_TagsBody.swap(Body);
+    s_Tags.clear();
+    for (size_t At = 0, End; (End = s_TagsBody.find('\n', At)) != std::string::npos; At = End + 1) {
+        const std::string Line = s_TagsBody.substr(At, End - At);
+        const size_t T1 = Line.find('\t'), T2 = T1 == std::string::npos ? T1 : Line.find('\t', T1 + 1);
+        if (T2 == std::string::npos || T1 == 0) continue;
+        const std::string TierName = Line.substr(T1 + 1, T2 - T1 - 1), StyleName = Line.substr(T2 + 1);
+        Tag T;
+        for (const TierInfo& Ti : kTiers) if (TierName == Ti.LogName) T.Info = &Ti;
+        for (const StyleInfo& S : kStyles) if (StyleName == S.LogName) T.Si = &S;
+        if (T.Info || T.Si) s_Tags[Line.substr(0, T1)] = T;
     }
-    for (const StyleInfo& S : kStyles) {
-        const size_t Len = std::strlen(S.Prefix);
-        if (Text.compare(Pos, Len, S.Prefix) == 0) { Si = &S; Pos += Len; break; }
-    }
-    return Pos;
 }
 
-static void StripTags(SDK::UTextBlock* Tb) {
-    if (!Tb) return;
-    const std::string Text = SDK::UKismetTextLibrary::Conv_TextToString(Tb->GetText()).ToString();
-    const TierInfo* Info = nullptr;
-    const StyleInfo* Si = nullptr;
-    if (const size_t Pos = ParseTags(Text, Info, Si)) SetName(Tb, Text.substr(Pos));
-}
-
-// The party list and hunt HUD show the raw tagged name in a fixed-width box, so the tags pushed the name out.
-// ponytail: runs on the plate scan, so a tagged name can show for up to kScanMs after the game re-sets it.
-static void StripHudNames(SDK::UWorld* World) {
-    static auto* s_Found = new SDK::TArray<SDK::UUserWidget*>();
-    auto Each = [&](SDK::UClass* Cls, auto Fn) {
-        SDK::UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World, s_Found, Cls, false);
-        for (int32_t i = 0; i < s_Found->Num(); ++i)
-            if (SDK::UUserWidget* U = (*s_Found)[i]) Fn(U);
-    };
-    Each(SDK::UPlayerHUDDisplayItem::StaticClass(), [](SDK::UUserWidget* U) { StripTags(static_cast<SDK::UPlayerHUDDisplayItem*>(U)->PlayerNameTextBox); });
-    Each(SDK::UPartyWidgetItem::StaticClass(), [](SDK::UUserWidget* U) { StripTags(static_cast<SDK::UPartyWidgetItem*>(U)->PlayerNameText); });
-    Each(SDK::UHuntingPartyPlayerWidget::StaticClass(), [](SDK::UUserWidget* U) { StripTags(static_cast<SDK::UHuntingPartyPlayerWidget*>(U)->MemberName); });
+static const Tag* Lookup(const std::string& Name) {
+    auto It = s_Tags.find(Name);
+    return It == s_Tags.end() ? nullptr : &It->second;
 }
 
 static void Update() {
@@ -5931,44 +5919,29 @@ static void Update() {
         if (!World) return;
         static auto* s_Found = new SDK::TArray<SDK::UUserWidget*>();   // engine-allocated, never freed (exit-safe)
         SDK::UWidgetBlueprintLibrary::GetAllWidgetsOfClass(World, s_Found, SDK::UNamePlatesWidget::StaticClass(), false);
+        RefreshTags();
         std::vector<Plate> Next;
         for (int32_t i = 0; i < s_Found->Num(); ++i) {
             auto* W = static_cast<SDK::UNamePlatesWidget*>((*s_Found)[i]);
             if (!W || !W->TextBlock_Name) continue;
             FitComponent(W);
-            const std::string Text = SDK::UKismetTextLibrary::Conv_TextToString(W->TextBlock_Name->GetText()).ToString();
+            const Tag* T = Lookup(SDK::UKismetTextLibrary::Conv_TextToString(W->TextBlock_Name->GetText()).ToString());
+            if (!T) continue;
+            const Style S = T->Si ? T->Si->S : Style::None;
             auto Old = std::find_if(s_Plates.begin(), s_Plates.end(), [&](const Plate& P) { return P.W.Get() == W; });
-            // New plate, or the game re-set the name: staff tag, then style tag, both optional.
-            const TierInfo* Info = nullptr;
-            const StyleInfo* Si = nullptr;
-            const size_t Pos = ParseTags(Text, Info, Si);
-            Style S = Si ? Si->S : Style::None;
-            const char* StyleLog = Si ? Si->LogName : "-";
-            std::string Name;
-            if (Pos > 0) {
-                Name = Text.substr(Pos);
-                SetName(W->TextBlock_Name, Name);
-            } else if (Old != s_Plates.end() && Text == Old->Name) {   // already stripped
-                Info = Old->Info;
-                S = Old->S;
-                Name = Text;
-            }
-            if (!Info && S == Style::None) continue;
-            const bool Fresh = Old == s_Plates.end() || Old->Info != Info || Old->S != S;
+            const bool Fresh = Old == s_Plates.end() || Old->Info != T->Info || Old->S != S;
             if (Fresh) {
-                Decorate(W, Info, S);
-                Log(std::string(Info ? Info->LogName : "-") + "/" + StyleLog + " plate " + W->GetFullName());
+                Decorate(W, T->Info, T->Si);
+                Log(std::string(T->Info ? T->Info->LogName : "-") + "/" + (T->Si ? T->Si->LogName : "-") + " plate " + W->GetFullName());
             } else if (!Old->FitLogged) {
                 LogFit(W);
             }
             Next.push_back(Plate{});
             Next.back().W.Set(W);
-            Next.back().Info = Info;
+            Next.back().Info = T->Info;
             Next.back().S = S;
-            Next.back().Name = Name;
             Next.back().FitLogged = !Fresh;
         }
-        StripHudNames(World);
         static bool s_LoggedCount = false;
         if (!s_LoggedCount && s_Found->Num() > 0) {
             s_LoggedCount = true;
@@ -13444,9 +13417,9 @@ static void Tick() {
 // Keyframes carry focus distance too (focus pulls); each key picks how it moves to the next (smooth/linear/hold).
 // Photo = the engine's HighResShot (no HUD, no menu); files land in Archon\Saved\Screenshots.
 // Settings persist in CINECAM.ini beside the exe, saved shots in CINECAM_shots\. DISABLE_CINECAM.flag turns it off.
-// Owner accounts only: the local player's name must carry the backend's "[Owner] " tag or a name-style tag (login.ts
-// GetDisplayNameForUserId; usernames are alphanumeric, so nobody else can type it). Anyone else: every key, the
-// menu and the guides stay off. Fails closed while the player state or its name is not there yet.
+// Owner accounts only: the local player's name must be an owner in backend GET /mystic/name-tags (StaffNameplates
+// Lookup). Anyone else: every key, the menu and the guides stay off. Fails closed while the player state, its name or
+// the tag list is not there yet.
 // Log tag [CineCam].
 // ponytail: fixed keys, no gamepad; path speed between keys follows key times (use "Even out speed").
 namespace CineCam {
@@ -14134,12 +14107,9 @@ static bool OwnerOnly(SDK::APlayerController* PC, ULONGLONG Now) {
     if (Now >= s_Next) {
         s_Next = Now + 1000;
         SDK::APlayerState* Ps = PC->PlayerState;
-        // A worn name style replaces "[Owner] " (staffRoles.ts GameNameTag).
-        // ponytail: styles are owner-only (AllowedNameStyles); give the gate its own signal once Patreon tiers wear them.
-        const StaffNameplates::TierInfo* Info = nullptr;
-        const StaffNameplates::StyleInfo* Si = nullptr;
-        if (Ps) StaffNameplates::ParseTags(Ps->PlayerNamePrivate.ToString(), Info, Si);
-        s_Owner = (Info && Info->T == StaffNameplates::Tier::Owner) || Si;
+        StaffNameplates::RefreshTags();
+        const StaffNameplates::Tag* T = Ps ? StaffNameplates::Lookup(Ps->PlayerNamePrivate.ToString()) : nullptr;
+        s_Owner = T && T->Info && T->Info->T == StaffNameplates::Tier::Owner;
         if (s_Logged != static_cast<int>(s_Owner) && (s_Owner || Ps)) {
             s_Logged = static_cast<int>(s_Owner);
             Log(s_Owner ? "owner account - camera unlocked" : "not an owner account - camera locked");

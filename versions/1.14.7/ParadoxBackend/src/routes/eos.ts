@@ -16,7 +16,7 @@ import { GetUserIDForAPIKey, SignMetagameJWTForUid, ValidateMetagameJWTAndGetPay
 import { HasParadoxBackendAuth } from "../middleware/HasParadoxBackendAuth";
 import { GetUsernameForUserId } from "../controllers/login";
 import { StripStaffNameTag } from "../security/staffRoles";
-import { ActiveCharacters, GameNameTagFor } from "../characterSlots";
+import { ActiveCharacters } from "../characterSlots";
 import { GetRepositories } from "../persistence";
 import { HashOpaqueToken } from "../security/launcherTokens";
 import { IsAccountEligible } from "../security/accountEligibility";
@@ -345,7 +345,7 @@ async function LookupEpicPublicAccount(accountId: string, displayNameOverride?: 
     return {
         id: accountId,
         displayName: displayNameOverride
-            ?? (LauncherAccount?.displayName ? await GameNameTagFor(LauncherAccount.roles, accountId) + LauncherAccount.displayName : undefined)
+            ?? LauncherAccount?.displayName
             ?? Account?.name ?? accountId,
         // The Epic account is the core profile above. This map is only for linked
         // external platforms (PSN/XBL/etc.), so do not fabricate an "epic" entry.
@@ -364,7 +364,7 @@ eosRouter.get("/account/api/public/account/:AccId", async (req, res) => {
     const RequesterAccount = IsLegacySelfAlias
         ? await GetRepositories().launcherAccounts.findByUserId(RequesterId)
         : undefined;
-    const Account = await LookupEpicPublicAccount(req.params.AccId, IsLegacySelfAlias && RequesterAccount ? await GameNameTagFor(RequesterAccount.roles, RequesterId) + RequesterAccount.displayName : undefined);
+    const Account = await LookupEpicPublicAccount(req.params.AccId, IsLegacySelfAlias ? RequesterAccount?.displayName : undefined);
     if (Account === undefined) {
         res.status(404).send();
         return;
@@ -404,7 +404,7 @@ eosRouter.get("/account/api/public/account/displayName/:displayName", async (req
     logger.info(`Display-name lookup: ${DisplayName} -> ${GameId}`);
     res.json({
         id: GameId,
-        displayName: await GameNameTagFor(Account.roles, Account.userId) + Account.displayName,
+        displayName: Account.displayName,
         externalAuths: {}
     });
 });
@@ -448,7 +448,7 @@ eosRouter.get("/account/api/public/account", HasParadoxBackendAuth, async (req: 
     const AuthenticatedLauncherAccount = await GetRepositories().launcherAccounts.findByUserId(req.AuthData.userId);
     const Accounts = (await Promise.all(RequestedIds.map(async (RequestedId) => {
         const IsLegacySelfAlias = RequestedId === DEV_USER_ID && req.AuthData.userId !== DEV_USER_ID;
-        return LookupEpicPublicAccount(RequestedId, IsLegacySelfAlias && AuthenticatedLauncherAccount ? await GameNameTagFor(AuthenticatedLauncherAccount.roles, req.AuthData.userId) + AuthenticatedLauncherAccount.displayName : undefined);
+        return LookupEpicPublicAccount(RequestedId, IsLegacySelfAlias ? AuthenticatedLauncherAccount?.displayName : undefined);
     })))
         .filter((Account): Account is EpicPublicAccount => Account !== undefined);
 

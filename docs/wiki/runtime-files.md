@@ -38,7 +38,7 @@ which flag, which log tag. C = client role, S = dedicated-server role (`-server`
 | `P2PHooksStub.cpp` | Dedicated-only implementation: claims no auth mode, so any `MYSTICPARADOX_AUTH_MODE` other than `GLOBAL_GAMESERVER` makes the server exit before listen (`[ServerAuth]`, exit `0xE102`). Every other hook is a no-op/true. |
 | `Voice.cpp` | In-game voice (C) and hub proximity reports (S). See the section below. |
 | `CrashReporter.cpp` | Own crash reporter (C+S). See below. |
-| `JoinPrompt.cpp` | Join-in-progress offer worker thread (C). See below. |
+| `JoinPrompt.cpp` | Join-in-progress offer worker thread and the name-tag poll (C). See below. |
 | `HuntStats.cpp` | `MpHuntStatsPost(Json, ApiKey)` (S): detached thread, one `POST <MpApiBase>/mystic/hunt-stats` via WinHTTP with `Content-Type: application/json` and `x-mysticparadox-gameserver-apikey`, no proxy, 3/3/5/5 s timeouts, one attempt. Logs `[HuntStats] backend -> <status>`. The JSON is built by `MpHuntStatsTick` in `dllmain.cpp`. |
 | `WindowLock.cpp` | `MpWindowLockStart` (C): hooks `user32!SetWindowPos`, `MoveWindow`, `SetWindowLongW`, `SetWindowLongPtrW` with `MH_CreateHookApiEx`. Only the game's own top-level unowned `UnrealWindow` is affected. An engine request identical to its previous one (the map-load re-apply) keeps the window's current rect and border bits; a new request (options menu change) passes. A kept rect is re-announced with posted `WM_MOVE`/`WM_SIZE` (Slate caches the size it asked for). Subclasses the game window (`GameWndProc`): a captionless window not filling its monitor gets 8 px resize edges (`WM_NCHITTEST`). `DISABLE_WINDOW_LOCK.flag`. Tag `[WindowLock]`. |
 | `CineCamMenu.cpp` | F10 cinematic-camera menu (C): Dear ImGui drawn from an `IDXGISwapChain::Present` hook (vtable 8; `ResizeBuffers` vtable 13), found by creating a throwaway D3D11 device + swap chain. Subclasses the game window's `WndProc` so the menu eats its input. D3D11 only (menu off on D3D12; hotkeys still work). Saves menu layout to `CINECAM_menu.ini`, shots to `CINECAM_shots\` beside the exe. Never touches UObjects; asks the game thread via `Cine::G` commands. Tag `[CineCam]`. |
@@ -82,7 +82,7 @@ Search by symbol or `[Tag]`; the file has long dated history comments above most
 | Manual net tick | `NativeNetTick`, `SafeManualTickDispatch`, `SafeManualTickFlush`, `SanitizeNetDriver*`, `RegisterNetDriverInLevelCollections`, `ApplyNetRateBoost` | S | Native-only net tick by default; SEH-guarded manual dispatch for A/B flags. Raises `MaxClientRate`/`MaxInternetClientRate` and each connection's `CurrentNetSpeed` to 100000 B/s. |
 | Voice options | `namespace VoiceSettings` | C | Game Audio "Voice chat" toggle + volume feed `Voice.cpp`; adds a Push to Talk binding row (repurposes hidden `Binding_ToggleHUD_Gamepad`, default Mouse4) and an "Open Mic" toggle saved as `VOIP_OPEN_MIC.flag`. |
 | Behemoth HP bar | `namespace BehemothHealthBar` | C | Native bar + `12,345/15,654` number for live behemoths within 35 m (last damaged first), one row per behemoth. |
-| Nameplates | `namespace StaffNameplates` | C | Strips `[Owner]/[Admin]/[Mod]` and Patreon tags (`[Wanderer]`, `[Scout]`, `[Slayer]`, `[Legend]`, `[Emerald]`) from overhead plates, adds a role title line (staff tag) or an animated name style (style tag; the backend sends one tag, a worn style replaces the staff tag); switches every plate's widget component to draw at desired size so names are not clipped. Tags come from backend `staffRoles.ts`. |
+| Nameplates | `namespace StaffNameplates` | C | Looks each plate's exact name up in the backend `/mystic/name-tags` list (`RefreshTags`, `Lookup`; names carry no tags since the game caps them at 20 characters): the title line under the name shows the staff title ("Server Owner") or, for non-staff, the style name; the name gets the animated style; switches every plate's widget component to draw at desired size so names are not clipped. Tags come from backend `staffRoles.ts`. |
 | Inventory | `namespace InventoryProbe` (`Read`, `Heal`, `FindUnresolvedGearSlots`, `LoadoutHeal`, `Tick`) | C | Logs changes in the client's two inventory views (`[InvProbe]`); if inventory stays empty 5 s on a live controller, calls `ClientQueryInventory(true)` (max 3 tries, 10 s apart) (`[InvHeal]`). Once the inventory has finished loading, re-resolves gear slots (`UArchonLoadoutItemSlot`) that hold an item CRC but no instance id - fills a null slot `Inventory` from the controller and re-runs `OnRep_ItemInstanceIdChanged` (max 5 passes per controller) (`[LoadoutHeal]`). Skips while `s_lmDepth` > 0 (inside LoadMap) and only touches controller, inventory and slots that pass `IsRegisteredLiveObject`: after travel `s_LastPossessedPC` points at the freed old controller (crash reports #10/#11, 0.2.67). |
 | Fountain core popup | `MpFountainCorePopupFix` | C | Rewrites `ArchonInventory.ClientContainerUnlocked` before the UI: Patrol Key line = game roll +2 (clamped 4-6) and an appended `CURRENCY_PLATINUM` x20 line, matching backend `ramsRewards.ts`. Keep both in step. |
 | Cell core popup | `MpNoteContainerUnlock`, `MpCellCorePopupFix` | C | Remembers cell cores sent in `ServerUnlockContainer`, then replays backend `UpgradeCoreCells` (same seed + chances as `CellCoreRandom`/`CELL_CORE_UPGRADE`) on the next `ClientContainerUnlocked`: one `_UC` line renamed to `_R`/`_E`, or split off a stack. Keep both in step. |
@@ -100,7 +100,7 @@ Search by symbol or `[Tag]`; the file has long dated history comments above most
 | Combat log | `MpHuntCombatLog` | S | Per-hunt `<exe dir>\HuntCombat\hunt_<start>_port<N>.log` (montage / try / ok / REJECT / dmg). Summarised by `host\hunt-combat-report.ps1`. |
 | Hunt pass probe | `MpHuntPassProbe` | C+S | `HUNTPASS_PROBE.flag` only. |
 | Voice icons | `namespace VoiceIndicators` | C | Talking/muted icons on party HUD, own health bar and nameplates. |
-| Cinematic camera | `namespace CineCam` | C | F8/F9/F10 camera, keyframe paths, HUD hide, `CINECAM.ini`; owner accounts only (`OwnerOnly` accepts an `[Owner] ` or name-style prefix; styles are owner-only). |
+| Cinematic camera | `namespace CineCam` | C | F8/F9/F10 camera, keyframe paths, HUD hide, `CINECAM.ini`; owner accounts only (`OwnerOnly`: local name is an owner in the `/mystic/name-tags` list). |
 | Join popup | `namespace JoinPopup` | C | Shows `JoinPrompt.cpp` offers through `UArchonGlobalUI::DisplayPopup`, returns the choice. |
 | Client ProcessEvent | `ProcessEventClientHook` | C | Reentrancy guard; drives branding, autoplay, console, client probes, role pump, and ticks `BehemothHealthBar`, `StaffNameplates`, `VoiceSettings`, `VoiceIndicators`, `InventoryProbe`, `CineCam`, `JoinPopup`; `[ClientPerf]` once a minute. |
 | Server ProcessEvent | `ProcessEventHook` | S | Reentrancy guard; forces `PlayerCanRestart` (except the phantom/held party), installs the synthetic net id when flagged, suppresses Wwise `PostEvent` on servers, projectile tick fix, escalation hooks, combat log, debug damage, P2P observer. |
@@ -236,7 +236,8 @@ Defined but not installed: `InstallActiveHuntPassDriver` (`0x018FD230`), `Instal
 
 | Item | Value |
 |---|---|
-| Entry | `MpJoinPromptStart` (C). Off with `DISABLE_JOIN_PROMPT.flag` or without `MYSTICPARADOX_VOICE_TICKET`. |
+| Entry | `MpJoinPromptStart` (C). Off without `MYSTICPARADOX_VOICE_TICKET`; `DISABLE_JOIN_PROMPT.flag` turns off the offer thread only. |
+| Name tags | `NameTagThread`: every 30 s `GET /mystic/name-tags`; `MpNameTags()` hands the body to `StaffNameplates`. Log tag `[NameTags]` (first success, failures). |
 | Loop | Every 1 s `GET /mystic/party/hunt-offer` with `X-Mystic-Ticket`. Shows an offer only when `"offer":{` and `"blocked":null`, once per member+hunt. |
 | Answer | `MpJoinPromptAnswer(true)` -> `POST /mystic/party/join-hunt`; a notice says "Joining <name>'s hunt." or "Can't join." + reason (`FULL`, `NEARLY_DONE`, `ENDING`). Polling pauses 10 s after a join. |
 | Game thread | `MpJoinPromptTakeOffer` / `MpJoinPromptTakeNotice` (one-shot strings) read by `JoinPopup` in `dllmain.cpp`. |
@@ -473,6 +474,7 @@ All go to `mysticparadox_dll_port<N>.log` beside the exe unless noted. `[Init]`,
 | `[InventoryRefreshGuard]` | dllmain.cpp | S: equipped refresh skipped / guard not installed. |
 | `[IsEOSEnabled]` | dllmain.cpp | C: forced to 0. |
 | `[JoinPrompt]` | dllmain.cpp, JoinPrompt.cpp | C: polling, offers, answers, notices. |
+| `[NameTags]` | JoinPrompt.cpp | C: name-tag list fetched (count) or failed (status). |
 | `[LateJoin]` | dllmain.cpp | S: behemoth HP rescaled for a higher player count. |
 | `[LegacyReplication]`, `[NATIVE_GRAPH_ONLY]`, `[NATIVE_REPLICATION_ONLY]` | Networking.cpp | S: which replication path runs. |
 | `[Lifecycle:<event>]` | dllmain.cpp | S: Archon lifecycle edges (`LogArchonLifecycle`, e.g. `ConnEdge`). |
@@ -531,6 +533,6 @@ All go to `mysticparadox_dll_port<N>.log` beside the exe unless noted. `[Init]`,
 | `[XmppConfig]` | dllmain.cpp | Dead code (XMPP hook not installed). |
 | `[vhook]`, `[vtable]` | dllmain.cpp | stdout only: vtable hook/dump helpers. |
 
-Not log tags: `[Owner] `, `[Admin] `, `[Mod] ` and `[Wanderer] `, `[Scout] `, `[Slayer] `, `[Legend] `, `[Emerald] ` are the backend's name prefixes that `StaffNameplates` strips.
+Not log tags: `[Owner] `, `[Admin] `, `[Mod] ` and `[Wanderer] `, `[Scout] `, `[Slayer] `, `[Legend] `, `[Emerald] ` were the backend's old name prefixes (gone 2026-11-03; backend `StripStaffNameTag` still accepts them).
 
 See also: [runtime](runtime.md), [director](director.md), [backend](backend.md), [paradox-launcher](paradox-launcher.md), [tools](tools.md).

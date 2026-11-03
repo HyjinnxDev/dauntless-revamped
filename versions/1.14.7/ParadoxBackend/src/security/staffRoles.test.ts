@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AllowedNameStyles, CanActOn, GameNameTag, HasStaffPermission, StaffNameTag, StaffRank, StripStaffNameTag } from "./staffRoles";
+import { AllowedNameStyles, CanActOn, HasStaffPermission, NameTagOf, StaffRank, StripStaffNameTag } from "./staffRoles";
 
 test("staff tiers gate permissions", () => {
     assert.equal(StaffRank(["player"]), 0);
@@ -20,18 +20,15 @@ test("staff only act on lower ranks, never themselves or peers", () => {
     assert.equal(CanActOn(["admin", "owner"], ["admin", "owner"]), false);
 });
 
-test("staff name tag round-trips", () => {
-    assert.equal(StaffNameTag(["player", "admin", "owner"]), "[Owner] ");
-    assert.equal(StaffNameTag(["admin"]), "[Admin] ");
-    assert.equal(StaffNameTag(["moderator"]), "[Mod] ");
-    assert.equal(StaffNameTag(["player", "tester"]), "");
+test("name tags: tier and worn style, old tagged names still strip", () => {
+    assert.deepEqual(NameTagOf(["player", "admin", "owner"], "legend"), { tier: "owner", style: "legend" });
+    assert.deepEqual(NameTagOf(["admin"], "legend"), { tier: "admin" });   // not allowed yet: style dropped
+    assert.deepEqual(NameTagOf(["moderator"], undefined), { tier: "moderator" });
+    assert.deepEqual(NameTagOf(["owner"], "bogus"), { tier: "owner" });
+    assert.deepEqual(NameTagOf(["player", "tester"], undefined), {});
     assert.equal(StripStaffNameTag("[Mod] Someone"), "Someone");
-    assert.equal(StripStaffNameTag("[Owner] Hyjinnx"), "Hyjinnx");
     assert.equal(StripStaffNameTag("Hyjinnx"), "Hyjinnx");
     assert.equal(StripStaffNameTag("[Owner] [Emerald] Hyjinnx"), "Hyjinnx");
-    assert.equal(GameNameTag(["owner", "admin"], "legend"), "[Legend] ");   // style replaces the staff tag
-    assert.equal(GameNameTag(["admin"], "legend"), "[Admin] ");   // not allowed yet: style dropped
-    assert.equal(GameNameTag(["owner"], "bogus"), "[Owner] ");
     assert.deepEqual(AllowedNameStyles(["player"]), []);
 });
 

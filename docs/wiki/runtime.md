@@ -25,7 +25,7 @@ Everything lives in `versions/1.14.7/ParadoxRuntime/`. Full table in [runtime-fi
 | `RuntimeShared.h` | Helpers and globals `dllmain.cpp` shares with the side files. |
 | `Voice.cpp` | In-game voice (WASAPI + Opus + UDP relay) and hub proximity reports. |
 | `CrashReporter.cpp` | Own crash reporter (replaces Unreal's CrashReportClient). |
-| `JoinPrompt.cpp` | Join-in-progress offer polling (client). |
+| `JoinPrompt.cpp` | Join-in-progress offer polling and the name-tag list poll (client). |
 | `HuntStats.cpp` | Posts per-player hunt damage to the backend (server). |
 | `WindowLock.cpp` | Keeps the player's window size/border across map loads (client). |
 | `CineCamMenu.cpp`, `CineCamPath.cpp`, `CineCamShared.h`, `tools/CineCamPathCheck.cpp` | Cinematic camera menu, path math, shared state, standalone math check. |
@@ -75,7 +75,7 @@ Calls made by the runtime's own code (not the game's HTTP stack), via WinHTTP or
 | Caller | Request | Auth |
 |---|---|---|
 | `HuntStats.cpp` | `POST /mystic/hunt-stats` (JSON per-kill damage) | gameserver API key header |
-| `JoinPrompt.cpp` | `GET /mystic/party/hunt-offer` every 1 s, `POST /mystic/party/join-hunt` | `X-Mystic-Ticket` (launcher voice ticket) |
+| `JoinPrompt.cpp` | `GET /mystic/party/hunt-offer` every 1 s, `POST /mystic/party/join-hunt`, `GET /mystic/name-tags` every 30 s | `X-Mystic-Ticket` (launcher voice ticket) |
 | `CrashReporter.cpp` | `PUT /crash/v1/reports/<id>/report.json`, `minidump.dmp`, `context.xml` | none |
 | `Voice.cpp` (client) | UDP to `MYSTICPARADOX_VOICE_ADDR` | ticket in the hello packet (`'H' + ticket`) |
 | `Voice.cpp` (hub server) | UDP `P` position reports to `MYSTICPARADOX_VOICE_RELAY` (default `127.0.0.1:8791`) | HMAC-SHA256 with the gameserver key |
@@ -123,7 +123,7 @@ Search for the symbol or the `[Tag]` to find the code.
 | `namespace LoginBranding` | Login screen: `LoginLoop.mp4` background video if installed, else embedded PNG; Revamped logo; hides the patch-notes title (`DISABLE_LOGIN_BRANDING.flag`, `DISABLE_LOGIN_VIDEO.flag`). |
 | `namespace CreditsBranding`, `PressStartBranding` | Credits block; press-start text, popup auto-skipped. |
 | `namespace BehemothHealthBar` | Native HP bar and number for live behemoths within 35 m (UE4SS cannot call UFunctions on 1.14.7). |
-| `namespace StaffNameplates` | Staff and Patreon name styles on nameplates (tags come from backend `staffRoles.ts`). |
+| `namespace StaffNameplates` | Staff title line and Patreon name styles on nameplates (tier/style from backend `/mystic/name-tags`; names carry no tags). |
 | `namespace VoiceSettings` | Push to Talk binding and Open Mic toggle in the options menu; feeds `Voice.cpp`. |
 | `namespace VoiceIndicators` | Talking/muted icons on party HUD, own health bar and nameplates. |
 | `namespace JoinPopup` | Shows the join-in-progress offer in the game's own popup. |
@@ -138,7 +138,7 @@ Mic capture (WASAPI, 48 kHz mono) -> Opus 20 ms frames -> UDP to the backend voi
 
 ### Cinematic camera (`CineCam*`)
 
-F8/F9/F10 camera (state in `dllmain.cpp` `namespace CineCam`, menu in `CineCamMenu.cpp`). The menu is Dear ImGui drawn in a D3D11 `Present` hook (D3D11 only). Path math (Catmull-Rom / Kochanek-Bartels) in `CineCamPath.cpp`. Settings in `CINECAM.ini`, shots in `CINECAM_shots\`. Owner accounts only: `OwnerOnly` requires the local player name to start with `[Owner] ` or a name-style tag (a worn style replaces the staff tag; styles are owner-only). Off with `DISABLE_CINECAM.flag`.
+F8/F9/F10 camera (state in `dllmain.cpp` `namespace CineCam`, menu in `CineCamMenu.cpp`). The menu is Dear ImGui drawn in a D3D11 `Present` hook (D3D11 only). Path math (Catmull-Rom / Kochanek-Bartels) in `CineCamPath.cpp`. Settings in `CINECAM.ini`, shots in `CINECAM_shots\`. Owner accounts only: `OwnerOnly` requires the local player name to be an owner in the `/mystic/name-tags` list. Off with `DISABLE_CINECAM.flag`.
 
 ### Window lock (`WindowLock.cpp`)
 
