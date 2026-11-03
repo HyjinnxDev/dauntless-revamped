@@ -171,7 +171,7 @@ app.use((req, res, next) => {
     const authBearer = typeof req.headers.authorization === "string" && req.headers.authorization.toLowerCase().startsWith("bearer ") ? "Y" : "N";
     const originHost = (req as OriginTaggedRequest).originHost;
     const loggedUrl = sanitizeUrlForLog(req.originalUrl);
-    logger.info(`[REQ] requestId=${requestId} ${req.method} ${req.headers.host || "?"}${loggedUrl}${originHost ? ` origin=${originHost}` : ""} gsKey=${gsKey}${Extension.http.requestLogTags(req)} bearer=${authBearer}`);
+    logger.info(`[REQ] requestId=${requestId} ip=${req.ip ?? "?"} ${req.method} ${req.headers.host || "?"}${loggedUrl}${originHost ? ` origin=${originHost}` : ""} gsKey=${gsKey}${Extension.http.requestLogTags(req)} bearer=${authBearer}`);
     if (BODY_CAPTURE_ENABLED && req.method === "POST" && /(pjm|progression|breadcrumbs|store|reconcile|balance|purchase|unlock|merit|currenc|inventory)/i.test(req.originalUrl)) {
         try { logger.info(`[BODY-CAPTURE] ${req.method} ${loggedUrl} body=${JSON.stringify(req.body)}`); } catch { /* ignore */ }
     }

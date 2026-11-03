@@ -230,7 +230,7 @@ Defined but not installed: `InstallActiveHuntPassDriver` (`0x018FD230`), `Instal
 | Entry | `MpCrashReporterInstall` (C and S). `DISABLE_CRASH_REPORTER.flag` leaves the engine reporter in place. |
 | Hooks | `kernelbase!CreateProcessW` (refuses any `CrashReportClient` launch with `ERROR_FILE_NOT_FOUND`), `kernelbase!UnhandledExceptionFilter`, plus a VEH that remembers the last real exception. |
 | Report | `MysticReport.json` (exception, module+RVA with Ghidra address, unwound stack, registers, memory, log tail) and `MysticDump.dmp` in Unreal's `UE4CC-*` folder from the reporter command line, else `%TEMP%\MysticCrash-<id>`. |
-| Upload | `PUT <MpApiBase>/crash/v1/reports/<id>/report.json`, then `minidump.dmp` (max 32 MB) and `context.xml` (`CrashContext.runtime-xml`) only if the first returns 201. No auth header. Backend: `routes/crashReports.ts`. |
+| Upload | `PUT <MpApiBase>/crash/v1/reports/<id>/report.json`, then `minidump.dmp` (backend max 8 MB) and `context.xml` (`CrashContext.runtime-xml`) only if the first returns 201. No auth header. Backend: `routes/crashReports.ts`. |
 | UI | Client shows a "Dauntless crashed" message box with the report id or folder; servers do not. One report per process; other crashing threads wait. |
 | Log tag | `[CrashReporter]` |
 

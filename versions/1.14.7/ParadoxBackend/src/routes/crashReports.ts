@@ -15,7 +15,8 @@ import { IsRateLimited } from "../security/rateLimit";
 
 // Crash reports from the injected runtime (ParadoxRuntime/CrashReporter.cpp), replacing Unreal's
 // CrashReportClient upload. The crashing process has no account token, so this is unauthenticated and
-// bounded instead: fixed file names, size caps, per-address rate limit, and a cap on stored reports.
+// bounded instead: fixed file names, size caps, per-address rate limits, and a rolling cap on stored
+// reports (oldest deleted first, so junk can't lock real reports out or grow the disk past ~5 GB).
 // Each report lands in <root>/<id>/ with report.json, summary.txt (readable), minidump.dmp and
 // context.xml (Unreal's own crash context: full call stacks, module list, system info).
 export const CRASH_STORAGE_ROOT = path.resolve(process.env.CRASH_REPORT_STORAGE_DIR ?? path.join(process.cwd(), "..", "MysticCrashReports"));
@@ -23,12 +24,16 @@ export const CRASH_STORAGE_ROOT = path.resolve(process.env.CRASH_REPORT_STORAGE_
 const ID_PATTERN = /^[a-f0-9]{32}$/;
 const MAX_FILE_BYTES: Record<string, number> = {
     "report.json": 512 * 1024,
-    "minidump.dmp": 32 * 1024 * 1024,
+    "minidump.dmp": 8 * 1024 * 1024,   // real minidumps are ~1 MB
     "context.xml": 2 * 1024 * 1024,
 };
-const MAX_REPORTS = 2000;
+const MAX_REPORTS = 500;
+const MAX_NEW_REPORTS_PER_IP_HOUR = 10;
 
 const text = (value: unknown, max = 200): string => String(value ?? "?").replace(/[\r\n]+/g, " ").slice(0, max);
+// Uploaded text shown outside a code fence on GitHub: a zero-width space after @ and # stops mentions and
+// issue cross-references, and backticks can't open inline code.
+export const inert = (value: string): string => value.replace(/[@#]/g, "$&​").replace(/`/g, "'");
 
 export function formatCrashSummary(r: Record<string, any>): string {
     const e = r.exception ?? {};
@@ -71,7 +76,7 @@ export function crashSignature(r: Record<string, any>): string {
 
 export function crashIssueTitle(r: Record<string, any>): string {
     const e = r.exception ?? {};
-    return `${text(e.name, 60)} at ${text(e.where, 120)}`.slice(0, 200);
+    return inert(`${text(e.name, 60)} at ${text(e.where, 120)}`).slice(0, 200);
 }
 
 const issueChains = new Map<string, Promise<void>>();
@@ -97,7 +102,7 @@ async function fileIssue(id: string, report: Record<string, any>, summary: strin
     const sig = crashSignature(report);
     const index: Record<string, { number: number; count: number }> = fs.existsSync(ISSUE_INDEX)
         ? JSON.parse(fs.readFileSync(ISSUE_INDEX, "utf8")) : {};
-    const line = `report \`${id}\` · ${text(report.role, 16)} · ${text(report.runtime, 40)} · ${text(report.time, 30)} · uptime ${text(report.uptimeSec, 12)}s`;
+    const line = `report \`${id}\` · ${inert(`${text(report.role, 16)} · ${text(report.runtime, 40)} · ${text(report.time, 30)} · uptime ${text(report.uptimeSec, 12)}s`)}`;
     const known = index[sig];
 
     if (!known) {
@@ -138,11 +143,24 @@ function queueIssue(id: string, report: Record<string, any>, summary: string): v
     void next.finally(() => { if (issueChains.get(sig) === next) issueChains.delete(sig); });
 }
 
+// Keep at most `keep` report folders, deleting the oldest (by mtime). issues.json is a file, not a report.
+export function pruneOldestReports(keep: number, root = CRASH_STORAGE_ROOT): void {
+    if (!fs.existsSync(root)) return;
+    const dirs = fs.readdirSync(root, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && ID_PATTERN.test(d.name))
+        .map((d) => ({ name: d.name, mtime: fs.statSync(path.join(root, d.name)).mtimeMs }))
+        .sort((a, b) => a.mtime - b.mtime);
+    for (const d of dirs.slice(0, Math.max(0, dirs.length - keep))) {
+        fs.rmSync(path.join(root, d.name), { recursive: true, force: true });
+        logger.info(`[CRASH] pruned old report ${d.name}`);
+    }
+}
+
 export const crashReportsRouter = Router();
 
 crashReportsRouter.put(
     "/crash/v1/reports/:id/:fileName",
-    express.raw({ type: "application/octet-stream", limit: "32mb" }),
+    express.raw({ type: "application/octet-stream", limit: "8mb" }),
     (req: Request, res: Response) => {
         const id = String(req.params.id ?? "");
         const fileName = String(req.params.fileName ?? "");
@@ -162,10 +180,11 @@ crashReportsRouter.put(
 
         const dir = path.join(CRASH_STORAGE_ROOT, id);
         if (!fs.existsSync(dir)) {
-            if (fs.existsSync(CRASH_STORAGE_ROOT) && fs.readdirSync(CRASH_STORAGE_ROOT).length >= MAX_REPORTS) {
-                res.status(507).json({ error: "crash_storage_full" });
+            if (IsRateLimited(`crash-new:${req.ip ?? "unknown"}`, MAX_NEW_REPORTS_PER_IP_HOUR, 60 * 60 * 1000)) {
+                res.status(429).json({ error: "rate_limited" });
                 return;
             }
+            pruneOldestReports(MAX_REPORTS - 1);
             fs.mkdirSync(dir, { recursive: true });
         }
 

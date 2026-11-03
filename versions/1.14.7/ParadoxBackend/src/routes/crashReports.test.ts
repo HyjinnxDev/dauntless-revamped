@@ -1,6 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { crashIssueTitle, crashSignature, formatCrashSummary } from "./crashReports";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { crashIssueTitle, crashSignature, formatCrashSummary, pruneOldestReports } from "./crashReports";
+
+test("issue title can't @mention, cross-reference or open inline code", () => {
+    const title = crashIssueTitle({ exception: { name: "@everyone see #1", where: "`x`" } });
+    assert.doesNotMatch(title, /@[a-z]|#\d|`/);
+});
+
+test("prune keeps the newest report folders and leaves other files", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "crash-"));
+    const ids = ["a", "b", "c"].map((c) => c.repeat(32));
+    ids.forEach((id, i) => {
+        fs.mkdirSync(path.join(root, id));
+        fs.utimesSync(path.join(root, id), 1000 + i, 1000 + i);
+    });
+    fs.writeFileSync(path.join(root, "issues.json"), "{}");
+    pruneOldestReports(2, root);
+    assert.deepEqual(fs.readdirSync(root).sort(), [ids[1], ids[2], "issues.json"]);
+    fs.rmSync(root, { recursive: true });
+});
 
 test("crash summary names the fault, location and stack", () => {
     const out = formatCrashSummary({
