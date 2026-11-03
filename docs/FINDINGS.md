@@ -43,6 +43,7 @@ No critical findings.
   - Anyone can open 50 GitHub issues an hour with their own text, including `@mentions` that notify people.
   - Minidumps of client processes can hold session tokens. They are kept forever.
 - **Fix:** require the launcher bearer or game exchange identity (the client already has one), or at least a per-install signed token. Escape `@` in issue text, or put every attacker-controlled field inside the fence. Add age-based cleanup (for example, delete folders older than 30 days) instead of a hard folder cap.
+- **Status (2026-11-04):** mostly fixed (branch `launch/must-fixes`, needs backend restart). Text outside the fence goes through `inert` (no @mentions, #refs, backticks); rolling 500-report cap deletes the oldest instead of refusing (worst case ~5 GB); minidump cap 8 MB (real ones ~1 MB); 10 new reports/h per IP. Still open: uploads stay unauthenticated (needs a DLL change to send an identity), so junk can still push real reports out of the rolling window.
 
 ### H3. Voice relay is plaintext UDP on the public internet; its 24 h ticket also authorises party hunt-joins
 - **Where:** `versions/1.14.7/ParadoxBackend/src/voiceRelay.ts:28` (the `ponytail:` note relies on Tailscale), `:39` (`TICKET_TTL = "24h"`), `:51-63`; `ParadoxRuntime/Voice.cpp:206-209` (`SendHello` sends the ticket in clear); `src/routes/party.ts:73-76,86-117`
