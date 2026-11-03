@@ -34,7 +34,7 @@ export async function GetUsernameForUserId(userId: string){
     return UserFromDb?.name ?? userId;
 }
 
-/** GetUsernameForUserId plus the staff and name-style tags ("[Owner] [Legend] Name"), for names the game shows.
+/** GetUsernameForUserId plus the staff or name-style tag ("[Owner] Name" / "[Legend] Name"), for names the game shows.
  *  Character creation keeps the plain name so a demotion never leaves a stale tag behind. */
 export async function GetDisplayNameForUserId(userId: string){
     const Account = await GetRepositories().launcherAccounts.findByUserId(userId).catch(() => undefined);

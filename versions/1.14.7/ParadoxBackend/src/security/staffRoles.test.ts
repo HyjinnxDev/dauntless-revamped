@@ -29,7 +29,7 @@ test("staff name tag round-trips", () => {
     assert.equal(StripStaffNameTag("[Owner] Hyjinnx"), "Hyjinnx");
     assert.equal(StripStaffNameTag("Hyjinnx"), "Hyjinnx");
     assert.equal(StripStaffNameTag("[Owner] [Emerald] Hyjinnx"), "Hyjinnx");
-    assert.equal(GameNameTag(["owner", "admin"], "legend"), "[Owner] [Legend] ");
+    assert.equal(GameNameTag(["owner", "admin"], "legend"), "[Legend] ");   // style replaces the staff tag
     assert.equal(GameNameTag(["admin"], "legend"), "[Admin] ");   // not allowed yet: style dropped
     assert.equal(GameNameTag(["owner"], "bogus"), "[Owner] ");
     assert.deepEqual(AllowedNameStyles(["player"]), []);
