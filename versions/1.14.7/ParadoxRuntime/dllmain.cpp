@@ -18862,6 +18862,30 @@ static void MpLmTrashZombieWorlds() {
     }
 }
 
+static void MpLmTrashIfZombie(const std::string& Map, const char* When) {
+    if (!MpLmHasZombieWorld(Map)) return;
+    if (MpExeRelativeFlagPresent(L"DISABLE_ZOMBIE_WORLD_TRASH.flag")) {
+        MpLog(std::string("[LoadMapPL] zombie PENDINGKILL world for ") + Map + " " + When + "; requesting GC (trash disabled by flag)");
+        UKismetSystemLibrary::CollectGarbage();
+        return;
+    }
+    MpLog(std::string("[LoadMapPL] zombie PENDINGKILL world for ") + Map + " " + When + "; trashing its package");
+    MpLmTrashZombieWorlds();
+    MpLmWorldCensus("after-trash");
+}
+
+// [Revamped 2026-11-03 FIX 3, crash report 0000021b4a6b... (issue #3 again)] Same-map reload: a hunt connection
+// timed out and the client reconnected to the same hunt map. At LoadMap ENTER the old world is still the live ROOT
+// world, so the ENTER check finds no zombie; LoadMap then tears it down and runs CollectGarbage(RF_NoFlags, true)
+// (+0x27DFE10, LoadMap's only call at +0x42721A6, before LoadPackage). The world leaked through that GC, LoadPackage
+// reused it and SetGameMode/+0x285E6F0 hit pl=null. Trash leaked worlds right after LoadMap's own GC.
+static std::string s_lmMap;
+void* OrigLmCollectGarbage = nullptr;
+void LmCollectGarbageHook(uint32_t KeepFlags, bool bPurge) {
+    reinterpret_cast<void(*)(uint32_t, bool)>(OrigLmCollectGarbage)(KeepFlags, bPurge);
+    if (s_lmDepth) MpLmTrashIfZombie(s_lmMap, "after LoadMap GC");
+}
+
 void* OrigLoadMapDiag = nullptr;
 bool LoadMapDiagHook(void* Engine, void* Ctx, void* URL, void* Pending, void* Error) {
     // FURL::Map is the FString at +0x28.
@@ -18875,20 +18899,14 @@ bool LoadMapDiagHook(void* Engine, void* Ctx, void* URL, void* Pending, void* Er
     s_LocalArrivalDone = false;
     s_MutedArrivalTriggers.clear();
     MpLog("[LoadMapPL] ENTER map=" + Map + " pending=" + MpPtr(Pending) + " ctx=" + MpPtr(Ctx) + " " + MpLmWorld(MpLmCtxWorld()));
-    if (MpLmHasZombieWorld(Map)) {
-        if (MpExeRelativeFlagPresent(L"DISABLE_ZOMBIE_WORLD_TRASH.flag")) {
-            MpLog("[LoadMapPL] zombie PENDINGKILL world for " + Map + "; requesting GC (trash disabled by flag)");
-            UKismetSystemLibrary::CollectGarbage();
-        } else {
-            MpLog("[LoadMapPL] zombie PENDINGKILL world for " + Map + "; trashing its package before LoadMap");
-            MpLmTrashZombieWorlds();
-        }
-        MpLmWorldCensus("after-trash");
-    }
+    MpLmTrashIfZombie(Map, "before LoadMap");
     MpLmWorldCensus("enter");
+    const std::string PrevMap = s_lmMap;
+    s_lmMap = Map;
     ++s_lmDepth;
     const bool Ok = reinterpret_cast<bool(*)(void*, void*, void*, void*, void*)>(OrigLoadMapDiag)(Engine, Ctx, URL, Pending, Error);
     --s_lmDepth;
+    s_lmMap = PrevMap;
     MpLog(std::string("[LoadMapPL] EXIT ok=") + (Ok ? "1" : "0") + " " + MpLmWorld(MpLmCtxWorld()));
     MpLmWorldCensus("exit");
     s_lmCtx = Prev;
@@ -18915,6 +18933,7 @@ static void InstallLoadMapDiagHooks() {
         { 0x04271370, reinterpret_cast<void*>(LoadMapDiagHook), &OrigLoadMapDiag, "LoadMap" },
         { 0x042D9AA0, reinterpret_cast<void*>(LmSetGameModeHook), &OrigLmSetGameMode, "SetGameMode" },
         { 0x04153460, reinterpret_cast<void*>(LmProcessAsyncHook), &OrigLmProcessAsync, "ProcessAsyncResults" },
+        { 0x027DFE10, reinterpret_cast<void*>(LmCollectGarbageHook), &OrigLmCollectGarbage, "CollectGarbage" },
     };
     for (auto& H : Hooks) {
         void* Target = reinterpret_cast<void*>(Globals::BaseAddress + H.Rva);
