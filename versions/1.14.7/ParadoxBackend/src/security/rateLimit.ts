@@ -11,6 +11,7 @@
 
 import type { Request } from "express";
 import { ipKeyGenerator, type Options } from "express-rate-limit";
+import { IsKnownGameserverAPIKey } from "../controllers/apikeys";
 
 // A deliberately simple in-memory sliding-window limiter — good enough to stop
 // obvious single-process abuse during development, NOT the distributed/Redis-backed
@@ -51,15 +52,15 @@ export function IsRateLimited(key: string, maxAttempts: number, windowMs: number
 // [2026-10-11] Per-minute budget for every routed request (app.ts installs it ahead of the routers), on top of the
 // stricter per-route limits above (login, register, update downloads and publishes, log uploads). Two buckets per
 // address: gameserver-keyed calls, because every hub and hunt on one host shares its address, and everything else
-// (game clients, launchers, the dashboard). The header only picks the bucket - HasParadoxBackendAuth still checks
-// the key. Measured on the local stack 11 Oct: one player's login burst peaks at ~130 requests a minute, the hub
+// (game clients, launchers, the dashboard). [Revamped 2026-11-03] Only a key that is actually valid picks the
+// gameserver bucket (FINDINGS M7): a junk header used to buy any client 10x the budget. Measured on the local stack 11 Oct: one player's login burst peaks at ~130 requests a minute, the hub
 // serving that player at ~70. MYSTICPARADOX_RATE_LIMIT=off disables the budget;
 // MYSTICPARADOX_RATE_LIMIT_PER_MINUTE and MYSTICPARADOX_GAMESERVER_RATE_LIMIT_PER_MINUTE change it.
 export const DEFAULT_REQUESTS_PER_MINUTE = 600;
 export const DEFAULT_GAMESERVER_REQUESTS_PER_MINUTE = 6000;
 
-function IsGameserverRequest(req: Request): boolean {
-    return req.headers["x-mysticparadox-gameserver-apikey"] !== undefined;
+export function IsGameserverRequest(req: Pick<Request, "headers">): boolean {
+    return IsKnownGameserverAPIKey(req.headers["x-mysticparadox-gameserver-apikey"]);
 }
 
 function PositiveInteger(value: string | undefined, fallback: number): number {

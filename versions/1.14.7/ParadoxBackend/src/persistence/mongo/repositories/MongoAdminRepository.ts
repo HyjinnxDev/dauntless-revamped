@@ -10,6 +10,7 @@ import { ClientSession, Db } from "mongodb";
 import { AdminAuditRecord, AdminRepository, AdminSessionRecord, PlayerDeletionResult } from "../../contracts/AdminRepository";
 import { GetMongoClient, GetMongoDb } from "../client";
 import { Collections } from "../collections";
+import { MongoPartyRepository } from "./MongoPartyRepository";
 
 function ToSession(Doc: any): AdminSessionRecord {
     return {
@@ -105,12 +106,13 @@ export class MongoAdminRepository implements AdminRepository {
                 await Remove(Collections.RefreshSessions, { userId });
                 await Remove(Collections.GameExchangeCodes, { userId: { $in: Ids } });
                 await Remove(Collections.AdminSessions, { userId });
+                await Remove(Collections.AdminMfa, { _id: userId as any });
                 await Remove(Collections.AuthIdentities, { userId });
                 await Remove(Collections.DiscordOAuthTransactions, { userId });
                 await Remove(Collections.UserApiKeys, UserOwned);
-                await Remove(Collections.Friendships, { $or: [{ ownerId: userId }, { otherId: userId }] });
+                await Remove(Collections.LauncherGuardSessions, { accountId: { $in: Ids } });
 
-                CharacterCount = await RemoveGameData(Remove, Db, Session, Ids);
+                CharacterCount = await RemoveCharacterState(Remove, Db, Session, Ids);
                 await Remove(Collections.CharacterSlots, { ownerUserId: userId });
                 if (SlotIds.length > 0) await Remove(Collections.Accounts, { _id: { $in: SlotIds.filter((Id) => Id !== userId) as any[] } });
 
@@ -153,17 +155,7 @@ export class MongoAdminRepository implements AdminRepository {
                 }
                 const Remove = Remover(Db, Session, DeletedCounts);
 
-                CharacterCount = await RemoveGameData(Remove, Db, Session, [gameUserId]);
-                // Per-character state deletePlayerData does not cover.
-                for (const Name of [Collections.BountyStates, Collections.CooldownStates, Collections.Entitlements]) {
-                    await Remove(Name, { _id: gameUserId as any });
-                }
-                await Remove(Collections.EscalationProgress, { userId: gameUserId });
-                await Remove(Collections.ProgressionTransactions, { userId: gameUserId });
-                await Remove(Collections.GuildMembers, { _id: gameUserId as any });
-                await Remove(Collections.GuildInvites, { $or: [{ inviteeId: gameUserId }, { inviterId: gameUserId }] });
-                await Remove(Collections.SlayerLinks, { $or: [{ senderId: gameUserId }, { targetId: gameUserId }] });
-                await Remove(Collections.GameExchangeCodes, { userId: gameUserId });
+                CharacterCount = await RemoveCharacterState(Remove, Db, Session, [gameUserId]);
                 await Remove(Collections.Accounts, { _id: gameUserId as any, displayNameNormalized: { $exists: false } });
                 await Remove(Collections.CharacterSlots, { _id: gameUserId as any });
 
@@ -184,6 +176,45 @@ function Remover(Db: Db, Session: ClientSession, DeletedCounts: Record<string, n
         const Result = await Db.collection(collection).deleteMany(filter, { session: Session });
         DeletedCounts[collection] = (DeletedCounts[collection] ?? 0) + Result.deletedCount;
     };
+}
+
+// [Revamped 2026-11-03] Everything one or more game userIds own, shared by deletePlayerData (every slot of the
+// account) and deleteCharacterSlot (one slot) so the two paths can't drift again (FINDINGS M8). A new collection
+// with a user id must be added here or to the keep-list in adminDeleteCoverage.test.ts.
+async function RemoveCharacterState(Remove: RemoveFn, Db: Db, Session: ClientSession, Ids: string[]): Promise<number> {
+    const Characters = await RemoveGameData(Remove, Db, Session, Ids);
+    const ById = { _id: { $in: Ids as any[] } };
+    await Remove(Collections.BountyStates, ById);
+    await Remove(Collections.CooldownStates, ById);
+    await Remove(Collections.Entitlements, ById);
+    await Remove(Collections.EscalationProgress, { userId: { $in: Ids } });
+    await Remove(Collections.ProgressionTransactions, { userId: { $in: Ids } });
+    await Remove(Collections.GameExchangeCodes, { userId: { $in: Ids } });
+    await Remove(Collections.Friendships, { $or: [{ ownerId: { $in: Ids } }, { otherId: { $in: Ids } }] });
+    await Remove(Collections.SlayerLinks, { $or: [{ senderId: { $in: Ids } }, { targetId: { $in: Ids } }] });
+    await Remove(Collections.HuntStats, { userId: { $in: Ids } });
+    await Remove(Collections.GauntletClears, { accountId: { $in: Ids } });
+
+    // A deleted guild leader hands the guild to its longest-standing member; a guild left empty goes.
+    for (const Led of await Db.collection(Collections.GuildMembers).find({ _id: { $in: Ids as any[] }, rank: "Leader" }, { session: Session }).toArray()) {
+        const Heir = await Db.collection(Collections.GuildMembers).find(
+            { guildId: Led.guildId, _id: { $nin: Ids as any[] } }, { session: Session }).sort({ joinedAt: 1 }).limit(1).next();
+        if (Heir) {
+            await Db.collection(Collections.GuildMembers).updateOne({ _id: Heir._id }, { $set: { rank: "Leader" } }, { session: Session });
+            await Db.collection(Collections.Guilds).updateOne({ _id: Led.guildId }, { $set: { leaderId: String(Heir._id) } }, { session: Session });
+        } else {
+            await Remove(Collections.GuildInvites, { guildId: Led.guildId });
+            await Remove(Collections.Guilds, { _id: Led.guildId });
+        }
+    }
+    await Remove(Collections.GuildMembers, ById);
+    await Remove(Collections.GuildInvites, { $or: [{ inviteeId: { $in: Ids } }, { inviterId: { $in: Ids } }] });
+
+    // Party rows go through the party repository so the other members' party (and its leader) stays consistent.
+    const Parties = new MongoPartyRepository();
+    for (const Id of Ids) await Parties.leave(Id, new Date().toISOString(), Session);
+    await Remove(Collections.PartyInvites, { $or: [{ recipientPlayerId: { $in: Ids } }, { sendingPlayerId: { $in: Ids } }] });
+    return Characters;
 }
 
 // The game save of these game userIds: characters, inventory, loadouts, progression and wallet.

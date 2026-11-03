@@ -12,9 +12,9 @@
 import { GetRepositories } from "../persistence";
 import { ApiKeyRepository } from "../persistence/contracts/ApiKeyRepository";
 import { logger } from "../logger";
-import { FindApiKeyRecord, HashApiKey } from "../security/apiKeyHash";
+import { HashApiKey } from "../security/apiKeyHash";
 
-function HashGameserverAPIKey(GameserverAPIKeyToHash: string){
+export function HashGameserverAPIKey(GameserverAPIKeyToHash: string){
     return HashApiKey(GameserverAPIKeyToHash, "gameserver");
 }
 
@@ -47,6 +47,7 @@ export async function DrainAndRegisterAPIKeys(){
     if (ParseConfiguredGameserverAPIKeys(ConfiguredValue).length > 0) {
         const Count = await SynchronizeConfiguredGameserverAPIKeys(GetRepositories().apiKeys, ConfiguredValue ?? "");
         logger.info(`Synchronized ${Count} Gameserver API key hash(es) from GAMESERVER_API_KEYS`);
+        await RefreshGameserverKeyHashes();
         return;
     }
 
@@ -62,10 +63,43 @@ export async function DrainAndRegisterAPIKeys(){
     }
 
     logger.info(`Registered ${Registered} new Gameserver API Key(s) on boot!`);
+    await RefreshGameserverKeyHashes();
+}
+
+// [Revamped 2026-11-03] Valid gameserver key hashes are cached in memory (FINDINGS M7): every forged
+// x-mysticparadox-gameserver-apikey header used to cost a full collection read, and the rate limiter could not
+// tell a real key from a junk one. The key set only changes at boot (GAMESERVER_API_KEYS); the 60 s refresh
+// covers a database shared with another deployment that registers keys itself.
+const kGameserverKeyCacheMs = 60_000;
+let GameserverKeyHashes: Set<string> | null = null;
+let GameserverKeyHashesAt = 0;
+
+async function RefreshGameserverKeyHashes(): Promise<Set<string>> {
+    const Records = await GetRepositories().apiKeys.findAllGameServerKeyHashes();
+    GameserverKeyHashes = new Set(Records.map((Record) => Record.keyHash).filter((Hash): Hash is string => !!Hash));
+    GameserverKeyHashesAt = Date.now();
+    return GameserverKeyHashes;
 }
 
 // Only HMAC records match (security/apiKeyHash.ts); a pre-HMAC SHA-256 record must be registered again.
+// The hash is a keyed HMAC, so a Set lookup leaks nothing a timing-safe compare would protect.
 export async function IsValidGameserverAPIKey(GameserverAPIKey: string){
-    const AllAPIKeyHashes = await GetRepositories().apiKeys.findAllGameServerKeyHashes();
-    return FindApiKeyRecord(AllAPIKeyHashes, HashGameserverAPIKey(GameserverAPIKey)) !== undefined;
+    const Hashes = GameserverKeyHashes !== null && Date.now() - GameserverKeyHashesAt < kGameserverKeyCacheMs
+        ? GameserverKeyHashes
+        : await RefreshGameserverKeyHashes();
+    return Hashes.has(HashGameserverAPIKey(GameserverAPIKey));
+}
+
+// Synchronous check against the cache only, for the global rate limiter (security/rateLimit.ts), which runs before
+// any route can await. False until the cache is first filled (boot fills it in DrainAndRegisterAPIKeys).
+export function IsKnownGameserverAPIKey(GameserverAPIKey: unknown): boolean {
+    return typeof GameserverAPIKey === "string"
+        && GameserverKeyHashes !== null
+        && GameserverKeyHashes.has(HashGameserverAPIKey(GameserverAPIKey));
+}
+
+// Test seam: fills the cache without a database.
+export function SetGameserverKeyHashesForTest(Hashes: string[]): void {
+    GameserverKeyHashes = new Set(Hashes);
+    GameserverKeyHashesAt = Date.now();
 }

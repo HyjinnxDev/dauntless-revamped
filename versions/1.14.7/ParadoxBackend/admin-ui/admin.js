@@ -130,6 +130,29 @@ function enter(data) {
     $("me-role").textContent = ["", "Moderator", "Admin", "Owner"][myRank];
     buildNav();
     go(location.hash.slice(1) || "overview");
+    $("mfa").replaceChildren();
+    if (data.mfaEnrolled === false) showMfaSetup();
+}
+
+// [Revamped 2026-11-03] Each staff member sets up their own authenticator (FINDINGS M5).
+function showMfaSetup() {
+    const box = $("mfa");
+    const code = h("input", { placeholder: "6-digit code from the app", inputmode: "numeric", autocomplete: "one-time-code" });
+    const err = h("div", { class: "err" });
+    const start = btn("Set up authenticator", async () => {
+        try {
+            const r = await api("POST", "/mfa/enrol", {});
+            box.replaceChildren(h("div", { class: "zone" }, h("h2", null, "Add this to your authenticator app"),
+                h("p", { class: "dim", style: "margin:0 0 8px" }, "Enter the key by hand (time-based, 6 digits), then type the code it shows."),
+                h("p", null, h("code", null, r.secret)), h("p", { class: "dim", style: "word-break:break-all" }, r.otpauthUri),
+                h("div", { class: "row" }, code, btn("Confirm", async () => {
+                    try { await api("POST", "/mfa/confirm", { totp: code.value.trim() }); box.replaceChildren(h("div", { class: "zone" }, "Authenticator set up. Sign in with its codes from now on.")); }
+                    catch (e) { err.textContent = e.message; }
+                }, "btn primary")), err));
+        } catch (e) { err.textContent = e.message; }
+    }, "btn primary");
+    box.replaceChildren(h("div", { class: "zone danger" }, h("h2", null, "Set up your own authenticator"),
+        h("p", { class: "dim", style: "margin:0 0 8px" }, "You signed in with the shared code. It will stop working once every staff member has their own."), start, err));
 }
 $("l-go").addEventListener("click", async () => {
     try {
@@ -540,6 +563,9 @@ function moderation(a) {
         });
         out.push(h("div", { class: "zone" }, h("h2", null, "Roles"), h("div", { class: "row" }, checks.map((x) => x[2]),
             btn("Save roles", () => done(api("PATCH", `/players/${a.userId}/roles`, { roles: checks.filter((x) => x[1].checked).map((x) => x[0]), reason: "set from dashboard" }))))));
+        if (rank(a.roles) > 0) out.push(h("div", { class: "zone" }, h("h2", null, "Authenticator"),
+            h("p", { class: "dim", style: "margin:0 0 8px" }, "Lost phone or leaving staff: forget their authenticator. They set up a new one at next sign-in (with the shared code)."),
+            btn("Reset authenticator", () => done(api("DELETE", `/players/${a.userId}/mfa`, {})))));
         out.push(h("div", { class: "zone danger" }, h("h2", null, "Delete account"),
             h("p", { class: "dim", style: "margin:0 0 8px" }, "Permanently removes the account, characters and inventory. This can't be undone."),
             btn("Delete account…", async () => {

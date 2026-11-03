@@ -33,9 +33,8 @@ import {
 // silently handled, per the plan's "no secrets in logs or source" rule (queues
 // simply do not exist on this provider).
 //
-// findAll*KeyHashes preserves the exact full-table-scan + timingSafeEqual
-// comparison semantics from the SQLite adapter (plan section 6.10's explicit
-// requirement) — no server-side hash-equality query is used.
+// User keys are found by hash equality (keyHash index, indexes.ts); gameserver
+// hashes are read whole, but only once a minute (controllers/apikeys.ts cache).
 export class MongoApiKeyRepository implements ApiKeyRepository {
     async findAllGameServerKeyHashes(): Promise<GameServerApiKeyRecord[]> {
         const Db = await GetMongoDb();
@@ -74,10 +73,10 @@ export class MongoApiKeyRepository implements ApiKeyRepository {
         // No-op: nothing to clear on this provider — see class note.
     }
 
-    async findAllUserKeyHashes(): Promise<UserApiKeyRecord[]> {
+    async findUserKeyByHash(keyHash: string): Promise<UserApiKeyRecord | null> {
         const Db = await GetMongoDb();
-        const Docs = await Db.collection(Collections.UserApiKeys).find({}).toArray();
-        return Docs.map((Doc) => ({ userId: Doc.userId, keyHash: Doc.keyHash }));
+        const Doc = await Db.collection(Collections.UserApiKeys).findOne({ keyHash: { $eq: keyHash } });
+        return Doc ? { userId: Doc.userId, keyHash: Doc.keyHash } : null;
     }
 
     async insertUserKeyHash(userId: string, keyHash: string): Promise<void> {

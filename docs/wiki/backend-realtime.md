@@ -99,17 +99,17 @@ In order: enabled/accepting (`503`), path allowlist (`404`), `Host` allowlist (`
 
 ### Rooms / MUC (RoomService)
 
-Joining = directed presence to `Room@muc.prod.ol.epicgames.com/<nick>`; leaving = directed `unavailable`. Authorization is by the **authenticated account**, never the nick:
+Joining = directed presence to `Room@muc.prod.ol.epicgames.com/<nick>`; leaving = directed `unavailable`. Authorization is by the **authenticated account**, never the nick. The nick (`displayName:userId:resource`) is rebuilt on join: a userId part that isn't the joiner's own account is refused, and the display name part is replaced with the account's real name (`BuildNick`), so nobody can post as someone else:
 
 | Room local part | Rule |
 |---|---|
 | `Party-<partyId>` | `GetPartyForPlayer(account).partyId` must equal `<partyId>` (party id already carries the `_<base64(buildId)>` suffix) |
 | `Guild-<guildId>` | `IsGuildMember(account, guildId)` |
 | `City-<uuid>` | Allowed for any authenticated user unless `REALTIME_XMPP_DEV_CITY_MUC=false` (no account-to-instance mapping exists) |
-| `Hunt-<uuid>` | Same, controlled by `REALTIME_XMPP_DEV_HUNT_MUC` |
+| `Hunt-<GameSessionId>` | Matchmaking routed the joiner to that session (`IsInGameSession`, `controllers/matchmaking.ts`), or the joiner's party already has a member in the room. `REALTIME_XMPP_DEV_HUNT_MUC=true` opens them to anyone (refused in production) |
 | anything else | Denied (error presence `not-allowed`) |
 
-On join the joiner receives existing occupants' presence, existing occupants receive the newcomer, and the joiner gets self-presence with status 110 last. `groupchat` messages (max 4 KiB, non-empty, sender must be an occupant) fan out to all occupants including the sender. Rooms live in memory and vanish when empty. `evictPartyMember` removes a player from a `Party-` room when the outbox reports `LEAVE`/`DISBAND`/`KICK`/`MOVE`.
+On join the joiner receives existing occupants' presence, existing occupants receive the newcomer, and the joiner gets self-presence with status 110 last. `groupchat` messages (max 4 KiB, non-empty, sender must be an occupant, 12 per 10 s per connection and 60 per minute per account via `IsRateLimited`) fan out to all occupants including the sender. Rooms live in memory and vanish when empty. `evictPartyMember` removes a player from a `Party-` room when the outbox reports `LEAVE`/`DISBAND`/`KICK`/`MOVE`.
 
 ### Direct chat (DirectChatService)
 
@@ -176,7 +176,7 @@ The ticket is also used as a lightweight identity for `routes/party.ts` endpoint
 | `REALTIME_XMPP_ALLOWED_HOSTS` | empty (any) | Host header allowlist (port stripped, lowercased) |
 | `REALTIME_XMPP_RECONNECT_GRACE_MS` | `45000` | Delay before broadcasting offline |
 | `REALTIME_XMPP_DEV_CITY_MUC` | on unless `false` | Any authed user may join `City-*`. With `NODE_ENV=production`, `config/runtimeSafety.ts` refuses to start unless it is set explicitly (`true` or `false`); live sets `true` for public city chat |
-| `REALTIME_XMPP_DEV_HUNT_MUC` | on unless `false` | Same for `Hunt-*`; production also requires it set explicitly |
+| `REALTIME_XMPP_DEV_HUNT_MUC` | off unless `true` | `true` lets anyone into any `Hunt-*` room; production refuses it |
 | `HTTPS_PORT` | `3443` | Port the WS endpoint shares with HTTPS |
 | `VOICE_UDP_PORT` | `8791` | Voice relay UDP port |
 | `AUTH_SIGNING_PRIVKEY_B64` / `AUTH_SIGNING_PUBKEY_B64` | required | Sign/verify voice tickets (same keys as game JWTs) |
@@ -190,7 +190,8 @@ Hard-coded limits (`realtime/types.ts` `DEFAULT_LIMITS`): 64 KiB message, 1000 t
 - **Nothing works until `REALTIME_XMPP_ENABLED=true`** and the backend is restarted. A disabled gateway logs one `[XMPP] realtime disabled` line and rejects upgrades with 503. Backend code changes need a restart; all realtime state (sessions, rooms, throttles, voice peers, voice bans) is lost on restart and clients must reconnect.
 - **Single process only.** `SessionRegistry`, rooms and rate windows are in memory; running two API instances would split presence. Cross-process fan-out was never built.
 - **Several files are not on the live path.** `stateMachine.ts` is only used by its test (the real flow is inline in `XMPPSession`); `services.ts` holds unimplemented interface sketches; `RealtimeEventBus.ts` has no publishers or subscribers (friends/party use `PushFriendEvent` and the Mongo outbox instead). Comments still say "capture-first foundation"; the code is production auth + presence + chat.
-- **Insecure dev flags.** City/Hunt rooms are open to any authenticated user when their flags are on. The room nick is client-chosen and echoed as the sender name, so display names in rooms are not trustworthy.
+- **City rooms are open.** Any authenticated user may join any `City-*` room while `REALTIME_XMPP_DEV_CITY_MUC=true` (live runs public city chat). Hunt membership lives in memory (`MatchmakingResultMap`): after a backend restart mid-hunt only the party fallback lets players back into their hunt room.
+- **The client's `Hunt-`/`City-` id is the `/candidate/status` `gameSessionId`.** Seen in the live log: the same uuid is used for `City-` and `Hunt-` rooms of one hunt instance.
 - **Group chat has no rate limit** (direct chat does).
 - **Direct-chat rate windows are never pruned.** `connectionRates` is keyed by connection id and `accountRates` by account; entries stay in memory for the process lifetime.
 - **A second `<bind>` on a socket unbinds the previous resource first** (`XMPPConnection.handleFrame`, 2026-10-28); it used to leave a ghost that kept `isOnline()` true.

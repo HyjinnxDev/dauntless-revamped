@@ -12,7 +12,7 @@ import { GetRepositories, AccountApprovalStatus, AccountOperationalStatus, Launc
 import { VerifyPassword } from "../security/passwords";
 import { GenerateOpaqueToken, HashOpaqueToken } from "../security/launcherTokens";
 import { EffectiveApprovalStatus, IsAccountEligible, IsBanActive } from "../security/accountEligibility";
-import { VerifyTotp } from "../security/totp";
+import { ConfirmAdminMfaEnrolment, ConsumeAdminTotp, IsAdminMfaEnrolled, ResetAdminMfa, StartAdminMfaEnrolment } from "../security/adminMfa";
 import { IsRateLimited } from "../security/rateLimit";
 import { ADMIN_COOKIE_NAME } from "../middleware/HasAdminAuth";
 import { sessionRegistry } from "../realtime/SessionRegistry";
@@ -67,13 +67,16 @@ export async function AdminLogin(req: Request, res: Response): Promise<void> {
         return;
     }
 
-    const TotpSecret = process.env.ADMIN_TOTP_SECRET;
-    if (!TotpSecret && process.env.NODE_ENV === "production") {
-        res.status(503).json({ error: { code: "ADMIN_MFA_NOT_CONFIGURED", message: "Administrator MFA is not configured." } });
+    // [Revamped 2026-11-03] Each staff account has its own authenticator (FINDINGS M5); a code works once. An account
+    // that hasn't enrolled may still use the shared ADMIN_TOTP_SECRET, then sets up its own from the console banner.
+    const SharedSecret = process.env.ADMIN_TOTP_SECRET?.trim() || undefined;
+    const Enrolled = await IsAdminMfaEnrolled(Account.userId);
+    if (!Enrolled && !SharedSecret && process.env.NODE_ENV === "production") {
+        res.status(503).json({ error: { code: "ADMIN_MFA_NOT_CONFIGURED", message: "No authenticator is set up for this account. Ask an owner." } });
         return;
     }
-    if (TotpSecret && !VerifyTotp(TotpSecret, req.body?.totp)) {
-        res.status(401).json({ error: { code: "ADMIN_MFA_INVALID", message: "The authenticator code is invalid." } });
+    if ((Enrolled || SharedSecret) && !(await ConsumeAdminTotp(Account.userId, req.body?.totp, "lastStep", SharedSecret))) {
+        res.status(401).json({ error: { code: "ADMIN_MFA_INVALID", message: "The authenticator code is invalid or was already used." } });
         return;
     }
 
@@ -93,7 +96,7 @@ export async function AdminLogin(req: Request, res: Response): Promise<void> {
     });
 
     res.setHeader("Set-Cookie", `${ADMIN_COOKIE_NAME}=${encodeURIComponent(RawToken)}; ${AdminCookieOptions()}`);
-    res.json({ csrfToken: CsrfToken, account: PublicAccount(Account) });
+    res.json({ csrfToken: CsrfToken, account: PublicAccount(Account), mfaEnrolled: Enrolled });
 }
 
 export async function AdminLogout(req: Request, res: Response): Promise<void> {
@@ -104,7 +107,40 @@ export async function AdminLogout(req: Request, res: Response): Promise<void> {
 
 export async function AdminMe(req: Request, res: Response): Promise<void> {
     const Auth = (req as any).AdminAuth;
-    res.json({ csrfToken: Auth.session.csrfToken, account: PublicAccount(Auth.account) });
+    res.json({ csrfToken: Auth.session.csrfToken, account: PublicAccount(Auth.account), mfaEnrolled: await IsAdminMfaEnrolled(Auth.account.userId) });
+}
+
+// POST /admin/v1/mfa/enrol: a new secret for the signed-in staff member's own authenticator (shown once).
+export async function StartMfaEnrolment(req: Request, res: Response): Promise<void> {
+    const Account = (req as any).AdminAuth.account as LauncherAccountRecord;
+    res.json(await StartAdminMfaEnrolment(Account.userId, Account.displayName));
+}
+
+// POST /admin/v1/mfa/confirm {totp}: a code from the new authenticator makes it the account's secret.
+export async function ConfirmMfaEnrolment(req: Request, res: Response): Promise<void> {
+    const Account = (req as any).AdminAuth.account as LauncherAccountRecord;
+    if (IsRateLimited(`admin-mfa-confirm:${Account.userId}`, 6, 15 * 60 * 1000) || !(await ConfirmAdminMfaEnrolment(Account.userId, req.body?.totp))) {
+        res.status(400).json({ error: { code: "ADMIN_MFA_INVALID", message: "That code doesn't match the new authenticator." } });
+        return;
+    }
+    await GetRepositories().admin.appendAudit({
+        id: crypto.randomUUID(), actorUserId: Account.userId, targetUserId: Account.userId, action: "staff.mfa.enrol",
+        ip: req.ip ?? "unknown", requestId: crypto.randomUUID(), createdAt: new Date().toISOString()
+    });
+    res.json({ mfaEnrolled: true });
+}
+
+// DELETE /admin/v1/players/:userId/mfa: owner only (players.roles); the staff member enrols again at next sign-in.
+export async function ResetPlayerMfa(req: Request, res: Response): Promise<void> {
+    const Actor = (req as any).AdminAuth.account as LauncherAccountRecord;
+    const TargetUserId = String(req.params.userId ?? "");
+    const Removed = await ResetAdminMfa(TargetUserId);
+    const RequestId = crypto.randomUUID();
+    await GetRepositories().admin.appendAudit({
+        id: crypto.randomUUID(), actorUserId: Actor.userId, targetUserId: TargetUserId, action: "staff.mfa.reset",
+        newState: { removed: Removed }, ip: req.ip ?? "unknown", requestId: RequestId, createdAt: new Date().toISOString()
+    });
+    res.json({ removed: Removed, requestId: RequestId });
 }
 
 export async function ListPlayers(req: Request, res: Response): Promise<void> {

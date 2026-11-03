@@ -52,6 +52,8 @@ export const Collections = {
     DiscordOAuthTransactions: "discordOAuthTransactions",
     AdminSessions: "adminSessions",
     AdminAudit: "adminAudit",
+    // Per-staff authenticator secret + last used time steps (src/security/adminMfa.ts). _id = userId.
+    AdminMfa: "adminMfa",
 
     // Social graph for the Epic-compatible friends service (routes/friends.ts).
     Friendships: "friendships",

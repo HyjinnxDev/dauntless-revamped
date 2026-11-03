@@ -21,12 +21,12 @@ export interface IssuedEncryptionKey {
     at: number;
 }
 
-export type EncryptionKeyMatch = "candidateId" | "token" | "most-recent";
+export type EncryptionKeyMatch = "candidateId" | "token";
 
 export interface EncryptionKeyLookup {
     issued: IssuedEncryptionKey | null;
     matchedBy: EncryptionKeyMatch | "none";
-    // A token was supplied but no key was issued under it (the most-recent fallback may be another player's).
+    // A token was supplied but no key was issued under it.
     unknownToken: boolean;
 }
 
@@ -46,7 +46,6 @@ export function EncryptionKeyTokenFingerprint(Raw: unknown): string {
 export class EncryptionKeyStore {
     private readonly byCandidate = new Map<string, IssuedEncryptionKey>();
     private readonly byToken = new Map<string, IssuedEncryptionKey>();
-    private mostRecent: IssuedEncryptionKey | null = null;
 
     constructor(private readonly ttlMs: number = kEncryptionKeyTtlMs) {}
 
@@ -54,7 +53,6 @@ export class EncryptionKeyStore {
         if (CandidateId.length > 0) this.byCandidate.set(CandidateId, Issued);
         const TokenKey = NormalizeEncryptionKeyToken(Issued.token);
         if (TokenKey.length > 0) this.byToken.set(TokenKey, Issued);
-        this.mostRecent = Issued;
     }
 
     lookup(CandidateId: string, Token: unknown, Now: number): EncryptionKeyLookup {
@@ -70,10 +68,8 @@ export class EncryptionKeyStore {
         if (TokenKey.length > 0 && this.byToken.has(TokenKey)) {
             return { issued: this.byToken.get(TokenKey)!, matchedBy: "token", unknownToken: false };
         }
-        // Kept for request shapes that name neither a candidate nor a known token.
-        if (this.mostRecent && Now - this.mostRecent.at <= this.ttlMs) {
-            return { issued: this.mostRecent, matchedBy: "most-recent", unknownToken: TokenKey.length > 0 };
-        }
+        // [Revamped 2026-11-03] No "most recent key" fallback: it handed one player's key to whoever asked
+        // with an empty or unknown token (FINDINGS M9). The game server always sends the token.
         return { issued: null, matchedBy: "none", unknownToken: TokenKey.length > 0 };
     }
 }

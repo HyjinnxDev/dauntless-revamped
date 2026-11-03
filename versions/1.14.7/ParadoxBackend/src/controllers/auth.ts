@@ -12,7 +12,7 @@
 import jwt, {JwtPayload} from "jsonwebtoken";
 import { GetRepositories } from "../persistence";
 import { logger } from "../logger";
-import { FindApiKeyRecord, HashApiKey } from "../security/apiKeyHash";
+import { HashApiKey } from "../security/apiKeyHash";
 
 const PRIVKEY = Buffer.from(process.env.AUTH_SIGNING_PRIVKEY_B64!, "base64").toString("utf-8");
 const PUBKEY = Buffer.from(process.env.AUTH_SIGNING_PUBKEY_B64!, "base64").toString("utf-8");
@@ -37,10 +37,9 @@ export async function DrainAndRegisterUserAPIKeys(){
 }
 
 export async function GetUserIDForAPIKey(UserAPIKey: string){
-    const AllAPIKeyHashes = await GetRepositories().apiKeys.findAllUserKeyHashes();
-
     // Only HMAC records match; a user key stored before HMAC hashing (plain SHA-256) must be registered again.
-    return FindApiKeyRecord(AllAPIKeyHashes, HashUserAPIKey(UserAPIKey))?.userId;
+    // Looked up by hash (indexed) instead of scanning every key (FINDINGS M7).
+    return (await GetRepositories().apiKeys.findUserKeyByHash(HashUserAPIKey(UserAPIKey)))?.userId;
 }
 
 function SignMetagameJWTForUid(userId: string){

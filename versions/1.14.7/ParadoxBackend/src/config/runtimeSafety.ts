@@ -32,12 +32,14 @@ export function AssertRuntimeSafety(environment: NodeJS.ProcessEnv = process.env
     if (LiteralTrue(environment.ALLOW_NO_AUTH_DEV_MODE)) unsafe.push("ALLOW_NO_AUTH_DEV_MODE=true");
     if (Enabled(environment.MYSTICPARADOX_BODY_CAPTURE)) unsafe.push("MYSTICPARADOX_BODY_CAPTURE");
     if (Enabled(environment.MYSTICPARADOX_INV_CAPTURE_RAW)) unsafe.push("MYSTICPARADOX_INV_CAPTURE_RAW");
-    // [Revamped 2026-11-03] City/Hunt rooms have no instance check (any signed-in player may join any
-    // City-*/Hunt-* room). Revamped runs public city chat on purpose, so production only refuses the
-    // silent default: each flag must be set to "true" or "false" in .env.
-    for (const flag of ["REALTIME_XMPP_DEV_CITY_MUC", "REALTIME_XMPP_DEV_HUNT_MUC"]) {
-        if (environment[flag] !== "true" && environment[flag] !== "false") unsafe.push(`${flag} must be set to true or false`);
+    // [Revamped 2026-11-03] City rooms have no instance check (any signed-in player may join any City-* room).
+    // Revamped runs public city chat on purpose, so production only refuses the silent default: the flag must be
+    // set to "true" or "false" in .env. Hunt rooms are checked against matchmaking unless the dev flag opens them,
+    // which production refuses (FINDINGS M4).
+    if (environment.REALTIME_XMPP_DEV_CITY_MUC !== "true" && environment.REALTIME_XMPP_DEV_CITY_MUC !== "false") {
+        unsafe.push("REALTIME_XMPP_DEV_CITY_MUC must be set to true or false");
     }
+    if (LiteralTrue(environment.REALTIME_XMPP_DEV_HUNT_MUC)) unsafe.push("REALTIME_XMPP_DEV_HUNT_MUC=true");
     if (unsafe.length > 0) {
         throw new Error(`Unsafe production configuration: ${unsafe.join(", ")}`);
     }

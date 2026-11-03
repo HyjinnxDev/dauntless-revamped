@@ -9,7 +9,7 @@
 import { Router } from "express";
 import { logger } from "../logger";
 import { HasAdminAuth, RequireStaff } from "../middleware/HasAdminAuth";
-import { AdminLogin, AdminLogout, AdminMe, DeletePlayer, ListAudit, ListPlayers, UpdatePlayerAccess, UpdatePlayerRoles } from "../controllers/admin";
+import { AdminLogin, AdminLogout, AdminMe, ConfirmMfaEnrolment, DeletePlayer, ListAudit, ListPlayers, ResetPlayerMfa, StartMfaEnrolment, UpdatePlayerAccess, UpdatePlayerRoles } from "../controllers/admin";
 import {
     ADMIN_DISCORD_BINDING_COOKIE_NAME,
     AdminDiscordBindingCookie,
@@ -115,6 +115,8 @@ adminRouter.get("/admin/v1/auth/discord/callback", async (req, res) => {
 });
 
 adminRouter.get("/admin/v1/me", HasAdminAuth, AdminMe);
+adminRouter.post("/admin/v1/mfa/enrol", HasAdminAuth, StartMfaEnrolment);
+adminRouter.post("/admin/v1/mfa/confirm", HasAdminAuth, ConfirmMfaEnrolment);
 adminRouter.get("/admin/v1/online-players", HasAdminAuth, RequireStaff("players.read"), ListOnlinePlayersDetailed);
 adminRouter.get("/admin/v1/players", HasAdminAuth, RequireStaff("players.read"), ListPlayers);
 adminRouter.get("/admin/v1/players/:userId/detail", HasAdminAuth, RequireStaff("players.read"), GetPlayerDetail);
@@ -122,6 +124,7 @@ adminRouter.get("/admin/v1/players/:userId/detail", HasAdminAuth, RequireStaff("
 adminRouter.patch("/admin/v1/players/:userId/access", HasAdminAuth, UpdatePlayerAccess);
 adminRouter.patch("/admin/v1/players/:userId/roles", HasAdminAuth, RequireStaff("players.roles"), UpdatePlayerRoles);
 adminRouter.delete("/admin/v1/players/:userId", HasAdminAuth, RequireStaff("players.delete"), DeletePlayer);
+adminRouter.delete("/admin/v1/players/:userId/mfa", HasAdminAuth, RequireStaff("players.roles"), ResetPlayerMfa);
 adminRouter.get("/admin/v1/audit", HasAdminAuth, RequireStaff("players.read"), ListAudit);
 adminRouter.get("/admin/v1/operations/overview", HasAdminAuth, RequireStaff("operations"), GetOperationsOverview);
 adminRouter.patch("/admin/v1/operations/policy", HasAdminAuth, RequireStaff("operations"), UpdateOperationsPolicy);

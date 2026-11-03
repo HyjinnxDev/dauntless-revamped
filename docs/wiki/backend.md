@@ -51,7 +51,7 @@ Folders on other pages: `src/realtime/` ([realtime](backend-realtime.md)), `src/
 
 ### Startup (`src/server.ts`)
 
-1. `AssertRuntimeSafety()` (`config/runtimeSafety.ts`). Refuses to boot on stale `MYSTPAX_*` env names. When `NODE_ENV=production` it also rejects `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE`, body/raw inventory capture flags, unset `REALTIME_XMPP_DEV_CITY_MUC`/`REALTIME_XMPP_DEV_HUNT_MUC` (must be `true` or `false`), a missing or `combined` `MYSTICPARADOX_SERVICE_ROLE`, a missing `MYSTICPARADOX_METRICS_TOKEN` (api role) or `MONGODB_URI`, out-of-range Mongo settings and bad ports.
+1. `AssertRuntimeSafety()` (`config/runtimeSafety.ts`). Refuses to boot on stale `MYSTPAX_*` env names. When `NODE_ENV=production` it also rejects `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE`, body/raw inventory capture flags, unset `REALTIME_XMPP_DEV_CITY_MUC` (must be `true` or `false`), `REALTIME_XMPP_DEV_HUNT_MUC=true`, a missing or `combined` `MYSTICPARADOX_SERVICE_ROLE`, a missing `MYSTICPARADOX_METRICS_TOKEN` (api role) or `MONGODB_URI`, out-of-range Mongo settings and bad ports.
 2. Reads the service role. This entry point only serves `combined` (local default) or `api`.
 3. Loads the TLS cert/key. In production, no valid cert means startup fails.
 4. `AssertApiKeyHashSecret()` (needs `API_KEY_HASH_SECRET`), then `GetPersistenceLifecycle().start()` (Mongo connect + indexes), then registers gameserver and user API keys (`DrainAndRegisterAPIKeys`, `DrainAndRegisterUserAPIKeys`).
@@ -143,7 +143,7 @@ Path prefix -> route file -> where the logic lives. Per-route auth is in the [Ro
 - Director and game servers: game servers call the backend with the gameserver API key (`GAMESERVER_API_KEYS` here matches the Director's `METAGAME_API_KEY`). The backend calls the Director at `http://$DEPLOYSERVER_URL`: matchmaker and hub/hunt status routes without a key, `/api/admin/*` with header `x-api-key` set to the first gameserver key. See [director.md](director.md).
 - Launcher: [launcher.md](launcher.md) uses `/launcher/v1/*` and `/content/v1/*`; runtime update files come from the publish flow in [paradox-launcher.md](paradox-launcher.md).
 - Discord bot: [discord-bot.md](discord-bot.md) (news through `DISCORD_BOT_URL`; status uses `/health/ready` player count).
-- Slayer's Ledger companion site reads the `huntStats` collection written by `POST /mystic/hunt-stats`.
+- Revamped Ledger companion site reads the `huntStats` collection written by `POST /mystic/hunt-stats`.
 - Restart and hosting: [host-scripts.md](host-scripts.md), [setup.md](setup.md).
 
 ## Config
@@ -189,8 +189,8 @@ Real values live in the gitignored `.env`. It is loaded by `--env-file=.env` in 
 | `LAUNCHER_ALLOWED_ORIGINS` | none | Extra CORS origins for `/launcher/*` (always allowed: `http://localhost:1420`, `https://tauri.localhost`). |
 | `APPROVED_EXECUTABLE_SHA256` | none | Comma-separated lowercase SHA-256 of approved game exes; empty rejects every launch. |
 | `ADMIN_ALLOWED_ORIGINS` | dev: `http://localhost:4173`, `http://localhost:5174`; production: none | Cross-origin callers allowed on `/admin/v1` (the same-origin `/admin` page always works). |
-| `ADMIN_TOTP_SECRET` | none | Base32 TOTP for password staff login; required in production. |
-| `ADMIN_OPERATIONS_TOTP_SECRET` | `ADMIN_TOTP_SECRET` | Step-up TOTP for weakening the operations policy. |
+| `ADMIN_TOTP_SECRET` | none | Shared base32 TOTP for staff who haven't enrolled their own authenticator; remove once all have. |
+| `ADMIN_OPERATIONS_TOTP_SECRET` | `ADMIN_TOTP_SECRET` | Shared step-up TOTP for weakening the operations policy, before the operator enrols. |
 | `ADMIN_COOKIE_SECURE` | auto | `true`/`1` forces `Secure` on staff cookies outside production. |
 | `ADMIN_DISCORD_REDIRECT_URI` | none | Staff Discord OAuth redirect (HTTPS). |
 | `ADMIN_FRONTEND_URL` | none | Where staff Discord sign-in lands. |
@@ -248,7 +248,7 @@ Real values live in the gitignored `.env`. It is loaded by `--env-file=.env` in 
 | `GUILD_CREATE_ACTIVITY_FALLBACK` | off | `1` lets a gameserver guild create pass with any recent validate by the leader. |
 | `MYSTICPARADOX_LOG_ORIGIN_BODIES` | 0 | `1` logs response bodies of `/__origin` requests. |
 | `MYSTICPARADOX_P2P_MODULE` | on | `off` ignores an installed P2P module. |
-| `REALTIME_XMPP_DEV_HUNT_MUC`, `REALTIME_XMPP_RECONNECT_GRACE_MS` | on / 45000 | Realtime options; see [realtime](backend-realtime.md). |
+| `REALTIME_XMPP_DEV_HUNT_MUC`, `REALTIME_XMPP_RECONNECT_GRACE_MS` | off / 45000 | Realtime options; see [realtime](backend-realtime.md). |
 | `PARADOX_GAME_DATA_DIR` | `game-data/` | Game-data folder (tests and runtime). |
 | `CHARACTER_TEST_MONGODB_URI` | none | Enables `characterDelete.test.ts`. |
 

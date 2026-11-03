@@ -121,10 +121,15 @@ matchmakingRouter.post("/key/generate", HasParadoxBackendAuth, async (req: any, 
     });
 });
 
-// The hub's key fetch. Accepts the candidateId in the body or the query; falls back to the most recently
-// issued key when the hub does not name one (a hub serves the candidate matchmaking just routed to it). The
-// request shape is logged once per call so a wrong assumption is visible in the log rather than silent.
+// The hub's key fetch. Accepts the candidateId in the body or the query, otherwise matches the token the key was
+// issued under. Game servers only (FINDINGS M9): a player bearer could otherwise fetch keys. The request shape is
+// logged once per call so a wrong assumption is visible in the log rather than silent.
 matchmakingRouter.post("/key/consume", HasParadoxBackendAuth, async (req: any, res) => {
+    if (req.AuthData?.IsGameserver !== true) {
+        res.status(403);
+        res.json({ error: "gameserver only" });
+        return;
+    }
     const Body = req.body ?? {};
     const CandidateId = String(Body.candidateId ?? req.query?.candidateId ?? "");
     const ConsumeToken = Body.token ?? req.query?.token;
@@ -136,14 +141,9 @@ matchmakingRouter.post("/key/consume", HasParadoxBackendAuth, async (req: any, r
     const Lookup = EncryptionKeys.lookup(CandidateId, ConsumeToken, Date.now());
     const Match = Lookup.issued;
     const MatchedBy = Lookup.matchedBy;
-    if (Lookup.unknownToken && Match !== null) {
-        // With several players generating keys the most recent key can be someone else's.
-        logger.warn("key/consume: token " + TokenFp
-            + " matches no issued key; falling back to the most recent key (may belong to another player)");
-    }
 
     if (Match === null) {
-        logger.warn("key/consume: no issued key is available yet (hub asked before any /key/generate)");
+        logger.warn("key/consume: no key issued for candidateId=" + (CandidateId || "none") + " token=" + TokenFp + (Lookup.unknownToken ? " (unknown token)" : ""));
         res.status(404);
         res.json({ error: "no issued key" });
         return;

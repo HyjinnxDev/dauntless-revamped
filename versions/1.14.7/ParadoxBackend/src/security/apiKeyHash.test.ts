@@ -4,7 +4,7 @@ import test from "node:test";
 
 process.env.API_KEY_HASH_SECRET = "test-only-api-key-hash-secret-0123456789abcdef";
 
-import { AssertApiKeyHashSecret, FindApiKeyRecord, HashApiKey } from "./apiKeyHash";
+import { AssertApiKeyHashSecret, HashApiKey } from "./apiKeyHash";
 
 test("HMAC hash matches the public format: scope, NUL, key", () => {
     const expected = crypto.createHmac("sha256", process.env.API_KEY_HASH_SECRET!)
@@ -16,7 +16,7 @@ test("scopes are domain-separated and a pre-HMAC SHA-256 record no longer matche
     const Gameserver = HashApiKey("example-key", "gameserver");
     assert.notEqual(Gameserver, HashApiKey("example-key", "user"));
     const PreHmacRecord = { keyHash: crypto.createHash("sha256").update("example-key", "utf8").digest("hex") };
-    assert.equal(FindApiKeyRecord([PreHmacRecord], Gameserver), undefined);
+    assert.notEqual(PreHmacRecord.keyHash, Gameserver);
 });
 
 test("a short or missing secret is refused", () => {
@@ -31,13 +31,3 @@ test("a short or missing secret is refused", () => {
     }
 });
 
-test("FindApiKeyRecord matches exactly one stored hash and skips empty records", () => {
-    const Records = [
-        { keyHash: null, id: "empty" },
-        { keyHash: HashApiKey("old-key", "user"), id: "user-scope" },
-        { keyHash: HashApiKey("new-key", "gameserver"), id: "hmac" },
-    ];
-    assert.equal(FindApiKeyRecord(Records, HashApiKey("new-key", "gameserver"))?.id, "hmac");
-    assert.equal(FindApiKeyRecord(Records, HashApiKey("old-key", "user"))?.id, "user-scope");
-    assert.equal(FindApiKeyRecord(Records, HashApiKey("old-key", "gameserver")), undefined);
-});

@@ -15,12 +15,12 @@ test("a key with the old MYSTPAX_ prefix stops startup in every environment", ()
     assert.doesNotThrow(() => AssertRuntimeSafety({ NODE_ENV: "development", MYSTICPARADOX_LOG_ORIGIN_BODIES: "1" }));
 });
 
-test("production requires the City/Hunt room flags to be set explicitly", () => {
+test("production requires the City room flag explicitly and refuses open Hunt rooms (FINDINGS M4)", () => {
     assert.throws(() => AssertRuntimeSafety({ NODE_ENV: "production", MYSTICPARADOX_SERVICE_ROLE: "api" }), /REALTIME_XMPP_DEV_CITY_MUC/);
     assert.throws(() => AssertRuntimeSafety({ NODE_ENV: "production", MYSTICPARADOX_SERVICE_ROLE: "api",
-        REALTIME_XMPP_DEV_CITY_MUC: "true" }), /REALTIME_XMPP_DEV_HUNT_MUC/);
+        REALTIME_XMPP_DEV_CITY_MUC: "true", REALTIME_XMPP_DEV_HUNT_MUC: "true" }), /REALTIME_XMPP_DEV_HUNT_MUC=true/);
     assert.doesNotThrow(() => AssertRuntimeSafety({ NODE_ENV: "production", AUTH_MODE: "LAUNCHER",
-        REALTIME_XMPP_DEV_CITY_MUC: "true", REALTIME_XMPP_DEV_HUNT_MUC: "true", MYSTICPARADOX_SERVICE_ROLE: "api",
+        REALTIME_XMPP_DEV_CITY_MUC: "true", MYSTICPARADOX_SERVICE_ROLE: "api",
         MYSTICPARADOX_METRICS_TOKEN: "metrics-test-token", MONGODB_URI: "mongodb://guardit.example.test/?replicaSet=guardit" }));
     assert.doesNotThrow(() => AssertRuntimeSafety({ NODE_ENV: "production", AUTH_MODE: "APIKEY",
         REALTIME_XMPP_DEV_CITY_MUC: "false", REALTIME_XMPP_DEV_HUNT_MUC: "false", MYSTICPARADOX_SERVICE_ROLE: "api", MYSTICPARADOX_METRICS_TOKEN: "metrics-test-token",

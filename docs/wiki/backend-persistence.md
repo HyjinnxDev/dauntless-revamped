@@ -86,7 +86,7 @@ Related files outside this folder: `src/config/mongoRuntime.ts` (pool/timeout en
 | `playerJourney` | `contracts/PlayerJourneyRepository.ts` + `repositories/MongoPlayerJourneyRepository.ts` | `playerJourney` | `findByUserId`, `createIfAbsent` (false on duplicate), `updateIfRevision` (revision CAS + `$inc`). |
 | `breadcrumbs` | `contracts/BreadcrumbRepository.ts` + `repositories/MongoBreadcrumbRepository.ts` | `breadcrumbs` | `findByCharacterIdAndUserId`, `create`, `update` (blob + `updateVersion`, unconditional). |
 | `encounteredContent` | `contracts/EncounteredContentRepository.ts` + `repositories/MongoEncounteredContentRepository.ts` | `encounteredContent` | `findByCharacterIdAndUserId`, `create`, `updateContent` (unconditional). |
-| `apiKeys` | `contracts/ApiKeyRepository.ts` + `repositories/MongoApiKeyRepository.ts` | `gameServerApiKeys`, `userApiKeys` | `findAllGameServerKeyHashes`, `insertGameServerKeyHash`, `replaceGameServerKeyHashes` (upsert the given set, delete the rest; an empty list deletes all), `findAllUserKeyHashes`, `insertUserKeyHash`. `findAll*KeysToRegister` / `clear*KeysToRegister` are no-ops on Mongo. |
+| `apiKeys` | `contracts/ApiKeyRepository.ts` + `repositories/MongoApiKeyRepository.ts` | `gameServerApiKeys`, `userApiKeys` | `findAllGameServerKeyHashes`, `insertGameServerKeyHash`, `replaceGameServerKeyHashes` (upsert the given set, delete the rest; an empty list deletes all), `findUserKeyByHash` (indexed equality lookup), `insertUserKeyHash`. `findAll*KeysToRegister` / `clear*KeysToRegister` are no-ops on Mongo. |
 | `progressionTracks` | `contracts/ProgressionTrackRepository.ts` + `repositories/MongoProgressionTrackRepository.ts` | `progressionTracks`, `progressionObjectives`, `progressionObjectiveEvents` | `getAllForUser`, `get(?s)`, `increment(?s)` (`$inc` upsert), `setProgressIfGreater` (`$max`), `setConfirmedRank` (`$max` on the free or premium rank), `reset`, `spend(?s)` (no overspend), `appendObjectiveEvent`, `getAllObjectivesForUser`, `setObjectiveIfGreater` (`$max` on `value` and `completedCount`). |
 | `progressionGrants` | `contracts/ProgressionGrantRepository.ts` + `repositories/MongoProgressionGrantRepository.ts` | `progressionTransactions` | `findByGrantId(?s)`, `insertApplied(s)`. |
 | `escalationProgress` | `contracts/EscalationProgressRepository.ts` + `repositories/MongoEscalationProgressRepository.ts` | `escalationProgress` | `get(userId, seasonId)`, `saveIfVersion`. |
@@ -116,6 +116,7 @@ Related files outside this folder: `src/config/mongoRuntime.ts` (pool/timeout en
 | `discordOAuthTransactions` | In-flight Discord login (PKCE) and its completion code. | `_id = state`; `codeVerifier`, `expiresAt`, `consumedAt`, `completionCodeHash`, `completionExpiresAt`, `completionConsumedAt`, `userId`, `ttlAt` | `completionCodeHash`, `userId`, TTL `ttlAt` | `discordOAuthTransactions` |
 | `gameServerApiKeys` | HMAC hashes of the keys game servers present. | auto `_id`; `keyHash` | `keyHash` (non-unique) | `apiKeys` |
 | `userApiKeys` | HMAC hashes of per-user API keys (`AUTH_MODE=APIKEY`). | `_id = userId`; `keyHash` | `keyHash` | `apiKeys` |
+| `adminMfa` | Per-staff authenticator (`security/adminMfa.ts`). | `_id = userId`; `secret`, `pendingSecret`, `lastStep`, `lastOpsStep`, `enrolledAt` | `_id` | direct (`security/adminMfa.ts`) |
 | `adminSessions` | Staff dashboard sessions. | `_id = id`; `tokenHash`, `userId`, `csrfToken`, `expiresAt`, `ip`, `userAgent`, `revokedAt`, `ttlAt` | unique `tokenHash`, `userId`, TTL `ttlAt` | `admin` |
 | `adminAudit` | Append-only staff action log (also the tombstone after account deletion). | `_id = id`; `actorUserId`, `targetUserId`, `action`, `oldState`, `newState`, `reason`, `ip`, `requestId`, `createdAt` | `(targetUserId, createdAt desc)`, `(actorUserId, createdAt desc)`; no TTL | `admin` |
 | `launcherGuardSessions` | Short-lived challenge-bound Guard sessions (client or host role). | `_id = guardSessionId`; `accountId`, `role`, `publicKeyBase64`, `manifestId`, `challenge`, `lastSequence`, `status`, `riskScore`, `expiresAt`, `lastHeartbeatAt`, `lastSignals` | `(accountId, status, expiresAt desc)`, `(accountId, role, status, expiresAt desc)`; no TTL | `launcherGuard`; also `controllers/adminOperations.ts` |
@@ -174,7 +175,7 @@ Note on TTL: Mongo deletes expired docs on a background schedule (about every 60
 
 | What | Where | Lifetime |
 |---|---|---|
-| UDP encryption keys (`/key/generate`, `/key/consume`) | `src/encryptionKeyStore.ts`, in memory, 30 min TTL | Lost on restart. Looked up by candidate id, then bearer token, then "most recent". |
+| UDP encryption keys (`/key/generate`, `/key/consume`) | `src/encryptionKeyStore.ts`, in memory, 30 min TTL | Lost on restart. Looked up by candidate id, then bearer token; nothing else. |
 | Rate-limit windows | `src/security/rateLimit.ts` (`Map`) plus `express-rate-limit` memory store | Lost on restart; not shared between processes. |
 | Session registry (online players, XMPP sockets) | `src/realtime/SessionRegistry.ts` | See [backend realtime](backend-realtime.md). |
 | Metrics | `src/observability/metrics.ts` maps | See [security and admin](backend-security-admin.md). |
@@ -190,7 +191,7 @@ Note on TTL: Mongo deletes expired docs on a background schedule (about every 60
 - [Realtime](backend-realtime.md) writes `accounts.lastSeenAt`/`lastSeenIp` on XMPP bind, reads `friendships`, and drains `partyOutbox`.
 - The player [launcher](launcher.md) never talks to Mongo; it uses `/launcher/v1/*`.
 - Mongo itself: hand-started `mongod` on port 27018 (replica set `rs0`), data in `D:\MysticParadoxData\mongo`. If it is down the launcher shows "can't reach server" and `/health/ready` returns 503 with `persistence: unavailable`.
-- Companion site (Slayer's Ledger, separate repo) reads inventory and `huntStats` read-only from the same database.
+- Companion site (Revamped Ledger, separate repo) reads inventory and `huntStats` read-only from the same database.
 
 ## Config
 
@@ -217,12 +218,12 @@ Out-of-range pool/timeout values throw at startup rather than being clamped.
 - **Pass `session`.** Calling a repository inside `withTransaction` without the session runs outside the transaction.
 - **`accounts` is two things.** Legacy game accounts and character-slot accounts have no `displayNameNormalized`; launcher accounts do. Admin delete only removes the main doc if it has `displayNameNormalized`. `launcherAccounts.findByUserId` on a slot id answers with the owner's account.
 - **Plaintext key queues do not exist.** `findAll*KeysToRegister` always returns empty on Mongo. Register keys via `GAMESERVER_API_KEYS`. Keys stored before 2026-10-11 (plain SHA-256) no longer match and must be re-registered.
-- **API-key lookup is a full scan.** Each check loads every hash and compares with `timingSafeEqual`; the `keyHash` index is non-unique and unused for the lookup.
-- **Account deletion is partial.** `deletePlayerData` clears auth, sessions, keys, friendships and the game save (characters, inventory, loadouts, breadcrumbs, encountered content, progression tracks/objectives/events, player journey, wallet) for the account and all its slots, then the slot accounts. It does not touch `bountyStates`, `cooldownStates`, `entitlements`, `escalationProgress`, `progressionTransactions`, guild rows, slayer links, party rows, `huntStats`, Gauntlet clears or Guard sessions. `deleteCharacterSlot` covers several of those for one slot. See [FINDINGS](../FINDINGS.md).
+- **API-key lookups.** User keys are found by `keyHash` equality (indexed). Gameserver key hashes are read whole into a memory set at boot and at most once a minute after (`controllers/apikeys.ts`); the global rate limiter checks that set synchronously, so it is empty (no gameserver bucket) until boot finishes `DrainAndRegisterAPIKeys`.
+- **Deletion shares one list.** `deletePlayerData` (every slot) and `deleteCharacterSlot` (one slot) both run `RemoveCharacterState`: the game save plus bounty/cooldown/entitlement/escalation/progression-transaction rows, exchange codes, friendships, slayer links, `huntStats`, Gauntlet clears, guild membership and invites, party invites, and party membership through `MongoPartyRepository.leave` (the rest of the party keeps it). A deleted guild leader hands the guild to the longest-standing member; an empty guild is deleted. The account path also clears auth, sessions, keys, `adminMfa` and Guard sessions. `adminDeleteCoverage.test.ts` fails when a collection is neither deleted nor on its keep-list (`adminAudit` tombstone, `partyOutbox` TTL, ...).
 - **Outbox TTL.** PUBLISHED `partyOutbox` rows expire a day after publish (`ttlAt`, a BSON Date mirror: TTL indexes ignore ISO-string dates). `partyInvites` has no TTL but is keyed by recipient+sender and overwritten, so it stays bounded by pair count.
 - **JSON-string blobs.** `characters.data`, `inventories.*Items` and similar are strings. Editing them in Mongo shell needs parse and stringify, and the `revision`/`updateVersion` must be bumped or the game's next write may be rejected.
 - **Schema marker is forward-only.** Do not hand-edit `schemaMigrations`; a version higher than the binary knows blocks startup.
-- **Encryption keys vanish on restart**, and an unmatched lookup can fall back to the most recent key (possibly another player's).
+- **Encryption keys vanish on restart.** An unmatched lookup returns nothing (the old most-recent fallback could hand out another player's key).
 
 See also: [index](index.md), [backend](backend.md), [backend scripts](backend-scripts.md), [security and admin](backend-security-admin.md), [realtime](backend-realtime.md), [setup](setup.md).
 </content>

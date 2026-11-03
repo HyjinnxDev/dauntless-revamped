@@ -18,11 +18,12 @@ Paths are under `versions/1.14.7/ParadoxBackend/`.
 | `src/middleware/HasLauncherAuth.ts` | Auth for `/launcher/v1/*`: launcher-audience JWT plus live session check. |
 | `src/middleware/HasAdminAuth.ts` | Auth for `/admin/v1/*`: cookie session, CSRF, staff check. `RequireStaff(permission)`. |
 | `src/controllers/auth.ts` | Signs/validates the game JWT and the store purchase token; user API key lookup. |
-| `src/controllers/apikeys.ts` | Game-server API key registration and validation. |
-| `src/security/apiKeyHash.ts` | HMAC-SHA256 hashing of API keys, constant-time compare. |
+| `src/controllers/apikeys.ts` | Game-server API key registration and validation (in-memory hash set, refreshed at most once a minute; `IsKnownGameserverAPIKey` for the rate limiter). |
+| `src/security/apiKeyHash.ts` | HMAC-SHA256 hashing of API keys. |
 | `src/security/launcherTokens.ts` | Launcher access JWT (12 min), opaque token generation and hashing. |
 | `src/security/passwords.ts` | Argon2id hash/verify with a dummy hash for timing parity. |
-| `src/security/totp.ts` | RFC 6238 TOTP verify (6 digits, 30 s, plus or minus one step). |
+| `src/security/totp.ts` | RFC 6238 TOTP (6 digits, 30 s, plus or minus one step); returns the matched step; secret generator. |
+| `src/security/adminMfa.ts` | Per-staff authenticators (`adminMfa`): enrol, confirm, reset, single-use codes. |
 | `src/security/accountEligibility.ts` | Ban/disable/approval checks (`IsAccountEligible`). |
 | `src/security/staffRoles.ts` | Staff ranks, permission table, name tags, name styles, `CanActOn`. |
 | `src/security/testerFeatures.ts` | Assignable roles and the tester feature allow-list. |
@@ -93,7 +94,7 @@ Registration: a new account is `pending` (no tokens, 202) until staff approve it
 
 Sign-in options (`src/routes/admin.ts`):
 
-1. **Email or username + password** (`POST /admin/v1/auth/login`): rate limit 6 per 15 min per IP; account must have a staff role and be eligible. TOTP via `ADMIN_TOTP_SECRET`: one shared secret for all staff. In production the login returns 503 if it is unset; outside production it is skipped when unset.
+1. **Email or username + password** (`POST /admin/v1/auth/login`): rate limit 6 per 15 min per IP; account must have a staff role and be eligible. TOTP from the staff member's own authenticator (`adminMfa`, `security/adminMfa.ts`). An account that hasn't enrolled uses the shared `ADMIN_TOTP_SECRET` and gets a console banner to set up its own (`POST /admin/v1/mfa/enrol` -> secret + `otpauth://` URI, `POST /admin/v1/mfa/confirm`). Every accepted code burns its time step (`lastStep`), so it can't be replayed. In production a login with neither returns 503; outside production it is skipped. Once every staff member has enrolled, remove `ADMIN_TOTP_SECRET`. Owners reset a lost authenticator with `DELETE /admin/v1/players/:userId/mfa` (audited `staff.mfa.reset`).
 2. **Discord** (`GET /admin/v1/auth/discord/start` then `/callback`): the Discord id must be in `ADMIN_DISCORD_ALLOWED_IDS`. State is bound to a short-lived HttpOnly cookie. An allow-listed id with no account gets one created with role `admin`; an existing eligible linked account is promoted to `admin`. Redirect URLs must be HTTPS (localhost http allowed outside production).
 
 On success the backend creates an `adminSessions` row (8 h), sets cookie `mysticparadox_admin` (HttpOnly, SameSite=Strict, Path `/admin/v1`, Secure in production or when `ADMIN_COOKIE_SECURE`), and returns a per-session CSRF token. Only the SHA-256 of the cookie token is stored.
@@ -184,7 +185,7 @@ Rules enforced in `controllers/admin.ts`:
 | `UPDATE_PUBLISHER_API_KEY`, `UPDATE_PUBLISHER_ALLOWED_IPS`, `LAUNCHER_LOG_SYNC_TOKEN`, `MYSTICPARADOX_METRICS_TOKEN` | Script tokens and the publisher IP allow-list. |
 | `LAUNCHER_INVITE_CODES` | Invite codes that approve a registration at once. |
 | `APPROVED_EXECUTABLE_SHA256` | Approved game exe hashes; empty rejects every launch. |
-| `ADMIN_TOTP_SECRET`, `ADMIN_OPERATIONS_TOTP_SECRET` | Base32 TOTP secrets. |
+| `ADMIN_TOTP_SECRET`, `ADMIN_OPERATIONS_TOTP_SECRET` | Shared base32 TOTP secrets, used only by staff who haven't enrolled their own authenticator. |
 | `ADMIN_ALLOWED_ORIGINS`, `ADMIN_COOKIE_SECURE`, `ADMIN_FRONTEND_URL` | Dashboard origin and cookie settings. |
 | `ADMIN_DISCORD_ALLOWED_IDS`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `ADMIN_DISCORD_REDIRECT_URI` | Discord admin sign-in. |
 | `ADMIN_LOG_DIR`, `ADMIN_RESTART_SCRIPT`, `DEPLOYSERVER_URL` | Servers page. |
@@ -194,7 +195,7 @@ Rules enforced in `controllers/admin.ts`:
 | `MYSTICPARADOX_INV_CAPTURE`, `_RAW`, `_FILTER`, `MYSTICPARADOX_ECONOMY_MONITOR`, `MYSTICPARADOX_BODY_CAPTURE`, `MYSTICPARADOX_LOG_ORIGIN_BODIES` | Diagnostics switches. |
 | `MYSTICPARADOX_SERVICE_ROLE` | Must be explicit in production (`combined` refused). |
 
-`config/runtimeSafety.ts` refuses to boot in production with `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE=true`, body capture or raw inventory capture on, `REALTIME_XMPP_DEV_CITY_MUC` or `REALTIME_XMPP_DEV_HUNT_MUC` left unset (must be `true` or `false`), no metrics token on the API role, or a missing `MONGODB_URI`. It also rejects any env key still starting with `MYSTPAX_` (renamed to `MYSTICPARADOX_`).
+`config/runtimeSafety.ts` refuses to boot in production with `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE=true`, body capture or raw inventory capture on, `REALTIME_XMPP_DEV_CITY_MUC` left unset (must be `true` or `false`), `REALTIME_XMPP_DEV_HUNT_MUC=true`, no metrics token on the API role, or a missing `MONGODB_URI`. It also rejects any env key still starting with `MYSTPAX_` (renamed to `MYSTICPARADOX_`).
 
 ## Gotchas
 

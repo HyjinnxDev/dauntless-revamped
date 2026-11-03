@@ -467,6 +467,13 @@ export function CancelPlayerMatchmaking(PlayerId: string, PartyId?: string): Mat
 }
 
 // A cancel that lands while /candidate/join is still launching the server must win over the result it then writes.
+// [Revamped 2026-11-03] The client names its hunt chat room Hunt-<GameSessionId> after /candidate/status
+// (same id as City-<GameSessionId>); RoomService lets only players routed to that session in (FINDINGS M4).
+export function IsInGameSession(PlayerId: string, GameSessionId: string): boolean {
+    const Result = MatchmakingResultMap.get(PlayerId);
+    return Result !== undefined && !Result.Canceled && Result.GameSessionId === GameSessionId;
+}
+
 export function WasCancelledSince(PlayerId: string, SinceMs: number): boolean {
     return (CancelledAtMap.get(PlayerId) ?? 0) >= SinceMs;
 }

@@ -44,13 +44,14 @@ test("a candidate id still wins, and a re-issue for the same player replaces the
     assert.equal(Store.lookup("", LeaderToken, 20).issued?.key, "second");
 });
 
-test("an unknown token falls back to the most recent key and says so; expired keys are dropped", () => {
+test("an unknown or empty token gets no key (no most-recent fallback, FINDINGS M9); expired keys are dropped", () => {
     const Store = new EncryptionKeyStore(1000);
     Store.issue("", { key: "recent", nonce: "n", token: MemberToken, at: 0 });
     const Unknown = Store.lookup("", "BEARER somebody-else", 500);
-    assert.equal(Unknown.matchedBy, "most-recent");
+    assert.equal(Unknown.matchedBy, "none");
     assert.equal(Unknown.unknownToken, true);
-    assert.equal(Unknown.issued?.key, "recent");
+    assert.equal(Unknown.issued, null);
+    assert.equal(Store.lookup("", "", 500).issued, null);
 
     const Expired = Store.lookup("", MemberToken, 5000);
     assert.equal(Expired.issued, null);

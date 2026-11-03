@@ -33,18 +33,34 @@ function CodeAt(secret: Buffer, counter: number): string {
     return NumberCode.toString().padStart(6, "0");
 }
 
-export function VerifyTotp(base32Secret: string, candidate: unknown, nowMs = Date.now()): boolean {
-    if (typeof candidate !== "string" || !/^\d{6}$/.test(candidate)) return false;
+/** The 30 s time step the code matches (current one, or one either side), or undefined. */
+export function MatchTotpStep(base32Secret: string, candidate: unknown, nowMs = Date.now()): number | undefined {
+    if (typeof candidate !== "string" || !/^\d{6}$/.test(candidate)) return undefined;
     let Secret: Buffer;
     try {
         Secret = DecodeBase32(base32Secret);
     } catch {
-        return false;
+        return undefined;
     }
     const Counter = Math.floor(nowMs / 30_000);
-    return [-1, 0, 1].some((Window) => {
+    const Actual = Buffer.from(candidate);
+    let Matched: number | undefined;
+    for (const Window of [-1, 0, 1]) {
         const Expected = Buffer.from(CodeAt(Secret, Counter + Window));
-        const Actual = Buffer.from(candidate);
-        return Expected.length === Actual.length && crypto.timingSafeEqual(Expected, Actual);
-    });
+        if (Expected.length === Actual.length && crypto.timingSafeEqual(Expected, Actual)) Matched ??= Counter + Window;
+    }
+    return Matched;
+}
+
+export function VerifyTotp(base32Secret: string, candidate: unknown, nowMs = Date.now()): boolean {
+    return MatchTotpStep(base32Secret, candidate, nowMs) !== undefined;
+}
+
+/** A new random 160-bit secret, base32 (RFC 4648, no padding) as authenticator apps expect. */
+export function GenerateTotpSecret(): string {
+    const Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    const Bits = [...crypto.randomBytes(20)].map((Byte) => Byte.toString(2).padStart(8, "0")).join("");
+    let Out = "";
+    for (let Offset = 0; Offset < Bits.length; Offset += 5) Out += Alphabet[Number.parseInt(Bits.slice(Offset, Offset + 5).padEnd(5, "0"), 2)];
+    return Out;
 }

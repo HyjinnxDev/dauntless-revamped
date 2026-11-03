@@ -41,16 +41,3 @@ export function HashApiKey(value: string, scope: "gameserver" | "user"): string 
         .update(value, "utf8")
         .digest("hex");
 }
-
-/** Constant-time comparison of one hex hash against stored records; returns the first match. */
-export function FindApiKeyRecord<T extends { keyHash?: string | null }>(records: T[], hashHex: string): T | undefined {
-    const Incoming = Buffer.from(hashHex, "hex");
-    let Found: T | undefined;
-    for (const Record of records) {
-        if (!Record.keyHash) continue;
-        const Stored = Buffer.from(Record.keyHash, "hex");
-        if (Stored.length !== Incoming.length) continue;
-        if (crypto.timingSafeEqual(Incoming, Stored) && Found === undefined) Found = Record;
-    }
-    return Found;
-}

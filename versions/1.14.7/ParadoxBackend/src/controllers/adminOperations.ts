@@ -6,7 +6,7 @@ import { GetMongoDb } from "../persistence/mongo/client";
 import { Collections } from "../persistence/mongo/collections";
 import { GetOperationsPolicy, OperationsPolicyWeakeningCodes, SetOperationsPolicy } from "../services/operationsPolicy";
 import { ApplyDiagnosticsLogProfile } from "../logger";
-import { VerifyTotp } from "../security/totp";
+import { ConsumeAdminTotp } from "../security/adminMfa";
 import { IsRateLimited } from "../security/rateLimit";
 import { GetP2PExtension } from "../extensions/p2p";
 
@@ -28,11 +28,12 @@ export async function GetOperationsOverview(_req: Request, res: Response): Promi
     });
 }
 
-/** Operator step-up for a safety reduction: a fresh authenticator code, rate limited per operator. */
-export function VerifyOperationsStepUp(actorUserId: string, code: unknown): boolean {
-    const secret = process.env.ADMIN_OPERATIONS_TOTP_SECRET?.trim() || process.env.ADMIN_TOTP_SECRET?.trim();
-    const rateLimited = IsRateLimited(`admin-operations-step-up:${actorUserId}`, 6, 15 * 60_000);
-    return Boolean(secret) && !rateLimited && VerifyTotp(secret!, code);
+/** Operator step-up for a safety reduction: a fresh code from the operator's own authenticator (or, before they
+ *  enrol, ADMIN_OPERATIONS_TOTP_SECRET / ADMIN_TOTP_SECRET), rate limited and single-use (FINDINGS M5). */
+export async function VerifyOperationsStepUp(actorUserId: string, code: unknown): Promise<boolean> {
+    const shared = process.env.ADMIN_OPERATIONS_TOTP_SECRET?.trim() || process.env.ADMIN_TOTP_SECRET?.trim() || undefined;
+    if (IsRateLimited(`admin-operations-step-up:${actorUserId}`, 6, 15 * 60_000)) return false;
+    return ConsumeAdminTotp(actorUserId, code, "lastOpsStep", shared);
 }
 
 export async function UpdateOperationsPolicy(req: Request, res: Response): Promise<void> {
@@ -55,7 +56,7 @@ export async function UpdateOperationsPolicy(req: Request, res: Response): Promi
         if (before.version !== expectedVersion) return { kind: "CONFLICT" as const, before };
         const requested = { guardEnforcement, diagnosticsProfile } as const;
         const weakeningCodes = OperationsPolicyWeakeningCodes(before, requested);
-        if (weakeningCodes.length > 0 && !VerifyOperationsStepUp(actor.userId, req.body?.breakGlassTotp)) {
+        if (weakeningCodes.length > 0 && !(await VerifyOperationsStepUp(actor.userId, req.body?.breakGlassTotp))) {
             await repos.admin.appendAudit({
                 id: crypto.randomUUID(), actorUserId: actor.userId,
                 action: "operations.policy.weakening_rejected", oldState: before,

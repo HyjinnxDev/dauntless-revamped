@@ -23,12 +23,9 @@ import {
 // IsValidGameserverAPIKey) and controllers/auth.ts (DrainAndRegisterUserAPIKeys,
 // GetUserIDForAPIKey).
 //
-// The current lookup is a full-table scan with a constant-time hash comparison
-// per row (crypto.timingSafeEqual). Plan section 6.10 flags this as an eventual
-// optimization target (direct lookup by hash) for the Mongo adapter — Phase M1/M2
-// deliberately preserve the scan-based semantics exactly (same accepted
-// credentials, same timing-safe comparison), matching plan section 6.10's
-// requirement that "this optimization must retain the same accepted credentials."
+// [Revamped 2026-11-03] User keys are looked up by their HMAC hash (indexed) and gameserver hashes are cached
+// in memory by controllers/apikeys.ts, instead of a full scan per request (FINDINGS M7). The same credentials
+// are accepted: both sides of the comparison are the same keyed HMAC.
 export interface ApiKeyRepository {
     findAllGameServerKeyHashes(): Promise<GameServerApiKeyRecord[]>;
     insertGameServerKeyHash(keyHash: string): Promise<void>;
@@ -37,7 +34,7 @@ export interface ApiKeyRepository {
     findAllGameServerKeysToRegister(): Promise<GameServerApiKeyToRegisterRecord[]>;
     clearGameServerKeysToRegister(): Promise<void>;
 
-    findAllUserKeyHashes(): Promise<UserApiKeyRecord[]>;
+    findUserKeyByHash(keyHash: string): Promise<UserApiKeyRecord | null>;
     insertUserKeyHash(userId: string, keyHash: string): Promise<void>;
     findAllUserKeysToRegister(): Promise<UserApiKeyToRegisterRecord[]>;
     clearUserKeysToRegister(): Promise<void>;

@@ -4,7 +4,11 @@ import type { AddressInfo } from "node:net";
 import test from "node:test";
 import express from "express";
 import { rateLimit } from "express-rate-limit";
+
+process.env.API_KEY_HASH_SECRET ??= "test-only-api-key-hash-secret-0123456789abcdef";
+
 import { DEFAULT_GAMESERVER_REQUESTS_PER_MINUTE, DEFAULT_REQUESTS_PER_MINUTE, RequestRateLimitOptions } from "./rateLimit";
+import { HashGameserverAPIKey, SetGameserverKeyHashesForTest } from "../controllers/apikeys";
 
 function request(port: number, headers: Record<string, string> = {}): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -33,7 +37,9 @@ async function withLimitedApp(environment: NodeJS.ProcessEnv, run: (port: number
     }
 }
 
-const GameserverHeader = { "x-mysticparadox-gameserver-apikey": "any-value" };
+SetGameserverKeyHashesForTest([HashGameserverAPIKey("real-gameserver-key")]);
+const GameserverHeader = { "x-mysticparadox-gameserver-apikey": "real-gameserver-key" };
+const ForgedHeader = { "x-mysticparadox-gameserver-apikey": "any-value" };
 
 test("request budget defaults, overrides and ignores invalid values", () => {
     const req = (headers: Record<string, string>) => ({ headers, ip: "203.0.113.7" }) as any;
@@ -51,6 +57,10 @@ test("request budget defaults, overrides and ignores invalid values", () => {
     const key = RequestRateLimitOptions({}).keyGenerator as (req: any, res: any) => string;
     assert.equal(key(req({}), {}), "client:203.0.113.7");
     assert.equal(key(req(GameserverHeader), {}), "gameserver:203.0.113.7");
+
+    // FINDINGS M7: a junk header no longer buys the gameserver budget.
+    assert.equal(limit({}, ForgedHeader), DEFAULT_REQUESTS_PER_MINUTE);
+    assert.equal(key(req(ForgedHeader), {}), "client:203.0.113.7");
 });
 
 test("client and gameserver calls from one address use separate budgets", async () => {
