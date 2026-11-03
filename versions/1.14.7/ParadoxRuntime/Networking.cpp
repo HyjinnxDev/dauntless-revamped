@@ -11,6 +11,7 @@
 
 #include "networking.h"
 #include "P2PHooks.h"
+#include "RuntimeShared.h"
 
 #include <fstream>
 #include <iostream>
@@ -58,42 +59,11 @@ namespace Networking {
         return IsReadablePointer(Data, static_cast<size_t>(Num) * sizeof(void*));
     }
 
-    // Log directory derived from the game .exe path (mirrors dllmain's MpLogDir) so net
-    // telemetry appears on the VPS too. The previous hardcoded dev-box debug path only
-    // exists on the dev box, so every NetLog write silently failed on the VPS and the
-    // [TickNetLoop] actor-loop telemetry (the exact evidence needed for the 2-player join)
-    // was lost. Not under loader lock (called from Listen()/TickNetworking() on MainThread),
-    // so a plain function-local static is safe.
-    static const char* NetLogDir() {
-        static char Dir[MAX_PATH] = { 0 };
-        static bool Ready = false;
-        if (!Ready) {
-            char ExePath[MAX_PATH];
-            DWORD n = GetModuleFileNameA(nullptr, ExePath, MAX_PATH);
-            if (n > 0 && n < MAX_PATH) {
-                int slash = -1;
-                for (DWORD i = 0; i < n; ++i) { if (ExePath[i] == '\\' || ExePath[i] == '/') { slash = (int)i; } }
-                if (slash >= 0) {
-                    for (int i = 0; i <= slash; ++i) { Dir[i] = ExePath[i]; }
-                    Dir[slash + 1] = '\0';
-                }
-            }
-            Ready = true;
-        }
-        return Dir;
-    }
-
+    // [Revamped 2026-11-03] Through MpLog (dllmain.cpp): one locked append handle per process. NetLog used to open
+    // the same per-port file itself, unlocked, and its lines could interleave with MpLog's (FINDINGS M11).
     static void NetLog(int Port, const std::string& Msg) {
-        char Path[MAX_PATH];
-        // Same file as dllmain's MpLog ("<exedir>\mysticparadox_dll_port<port>.log") so [TickNetLoop]
-        // and [NetTickTrace] lines interleave in one per-port log.
-        sprintf_s(Path, "%smysticparadox_dll_port%d.log", NetLogDir(), Port);
-
-        std::ofstream File(Path, std::ios::app);
-        if (File.is_open()) {
-            File << Msg << "\n";
-            File.flush();
-        }
+        (void)Port; // MpLog writes to the file of Globals::Port, the same port every caller passes
+        MpLog(Msg);
     }
 
     // [A/B 2026-07-16] NATIVE_REPLICATION_ONLY.flag — reversible diagnostic switch for the

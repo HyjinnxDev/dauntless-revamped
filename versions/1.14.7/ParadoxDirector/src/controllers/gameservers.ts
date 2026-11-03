@@ -68,6 +68,16 @@ export type Gameserver = {
 // (4 = EndOfHunt). players: connected player count. at: epoch ms the line arrived.
 export type HuntState = { hpPct: number, players: number, subState: number, at: number };
 
+// [Revamped 2026-11-03] FINDINGS M15: the game server's API key travels in its environment, not on its command line
+// (any local process can read a command line). The child gets the Director's environment minus anything that looks
+// like a secret, plus the key under the one name the DLL reads.
+const kSecretEnvName = /(KEY|SECRET|TOKEN|PASS|PRIVATE|CREDENTIAL|MONGODB)/i;
+export function GameserverChildEnvironment(Base: NodeJS.ProcessEnv, ApiKey: string, Extra: Record<string, string>): NodeJS.ProcessEnv {
+    const Env: NodeJS.ProcessEnv = {};
+    for (const [Name, Value] of Object.entries(Base)) if (!kSecretEnvName.test(Name)) Env[Name] = Value;
+    return { ...Env, ...Extra, MYSTICPARADOX_GAMESERVER_API_KEY: ApiKey };
+}
+
 export function ParseHuntStateLine(Line: string): Omit<HuntState, "at"> | undefined {
     const Match = /^MYSTICPARADOX_HUNT_STATE hpPct=(-?\d+) players=(\d+) subState=(\d+)$/.exec(Line.trim());
     if (!Match) return undefined;
@@ -522,19 +532,18 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     // override and keep following the rotating schedule; an in-progress Trial retains the row it was
     // launched for even if the global UTC bucket changes while its process is starting/running.
     const ArenaWeekMatch = MatchmakerHuntId?.match(/^Arena_MatchmakerHunt_(?:Easy|Hard|Elite)_(\d{3})$/);
-    const ChildEnvironment = {
-        ...process.env,
+    const ChildEnvironment = GameserverChildEnvironment(process.env, METAGAME_API_KEY, {
         MYSTICPARADOX_GAMESERVER_LAUNCH_ID: Id,
         ...(ArenaWeekMatch ? { MYSTICPARADOX_TRIALS_WEEK: ArenaWeekMatch[1] } : {}),
         ...(GameMode != undefined ? { MYSTICPARADOX_GAME_MODE: GameMode } : {}),
         // [2026-10-20] The DLL appends ?GauntletLevel=N to the map URL; BPGM_ArchonGauntlet picks its lineup from it.
         ...(GauntletLevel != undefined ? { MYSTICPARADOX_GAUNTLET_LEVEL: String(GauntletLevel) } : {})
-    };
+    });
 
     let Child: ReturnType<typeof spawn>;
     try {
         Child = spawn(GAMESERVER_BINARY_PATH, [
-            METAGAME_API_KEY,
+            "-", // argv[1] used to carry the API key; kept as a placeholder so the DLL's argument positions don't move
             Port.toString(),
             Map,
             Behemoth != undefined ? Behemoth : "NO_BEHEMOTH",

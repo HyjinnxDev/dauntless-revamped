@@ -208,30 +208,74 @@ static bool VerboseDiag() {
     return Cached == 1;
 }
 
-// [1.12.0] Persistent, flushed diagnostic log from MainThread/hooks only.
+// [1.12.0] Persistent diagnostic log from MainThread/hooks only.
 // One file per server port so concurrently-spawned gameservers don't clobber each other.
 // Writes next to the game .exe (see MpLogDir) so logs are visible on the VPS too.
+//
+// [Revamped 2026-11-03] FINDINGS M11: every line used to open, flush and close a std::ofstream, with no lock across
+// threads and no size cap. Now one append handle per process behind an SRWLOCK (POD, needs no constructor, so it is
+// safe under the loader lock), lines are written whole with one WriteFile (no interleaving), the OS cache does the
+// buffering (a crash keeps every written line), and the file rotates to .1 above 50 MB. A Win32 handle rather than a
+// std::ofstream: nothing for the CRT to tear down at exit (see g_MpProcessDetaching). NetLog (Networking.cpp) writes
+// through here too.
+static SRWLOCK g_MpLogLock = SRWLOCK_INIT;
+static HANDLE g_MpLogFile = INVALID_HANDLE_VALUE;
+static int g_MpLogPort = -1;
+static LONGLONG g_MpLogBytes = 0;
+static constexpr LONGLONG kMpLogRotateBytes = 50LL * 1024 * 1024;
+
+static void MpLogPath(char (&Path)[MAX_PATH], int Port) {
+    sprintf_s(Path, "%smysticparadox_dll_port%d.log", MpLogDir(), Port);
+}
+
+// Caller holds g_MpLogLock.
+static void MpLogOpenLocked(int Port) {
+    if (g_MpLogFile != INVALID_HANDLE_VALUE) CloseHandle(g_MpLogFile);
+    char Path[MAX_PATH];
+    MpLogPath(Path, Port);
+    g_MpLogFile = CreateFileA(Path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    LARGE_INTEGER Size{};
+    g_MpLogBytes = (g_MpLogFile != INVALID_HANDLE_VALUE && GetFileSizeEx(g_MpLogFile, &Size)) ? Size.QuadPart : 0;
+    g_MpLogPort = Port;
+}
+
 void MpLog(const std::string& Msg) {
     if (MpProcessDetaching()) {
         return;
     }
-    char Path[MAX_PATH];
-    sprintf_s(Path, "%smysticparadox_dll_port%d.log", MpLogDir(), Globals::Port);
+    SYSTEMTIME Now{};
+    GetLocalTime(&Now);
+    char Prefix[48];
+    const int PrefixLength = sprintf_s(Prefix, "[%02u:%02u:%02u.%03u] pid=%lu ",
+        Now.wHour, Now.wMinute, Now.wSecond, Now.wMilliseconds, GetCurrentProcessId());
+    std::string Line;
+    Line.reserve(static_cast<size_t>(PrefixLength > 0 ? PrefixLength : 0) + Msg.size() + 1);
+    if (PrefixLength > 0) Line.append(Prefix, static_cast<size_t>(PrefixLength));
+    Line.append(Msg);
+    Line.push_back('\n');
 
-    std::ofstream File(Path, std::ios::app);
-
-    if (File.is_open()) {
-        SYSTEMTIME Now{};
-        GetLocalTime(&Now);
-        File << "["
-             << std::setfill('0') << std::setw(2) << Now.wHour << ":"
-             << std::setfill('0') << std::setw(2) << Now.wMinute << ":"
-             << std::setfill('0') << std::setw(2) << Now.wSecond << "."
-             << std::setfill('0') << std::setw(3) << Now.wMilliseconds << "] "
-             << "pid=" << GetCurrentProcessId() << " "
-             << Msg << "\n";
-        File.flush();
+    AcquireSRWLockExclusive(&g_MpLogLock);
+    const int Port = Globals::Port;
+    if (g_MpLogFile == INVALID_HANDLE_VALUE || g_MpLogPort != Port) {
+        MpLogOpenLocked(Port);
     }
+    else if (g_MpLogBytes > kMpLogRotateBytes) {
+        CloseHandle(g_MpLogFile);
+        g_MpLogFile = INVALID_HANDLE_VALUE;
+        char Path[MAX_PATH];
+        char Rotated[MAX_PATH + 2];
+        MpLogPath(Path, Port);
+        sprintf_s(Rotated, "%s.1", Path);
+        MoveFileExA(Path, Rotated, MOVEFILE_REPLACE_EXISTING);
+        MpLogOpenLocked(Port);
+    }
+    DWORD Written = 0;
+    if (g_MpLogFile != INVALID_HANDLE_VALUE &&
+        WriteFile(g_MpLogFile, Line.data(), static_cast<DWORD>(Line.size()), &Written, nullptr)) {
+        g_MpLogBytes += Written;
+    }
+    ReleaseSRWLockExclusive(&g_MpLogLock);
 }
 
 bool MpReadEnvironment(const char* Name, std::string& Value, size_t Maximum) {
@@ -3873,10 +3917,6 @@ static void InstallProgressionReadinessProbe();
 static void InstallActiveHuntPassDriver();
 // [1.14.7 load complete probe] same reason: defined later, installed from InitServerHooks.
 static void InstallLoadCompleteProbe();
-// [1.14.7 FindRow probe] same reason: defined later, installed from InitServerHooks.
-static void InstallFindRowProbe();
-// [1.14.7 config callback probe] same reason: defined later, installed from InitServerHooks.
-static void InstallConfigCompleteProbe();
 // [1.14.7 interface query call] defined later; used from the progression cache probe.
 static void CallInterfaceQuerySlot(void* Interface, uintptr_t SlotOffset);
 // [1.14.7 caller scan] defined later; installed from InitServerHooks.
@@ -3885,8 +3925,6 @@ static void InstallGameInstanceQueryHook();
 static void DumpFeatureFlags(const char* Tag);
 // [1.14.7 hunt pass query call] defined later; used from the readiness hook.
 static void CallHuntPassSeasonQuery();
-// [1.14.7 mastery array probe] same reason: defined later, installed from InitServerHooks.
-static void InstallMasteryProbe();
 // [1.14.7 InteractionCalloutWidget::OnSetDisabled guard] same reason: defined later.
 static void InstallInteractionCalloutSetDisabledGuard();
 // [1.14.7 loader state dump] same reason: defined later, used from the server tick.
@@ -23492,79 +23530,6 @@ static void InstallLoadCompleteProbe() {
         + " enable=" + MH_StatusToString(Enable));
 }
 
-// [1.14.7 FINDROW PROBE 2026-10-03] FUN_1418E6C70 is UDataTable::FindRow - the function behind every
-// "requested invalid row 'None'" / "specified no row" message in this investigation. UHuntPassComponent
-// ::LoadComplete calls it with the season id taken from gameInstance+0x6d0. Logging the (table, name,
-// result) triple shows exactly which name it searches for and whether the table contains it, which is the
-// last unknown in the hunt pass chain.
-using FindRowFn = void*(*)(void*, unsigned long long, void*, char);
-static FindRowFn OrigFindRow = nullptr;
-
-// [1.14.7 FIX 2026-10-03] This hook originally returned void while UDataTable::FindRow returns a row
-// pointer. The caller then received whatever was left in RAX (observed: 1), took the non-null branch and
-// dereferenced [RAX+0x10], which is the recorded EXCEPTION_ACCESS_VIOLATION reading 0x11 at RVA 0x01A19CBF.
-// The return value MUST be preserved.
-static void* FindRowProbeHook(void* Table, unsigned long long RowName, void* Out, char Param4) {
-    void* Result = OrigFindRow ? OrigFindRow(Table, RowName, Out, Param4) : nullptr;
-    static std::atomic<int> s_seq{ 0 };
-    const int Seq = s_seq.fetch_add(1, std::memory_order_relaxed);
-    if (Seq < 14) {
-        MpLog("[FindRowProbe] seq=" + std::to_string(Seq)
-            + " table=" + MpPtr(Table)
-            + " nameLow=" + std::to_string(static_cast<unsigned int>(RowName & 0xFFFFFFFFu))
-            + " nameHigh=" + std::to_string(static_cast<unsigned int>(RowName >> 32))
-            + " p4=" + std::to_string(static_cast<int>(Param4))
-            + " result=" + MpPtr(Result));
-    }
-    return Result;
-}
-
-static void InstallFindRowProbe() {
-    MH_STATUS Create = MH_CreateHook((void*)(Globals::BaseAddress + 0x018E6C70),
-        FindRowProbeHook, reinterpret_cast<LPVOID*>(&OrigFindRow));
-    MH_STATUS Enable = Create == MH_OK ? MH_EnableHook((void*)(Globals::BaseAddress + 0x018E6C70)) : Create;
-    MpLog(std::string("[FindRowProbe] hook (+0x18E6C70) create=") + MH_StatusToString(Create)
-        + " enable=" + MH_StatusToString(Enable));
-}
-
-// [1.14.7 CONFIG CALLBACK PROBE 2026-10-03] FUN_140E73D40 is the completion of the progression
-// configuration query (it references the "OnQueryProgressionConfigurationComplete" string) and it is what
-// populates the online progression interface's configuration map at interface+0x30 - the map the season
-// lookup reads through the virtual at 0x00E5E910. Logging whether it runs, and what the interface holds
-// afterwards, settles whether the configuration is ever populated - the question the season failure reduces
-// to.
-using ConfigCompleteFn = void(*)(long long, void*, long long*, void*, long long*);
-static ConfigCompleteFn OrigConfigComplete = nullptr;
-
-static void ConfigCompleteProbeHook(long long Interface, void* P2, long long* P3, void* P4, long long* P5) {
-    static std::atomic<int> s_seq{ 0 };
-    const int Seq = s_seq.fetch_add(1, std::memory_order_relaxed);
-    if (Seq < 4) {
-        MpLog("[ConfigCompleteProbe] seq=" + std::to_string(Seq)
-            + " ENTER interface=" + MpPtr(reinterpret_cast<void*>(Interface)));
-    }
-    if (OrigConfigComplete) OrigConfigComplete(Interface, P2, P3, P4, P5);
-    if (Seq < 4) {
-        std::string Fields = "<unreadable>";
-        if (IsReadablePointer(reinterpret_cast<void*>(Interface), 0x48)) {
-            Fields = "";
-            for (int Off = 0x28; Off <= 0x40; Off += 8) {
-                Fields += " +0x" + std::to_string(Off) + "="
-                    + MpPtr(reinterpret_cast<void*>(SafeReadPtr(Interface + Off, 0x00)));
-            }
-        }
-        MpLog("[ConfigCompleteProbe] seq=" + std::to_string(Seq) + " AFTER" + Fields);
-    }
-}
-
-static void InstallConfigCompleteProbe() {
-    MH_STATUS Create = MH_CreateHook((void*)(Globals::BaseAddress + 0x00E73D40),
-        ConfigCompleteProbeHook, reinterpret_cast<LPVOID*>(&OrigConfigComplete));
-    MH_STATUS Enable = Create == MH_OK ? MH_EnableHook((void*)(Globals::BaseAddress + 0x00E73D40)) : Create;
-    MpLog(std::string("[ConfigCompleteProbe] hook (+0xE73D40) create=") + MH_StatusToString(Create)
-        + " enable=" + MH_StatusToString(Enable));
-}
-
 // [1.14.7 INTERFACE QUERY CALL 2026-10-03] The online progression interface's vtable was dumped (RVA
 // 0x513E990): +0x70 -> 0xE62C80 is the "is the configuration loaded" check that FUN_1419053a0 calls, and
 // +0x88 -> 0xE5E910 is the season window lookup (already hooked). The string "QueryProgressionConfiguration"
@@ -23698,56 +23663,6 @@ static void CallHuntPassSeasonQuery() {
     SDK::TDelegate<void(bool, const SDK::FHuntPassSeasonDataTable&)> Event{};
     GI->QueryCurrentHuntPassSeasonData(Event);
     MpLog("[HuntPassQuery] returned");
-}
-
-// [1.14.7 MASTERY ARRAY PROBE 2026-10-03] FUN_1419fbcd0 (UHuntPassComponent::DoesHuntPassHaveUnclaimedRewards)
-// matches the requested track id against an array on the component itself:
-//   plVar13 = *(longlong **)(param_1 + 0x1d8);                          // array
-//   plVar8  = *(int *)(param_1 + 0x1e0) * 0x1c + plVar13;               // count * stride 0x1c
-//   if (*param_2 == *plVar7) { ... }                                    // id match
-// and logs "Failed to lookup hunt pass data for '%s'" when nothing matches. With the configuration now
-// populating (section BF) this is the next lookup that fails, so the probe reports whether the array is
-// empty (unpopulated) or populated with ids that do not include the requested one.
-// [1.14.7 FIX 2026-10-04] UHuntPassComponent::DoesHuntPassHaveUnclaimedRewards returns bool; this probe
-// declared void and dropped the return value, the same ABI mistake that made FindRowProbeHook fault. The
-// hook now returns the original's result.
-using UnclaimedRewardsFn = bool(*)(void*, void*);
-static UnclaimedRewardsFn OrigUnclaimedRewards = nullptr;
-
-static bool UnclaimedRewardsProbeHook(void* Component, void* TrackId) {
-    static std::atomic<int> s_seq{ 0 };
-    const int Seq = s_seq.fetch_add(1, std::memory_order_relaxed);
-    if (Seq < 6 && Component && IsReadablePointer(Component, 0x1E8)) {
-        const uintptr_t Array = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(Component) + 0x1D8);
-        const int32_t Count = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(Component) + 0x1E0);
-        // Resolve the requested id and the first few array ids so the mismatch is visible by name.
-        std::string Wanted = "<unresolved>";
-        std::string Have = "";
-        if (TrackId && IsReadablePointer(TrackId, 0x08)) {
-            const SDK::FName* WantedName = reinterpret_cast<const SDK::FName*>(TrackId);
-            Wanted = WantedName->ToString();
-        }
-        if (Array && Count > 0 && Count < 200) {
-            for (int i = 0; i < Count && i < 6; ++i) {
-                const SDK::FName* EntryName = reinterpret_cast<const SDK::FName*>(Array + static_cast<uintptr_t>(i) * 0x1c);
-                Have += " [" + std::to_string(i) + "]" + EntryName->ToString();
-            }
-        }
-        MpLog("[MasteryProbe] seq=" + std::to_string(Seq)
-            + " count=" + std::to_string(Count)
-            + " wanted='" + Wanted + "'"
-            + " have:" + Have);
-    }
-    // [1.14.7 FIX 2026-10-04] The original returns bool; its result must be preserved.
-    return OrigUnclaimedRewards ? OrigUnclaimedRewards(Component, TrackId) : false;
-}
-
-static void InstallMasteryProbe() {
-    MH_STATUS Create = MH_CreateHook((void*)(Globals::BaseAddress + 0x019FBCD0),
-        UnclaimedRewardsProbeHook, reinterpret_cast<LPVOID*>(&OrigUnclaimedRewards));
-    MH_STATUS Enable = Create == MH_OK ? MH_EnableHook((void*)(Globals::BaseAddress + 0x019FBCD0)) : Create;
-    MpLog(std::string("[MasteryProbe] hook (+0x19FBCD0) create=") + MH_StatusToString(Create)
-        + " enable=" + MH_StatusToString(Enable));
 }
 
 // ============================================================================
@@ -25156,7 +25071,8 @@ void InitServerHooks() {
     // (see the block comment near the definitions).
     InstallProgressionReadinessProbe();
 
-    // [1.14.7 ABI AUDIT 2026-10-04] The six probes below are DISABLED.
+    // [1.14.7 ABI AUDIT 2026-10-04] The probes below are DISABLED. [Revamped 2026-11-03] The FindRow, ConfigComplete
+    // and Mastery probes were deleted (FINDINGS M13); the comment on the two faulting ones stays for the record.
     //
     // Two of them were declared void while their targets return a value, which handed the caller a garbage
     // RAX and killed the process - the recorded faults were EXCEPTION_ACCESS_VIOLATION reading 0x11
@@ -25175,10 +25091,7 @@ void InitServerHooks() {
     // Re-enable any probe below only after confirming its real signature.
     // InstallActiveHuntPassDriver();
     // InstallLoadCompleteProbe();
-    // InstallFindRowProbe();
-    // InstallConfigCompleteProbe();
     // InstallGameInstanceQueryHook();
-    // InstallMasteryProbe();
 
     // [1.14.7 confirmed Training crash] UInteractionCalloutWidget::OnSetDisabled dereferences a null
     // InteractionHint (widget+0x3A8) on a headless server. Guarded, original preserved when bound.
@@ -25475,8 +25388,16 @@ void Init() {
             // each value because GetGameDefaultMap is called much later on engine threads;
             // keeping raw Args[n] pointers caused a late std::wstring(wchar_t*) AV.
             if (Globals::AuthMode == Globals::ServerAuthMode::GlobalGameserver) {
-                Globals::ServerAPIKeyStorage = Args[1];
-                Globals::ServerAPIKey = Globals::ServerAPIKeyStorage.c_str();
+                // [Revamped 2026-11-03] FINDINGS M15: the Director passes the key in the child environment; argv[1]
+                // is "-". Any other argv[1] is an older Director that still sends it there.
+                std::string EnvKey;
+                if (MpReadEnvironment("MYSTICPARADOX_GAMESERVER_API_KEY", EnvKey, 256) && !EnvKey.empty())
+                    Globals::ServerAPIKeyStorage.assign(EnvKey.begin(), EnvKey.end());
+                else if (wcscmp(Args[1], L"-") != 0)
+                    Globals::ServerAPIKeyStorage = Args[1];
+                else
+                    MpLog("[Init] MYSTICPARADOX_GAMESERVER_API_KEY is missing: backend calls from this server will be refused");
+                Globals::ServerAPIKey = Globals::ServerAPIKeyStorage.empty() ? nullptr : Globals::ServerAPIKeyStorage.c_str();
             }
             else if (Globals::AuthMode == Globals::ServerAuthMode::HuntCapability) {
                 // The optional player-hosted mode reads and validates its own launch environment
@@ -25490,7 +25411,14 @@ void Init() {
             Globals::ExpectedPlayerStringStorage = Args[6];
             Globals::MyIpAndPortStorage = Args[7];
 
-            Globals::Port = std::stoi(std::wstring(Args[2]));
+            // [Revamped 2026-11-03] FINDINGS M12: std::stoi threw an uncaught exception inside DllMain on a bad port.
+            wchar_t* PortEnd = nullptr;
+            const long ParsedPort = wcstol(Args[2], &PortEnd, 10);
+            if (PortEnd == Args[2] || *PortEnd != L'\0' || ParsedPort < 1 || ParsedPort > 65535) {
+                MpLog("[Init] FATAL: launch argument 2 is not a port (1-65535); exiting");
+                TerminateProcess(GetCurrentProcess(), 1); // not ExitProcess: we hold the loader lock
+            }
+            Globals::Port = static_cast<int>(ParsedPort);
             Globals::MapPath = Globals::MapPathStorage.c_str();
             Globals::BehemothPath = Globals::BehemothPathStorage.c_str();
             Globals::MatchmakerHuntId = Globals::MatchmakerHuntIdStorage.c_str();
@@ -25530,7 +25458,7 @@ void Init() {
             // Try to parse Port from URL if present
             size_t portPos = cmdLine.find("Port=");
             if (portPos != std::string::npos) {
-                int parsedPort = std::stoi(cmdLine.substr(portPos + 5));
+                int parsedPort = static_cast<int>(strtol(cmdLine.c_str() + portPos + 5, nullptr, 10)); // no throw on junk
                 if (parsedPort > 0) {
                     Globals::Port = parsedPort;
                     InitLog(std::string("[Init] Parsed Port from URL: ") + std::to_string(Globals::Port));

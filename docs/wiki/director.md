@@ -92,7 +92,7 @@ The pool is FIFO (a just-freed port is reused last) and every lease records an o
 2. **Hunts only:** reap every "superseded" empty hunt (`IsSupersededHunt`, see Reaping), then enforce `MAX_CONCURRENT_HUNT_SERVERS` (count of non-hub entries in `Gameservers`). Over the cap throws `NoHuntCapacityError`. Then `Ports.take(launchId)`; none free throws `No free ports left!`.
 3. Open (append) the log file `port<N>_<label>.log` in `GAMESERVER_LOG_DIR`. The label is `ramsgate`, `training_dojo`, the behemoth asset's short name, or `hunt`. A banner line records port, map, behemoth, matchmaker hunt id, Gauntlet level and players.
 4. `spawn(GAMESERVER_BINARY_PATH, [...])` with `stdio: ["ignore","pipe","pipe"]` and `windowsHide` on (set `GAMESERVER_WINDOWS_HIDE=0` to see the window). Positional args, in order:
-   - `METAGAME_API_KEY`
+   - `-` (a placeholder: the API key used to go here; it now travels in the env, step 5)
    - port
    - map path
    - behemoth asset path, or `NO_BEHEMOTH`
@@ -100,7 +100,7 @@ The pool is FIFO (a just-freed port is reused last) and every lease records an o
    - expected players as `uid:playerHuntId,uid:playerHuntId`, or `NO_EXPECTED_PLAYERS`
    - `MY_IP:port` (the address the server advertises)
    - fixed UE args: `-EpicPortal -server -nullrhi -warp -nosound -RepDriverEnable` and `-LogCmds="LogPhoenixCharacter <GAMESERVER_CHARACTER_LOG>, LogOnline Verbose, LogLoad Off, LogGauntlet VeryVerbose, LogPhoenixGauntlet VeryVerbose"`
-5. Child env = the Director's whole environment plus `MYSTICPARADOX_GAMESERVER_LAUNCH_ID` (a UUID), `MYSTICPARADOX_TRIALS_WEEK` (the `NNN` of an `Arena_MatchmakerHunt_{Easy,Hard,Elite}_NNN` row) `MYSTICPARADOX_GAUNTLET_LEVEL` (when a level was given) and `MYSTICPARADOX_GAME_MODE` (the matchmaker row's `GameModeOverride`, when it is a `/Game/...` class path; the server never applies it itself, so story missions ran the map's default Escalation mode). The launch header in the per-port log shows it as `game=`. A synchronous spawn failure returns the port lease.
+5. Child env (`GameserverChildEnvironment`) = the Director's environment minus every name matching `KEY|SECRET|TOKEN|PASS|PRIVATE|CREDENTIAL|MONGODB`, plus `MYSTICPARADOX_GAMESERVER_API_KEY` (= `METAGAME_API_KEY`), `MYSTICPARADOX_GAMESERVER_LAUNCH_ID` (a UUID), `MYSTICPARADOX_TRIALS_WEEK` (the `NNN` of an `Arena_MatchmakerHunt_{Easy,Hard,Elite}_NNN` row) `MYSTICPARADOX_GAUNTLET_LEVEL` (when a level was given) and `MYSTICPARADOX_GAME_MODE` (the matchmaker row's `GameModeOverride`, when it is a `/Game/...` class path; the server never applies it itself, so story missions ran the map's default Escalation mode). The launch header in the per-port log shows it as `game=`. A synchronous spawn failure returns the port lease.
 6. stdout and stderr are piped into the log file with `end: false`; the log closes on the child's `close`, so the `=== Gameserver process exited ... ===` banner is always written (the first pipe to end used to close it). That pipe must always keep draining. An earlier readiness check paused the stream and froze the game thread. The long comment in `WaitForServerReady` explains it. Do not pause or destroy `Child.stdout`. The child is `unref()`ed.
 7. Wait for the line `MYSTICPARADOX_GAMESERVER_READY launchId=<id> port=<n>` on stdout, up to `GAMESERVER_READY_TIMEOUT_MS`. The DLL prints it only after the UE listen socket exists. A mismatched launch id or port is ignored with a warning. On timeout, early exit or spawn error the server is marked `failed` and removed from the list; a still-running child is killed (its exit event returns the port), an already-dead hunt returns its port at once. `GameserverStartupError` is thrown.
 8. Only after the ready line is the server `state: "ready"` (`<label> ready on MY_IP:port after Nms`). Until then it is never returned to a caller.
@@ -219,7 +219,7 @@ Inputs: `player_hunts.jsonl`, `matchmaker_hunts.jsonl` and `hunt_export_manifest
 |---|---|
 | [ParadoxBackend](backend.md) matchmaking | `controllers/matchmaking.ts` POSTs to `http://$DEPLOYSERVER_URL/api/matchmaker/handle-matchmaking-for-player` and `/join-public-hunt`, and GETs `/api/hub-status` and `/api/hunt-status?port=N` for the join-in-progress and fencing checks. `DEPLOYSERVER_URL` is `127.0.0.1:<Director PORT>`. |
 | Backend staff console | `controllers/adminServers.ts` calls `/api/admin/gameservers`, `/gameservers/:id/stop` and `/gameservers/:id/log` with an `x-api-key` header. The key is the first entry of the backend's `GAMESERVER_API_KEYS`, which must equal the Director's `METAGAME_API_KEY`. |
-| Game server processes | Spawn with argv and env (above). Read their stdout for the ready and hunt-state markers. The servers call the backend with `METAGAME_API_KEY` (see [Runtime](runtime.md)). |
+| Game server processes | Spawn with argv and env (above). Read their stdout for the ready and hunt-state markers. The servers call the backend with `METAGAME_API_KEY`, received as `MYSTICPARADOX_GAMESERVER_API_KEY` (see [Runtime](runtime.md)). |
 | Players | Never talk to the Director. They get `MY_IP:port` through the backend and connect over UDP. Open those ports with [host-firewall.ps1](host-scripts.md). |
 | Hunt tables | `game-data/*.json`, produced by CatalogExporter (`EXPORT_HUNTS=1`) and `import_hunt_tables.cjs`, see [Tools](tools.md). |
 | Host scripts | [restart-server.ps1](host-scripts.md) runs `npm run build`, then `node --env-file=.env dist/server.js` (bypassing `prestart`), output to `<data>\logs\director.log`. |
@@ -235,7 +235,7 @@ All from `ParadoxDirector/.env` (template: `.env.example`). Node loads it with `
 | `MY_IP` | required | Host handed to clients and passed to each server as `MY_IP:port`. |
 | `PORT_RANGE_BEGIN`, `PORT_RANGE_END` | required | UDP range. Last port Ramsgate, second-to-last Dojo, the rest hunts. |
 | `GAMESERVER_BINARY_PATH` | required | Full path to `Dauntless-Win64-Shipping.exe`. |
-| `METAGAME_API_KEY` | required | First argv of every server; the `/api/admin` key. |
+| `METAGAME_API_KEY` | required | Given to every server as `MYSTICPARADOX_GAMESERVER_API_KEY` (env, not argv); the `/api/admin` key. |
 | `SECONDS_TO_WAIT_BETWEEN_GAMESERVER_STARTUP` | none | Hunt stagger in seconds. |
 | `GAMESERVER_READY_TIMEOUT_MS` | 30000 | Ready-marker wait. |
 | `HUB_PROMPT_RESTART` | `1` | `0`, `false`, `no`, `off` (any case) disable prompt hub restarts. |
@@ -268,7 +268,7 @@ Build and run: `npm run build` (clean + `tsc`), `npm start` (`prestart` rebuilds
 - **SHARED hunts are always private**, so `join-public-hunt` can only find ISLAND hunts the backend started with `IsPrivate: false`.
 - **`[HuntTableGap]` errors** mean the client asked for a hunt id missing from `player_hunts_table.json`. Re-export with CatalogExporter and import (see `game-data/README.md`).
 - **Game data is not in git.** A fresh checkout needs real tables or the `*.example.json` copies. With placeholders the Director boots but cannot launch real hunts. Loading happens at import time, so a missing table crashes startup with a clear error. `emptyHuntReap.test.ts` imports `gameservers.ts`, so it needs the tables too even though it is not named `*.gamedata.test.ts`.
-- **Two keys named alike.** `METAGAME_API_KEY` (Director) and the backend's `GAMESERVER_API_KEYS` must match. It is passed on the game server's command line, so it is visible in the local process list.
+- **Two keys named alike.** `METAGAME_API_KEY` (Director) and the backend's `GAMESERVER_API_KEYS` must match. It reaches game servers through their environment (`MYSTICPARADOX_GAMESERVER_API_KEY`), not the command line, so the process list doesn't show it (FINDINGS M15). Other Director secrets are filtered out of the child env by name; a new secret env var whose name has none of `KEY|SECRET|TOKEN|PASS|PRIVATE|CREDENTIAL|MONGODB` would leak to the child.
 - **Hub ports are the last two in the range.** Shrinking the range changes which ports are hubs. The range needs at least 3 ports. `host-firewall.ps1` defaults and `server-sizing-log.ps1` assume 8789 and 8790.
 - **Do not add anything that pauses `Child.stdout`.** See the freeze comment in `WaitForServerReady`.
 - **Status and admin routes are mounted before request logging**, so the dashboard and fencing polls do not flood the log.

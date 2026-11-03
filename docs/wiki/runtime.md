@@ -48,7 +48,7 @@ Everything lives in `versions/1.14.7/ParadoxRuntime/`. Full table in [runtime-fi
 
 ### 2. Client vs server mode
 
-- **Server**: `Init()` reads `MYSTICPARADOX_AUTH_MODE` (empty or `GLOBAL_GAMESERVER` = normal; anything else is invalid with the stub and `MainThread` exits with `0xE102`). It writes `GIsServer=1`, `GIsClient=0` into the exe. With more than 8 argv entries (a Director launch) it copies `argv[1]` gameserver API key, `[2]` port, `[3]` map, `[4]` behemoth, `[5]` matchmaker hunt id, `[6]` expected player roster, `[7]` IP:port. With fewer it is "manual test mode" (port 8777 or `Port=` from the command line, map `Ramsgate` or the first argument, empty-server watchdog off). Then `InitServerHooks()`.
+- **Server**: `Init()` reads `MYSTICPARADOX_AUTH_MODE` (empty or `GLOBAL_GAMESERVER` = normal; anything else is invalid with the stub and `MainThread` exits with `0xE102`). It writes `GIsServer=1`, `GIsClient=0` into the exe. With more than 8 argv entries (a Director launch) it reads the gameserver API key from `MYSTICPARADOX_GAMESERVER_API_KEY` (or `argv[1]` when that isn't `-`, an older Director) and copies `[2]` port (checked 1-65535 with `wcstol`; anything else logs `[Init] FATAL` and terminates the process), `[3]` map, `[4]` behemoth, `[5]` matchmaker hunt id, `[6]` expected player roster, `[7]` IP:port. With fewer it is "manual test mode" (port 8777 or `Port=` from the command line, map `Ramsgate` or the first argument, empty-server watchdog off). Then `InitServerHooks()`.
 - **Client**: `InitClientHooks()`, which also starts the crash reporter, voice, join prompt and window lock.
 - Both then start `MainThread`. Server: it waits up to 30 s for a `UWorld` and sets `Globals::DoListen`; the next `GameEngineTickHook` calls `Networking::Listen`. With `MAP_URL_LISTEN.flag` the map URL gets `?listen`, the engine creates the listener, and the tick only announces readiness once `UWorld::NetDriver` exists. Either way the READY line is `MYSTICPARADOX_GAMESERVER_READY launchId=... port=...` on stdout, printed only when `MYSTICPARADOX_GAMESERVER_LAUNCH_ID` is set. The Director waits for it. Client: after 3 s `MainThread` flags console setup; the game thread spawns a `UConsole` on F2.
 
@@ -91,7 +91,7 @@ Servers also talk to the Director on stdout: the READY line and, on hunts, `MYST
 
 ### 6. Logging
 
-- `MpLog` appends to `mysticparadox_dll_port<N>.log` next to the game exe (N = server port, 0 on a client). Format `[HH:MM:SS.mmm] pid=<pid> <message>`; every call opens and flushes the file. `Networking.cpp`'s `NetLog` writes to the same file without timestamp or pid.
+- `MpLog` appends to `mysticparadox_dll_port<N>.log` next to the game exe (N = server port, 0 on a client). Format `[HH:MM:SS.mmm] pid=<pid> <message>`. One `FILE_APPEND_DATA` handle per process behind an `SRWLOCK`, one `WriteFile` per line (no interleaving between threads, no flush: the OS cache keeps lines a crash would lose), rotated to `.1` above 50 MB, so a port keeps at most about 100 MB. `Networking.cpp`'s `NetLog` writes through it.
 - Lines are tagged with a bracketed prefix, for example `[HuntStats]`, `[Voip]`, `[InvHeal]`, `[NetRate]`, `[LateJoin]`, `[UrlRedirect]`, `[Move10]`, `[CineCam]`. Every tag: [runtime-files](runtime-files.md#log-tags).
 - Hunt servers also write `HuntCombat\hunt_<start>_port<N>.log` beside the exe (`MpHuntCombatLog`).
 - `CrashReporter.cpp` writes `MysticReport.json` and `MysticDump.dmp` into Unreal's `UE4CC-*` crash folder (or `%TEMP%\MysticCrash-<id>`) and uploads them with the engine's `CrashContext.runtime-xml`.
@@ -173,7 +173,7 @@ Hooks `SetWindowPos`, `MoveWindow`, `SetWindowLong(Ptr)W`. If the engine repeats
 | `MpHuntJoinTick` | Once a second on hunts: rescales behemoth HP when the player count rises (`DISABLE_LATE_JOIN_RESCALE.flag`) and prints `MYSTICPARADOX_HUNT_STATE`. |
 | `MpHoldRestartForParty` | Holds launch-roster players pawn-less until all have joined, up to 40 s (`DISABLE_PARTY_ARRIVAL_HOLD.flag`). Party drop-in arrival is opt-in with `ENABLE_PARTY_DROP_IN.flag`. |
 | `JoinPrompt.cpp` + `JoinPopup` | Client worker thread polls `/mystic/party/hunt-offer`; the game thread shows the popup; the answer posts `join-hunt`. |
-| `MpHuntStatsTick` + `HuntStats.cpp` | Keeps each player's max damage per behemoth/part, weapon and downs; when the target behemoth dies, adds the game's combat telemetry and posts JSON to the backend -> Slayer's Ledger. `DISABLE_HUNT_STATS.flag` off. |
+| `MpHuntStatsTick` + `HuntStats.cpp` | Keeps each player's max damage per behemoth/part, weapon and downs; when the target behemoth dies, adds the game's combat telemetry and posts JSON to the backend -> Revamped Ledger. `DISABLE_HUNT_STATS.flag` off. |
 
 ### Crash reporter (`CrashReporter.cpp`)
 
@@ -218,7 +218,8 @@ Files beside the game exe: the `*.flag` toggles, `FORCE_FEATURE_FLAGS.txt`, `HUB
 - **Big single file.** `dllmain.cpp` is one huge file with many retired probes and long history comments. Search by `[Tag]` or flag name.
 - **`p2p\` and `anticheat\` folders do not exist** in this repo; the stub compiles. Do not reference them from `dllmain.cpp`.
 - **`deployment_config.generated.h` and the SDK are gitignored.** A fresh clone will not build until both exist.
-- **Gameserver key in argv.** The API key is `argv[1]` of the server process; treat server hosts as trusted.
+- **Gameserver key in the environment.** The API key arrives as `MYSTICPARADOX_GAMESERVER_API_KEY` (`argv[1]` is `-`), so it is not in the process list, but any process running as the same user can still read another's environment; treat server hosts as trusted.
+- **The log file stays open.** `MpLog` holds its handle (shared read/write/delete). Deleting the log while a server runs makes its later lines vanish until the process restarts; rename or let rotation handle it.
 - **QoS loopback.** Latency-test hosts resolve to `127.0.0.1` on the player's own machine; the backend's port-80 pong only answers there when the player runs on the server box.
 
 See also: [index](index.md), [setup](setup.md), [runtime-files](runtime-files.md), [paradox-launcher](paradox-launcher.md), [director](director.md), [backend](backend.md), [tools](tools.md).

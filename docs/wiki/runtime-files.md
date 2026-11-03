@@ -31,7 +31,7 @@ which flag, which log tag. C = client role, S = dedicated-server role (`-server`
 | File | What it does |
 |---|---|
 | `dllmain.cpp` | ~24.7k lines. `DllMain`, `Init`, `InitClientHooks`, `InitServerHooks`, `MainThread`, both `ProcessEvent` hooks, `GameEngineTickHook`, URL redirect, all client UI features and all server fixes. Map below. |
-| `ParadoxRuntime/Networking.cpp` | `namespace Networking` (server). `Listen`: finds the `FWorldContext`, calls `CreateNamedNetDriver` (RVA `0x0425FDA0`) for `GameNetDriver`, sets the driver's world, calls `UNetDriver::Listen` (vtable byte offset `0x290`) with `UWorld+0x28` as network notify, then prints `MYSTICPARADOX_GAMESERVER_READY launchId=<id> port=<port>` to stdout (only when `MYSTICPARADOX_GAMESERVER_LAUNCH_ID` is set). `AnnounceEngineReady`: same marker when the engine built the listener (`MAP_URL_LISTEN.flag`). `TickNetworking`: per-tick driver maintenance; the hand-written actor replication loop runs only with `EMERGENCY_LEGACY_REPLICATION.flag` and is refused on 1.14.7 (`[LegacyReplication]`), so the native replication graph is the only path. `BootstrapActorChannel`, `GetActorChannelIndexForConnection`. Own `NetLog` writes to the same per-port log but with no timestamp or pid. |
+| `ParadoxRuntime/Networking.cpp` | `namespace Networking` (server). `Listen`: finds the `FWorldContext`, calls `CreateNamedNetDriver` (RVA `0x0425FDA0`) for `GameNetDriver`, sets the driver's world, calls `UNetDriver::Listen` (vtable byte offset `0x290`) with `UWorld+0x28` as network notify, then prints `MYSTICPARADOX_GAMESERVER_READY launchId=<id> port=<port>` to stdout (only when `MYSTICPARADOX_GAMESERVER_LAUNCH_ID` is set). `AnnounceEngineReady`: same marker when the engine built the listener (`MAP_URL_LISTEN.flag`). `TickNetworking`: per-tick driver maintenance; the hand-written actor replication loop runs only with `EMERGENCY_LEGACY_REPLICATION.flag` and is refused on 1.14.7 (`[LegacyReplication]`), so the native replication graph is the only path. `BootstrapActorChannel`, `GetActorChannelIndexForConnection`. `NetLog` writes through `MpLog`. |
 | `ParadoxRuntime/Networking.h` | Declares the above plus `ActorChannelPushDiag` (why `ReplicateActor` wrote nothing: dormancy/reentrancy vs nothing dirty). |
 | `RuntimeShared.h` | The API `dllmain.cpp` exports to the side files: `Globals::{AmServer, BaseAddress, Port, ExpectedPlayerString}`, `MpLog`, `MpPtr`, `MpReadEnvironment`, `MpExeRelativeFlagPresent`, `DevelopmentRuntimeProfile`, `IsReadablePointer`, `IsRegisteredLiveObject`, `SafeObjectNameForDiagnostic`, `CoreCapFString`, `MpApiBaseForCrashReports`, `MpQuitGame`, and the entry points of `CrashReporter.cpp`, `Voice.cpp`, `JoinPrompt.cpp`, `HuntStats.cpp`, `WindowLock.cpp`. |
 | `P2PHooks.h` | Seam for an optional player-hosted (P2P) server mode: `ClaimAuthMode`, `ReadLaunch`, `InstallServerHooks`, `DescribeRole`, `StartServer`, `PrepareListen`, `ReportsReadiness`, `ReportReady`, `TickShutdown`, `OnListenFailed`, `RequestHeader`, `ObserveServerEvent`. |
@@ -194,7 +194,7 @@ Addresses are RVAs into `Dauntless-Win64-Shipping.exe` CL 647472 unless an API i
 | `IsFeatureEnabled`, `IsLocalFeatureEnabled` | as client | | |
 | `d3d11!D3D11CreateDevice`, `D3D11CreateDeviceAndSwapChain`, `kernel32!LoadLibraryExW` | API | `D3D11CreateDeviceHook`, ... | Only with `MP_FORCE_WARP.flag`. |
 
-Defined but not installed: `InstallActiveHuntPassDriver` (`0x018FD230`), `InstallFindRowProbe` (`0x018E6C70`), `InstallConfigCompleteProbe` (`0x00E73D40`), `InstallGameInstanceQueryHook`, `InstallMasteryProbe` (`0x019FBCD0`), `InstallXmppConfigRedirectHook` (`0x025E6890`), Tempest scale diag (`0x0156D7D0`, `0x03CCF210`), `KnockoutHook`.
+Defined but not installed: `InstallActiveHuntPassDriver` (`0x018FD230`), `InstallGameInstanceQueryHook`, `InstallXmppConfigRedirectHook` (`0x025E6890`), Tempest scale diag (`0x0156D7D0`, `0x03CCF210`), `KnockoutHook`.
 
 ### Byte patches and global writes
 
@@ -429,7 +429,7 @@ All go to `mysticparadox_dll_port<N>.log` beside the exe unless noted. `[Init]`,
 | `[ClientRestartObserved]`, `[ClientTravelGuard]`, `[ClientRolePump]` | dllmain.cpp | C: ClientRestart seen; role lifecycle deferred during travel; role pump fault caught. |
 | `[CollectionFix]` | dllmain.cpp | S: net driver registered in level collections. |
 | `[CommandLine]` | dllmain.cpp | Engine command line served with `-NoEAC`/`-DisableEOS`/`-nullrhi`. |
-| `[ConfigCompleteProbe]`, `[FindRowProbe]`, `[GameInstanceQuery]`, `[LoadCompleteProbe]`, `[MasteryProbe]` | dllmain.cpp | S: progression/hunt-pass probes (mostly not installed; `[LoadCompleteProbe]` with `HUNTPASS_PROBE.flag`). |
+| `[GameInstanceQuery]`, `[LoadCompleteProbe]` | dllmain.cpp | S: progression/hunt-pass probes (`[GameInstanceQuery]` not installed; `[LoadCompleteProbe]` with `HUNTPASS_PROBE.flag`). The FindRow, ConfigComplete and Mastery probes were deleted 2026-11-03. |
 | `[ControllerSplit]`, `[ControllerWatch]` | dllmain.cpp | C: local controller diverged from its player; watchpoint hits. |
 | `[CorePopup]` | dllmain.cpp | C: every `ClientContainerUnlocked` notification list and `ServerUnlockContainer` ids; fountain core keys rewritten + Platinum line added; cell core `<cell> -> <upgraded>` / `no upgrade`. |
 | `[CrashReporter]` | CrashReporter.cpp | Installed/disabled, report written, upload ok/FAILED. |
