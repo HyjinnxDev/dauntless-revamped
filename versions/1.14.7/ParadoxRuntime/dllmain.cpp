@@ -5356,6 +5356,345 @@ namespace VoiceSettings {
     }
 }
 
+// [Revamped 2026-10-31] Slayer's Path test branch (JOURNEY_TEST_BRANCH.flag, client and server). Proves the tree
+// can grow: adds rows Revamped_TestBranch_01 -> _02 to the Archon.PlayerJourneyNodeData table as a new child of
+// Slayer_00, before the player's journey is built. The screen places nodes from ChildNodes and the row's layout
+// fields (ChildNodeLayoutRule, DepthDistanceScale, ...), so a new row needs no widget work. Rows clone Dojo (icon,
+// widget, layout) with their own text and no costs, objectives or rewards. The server needs the flag too, or
+// ServerUnlockNode has no row to unlock. The backend stores any node id the server saves.
+namespace JourneyTestBranch {
+    // UDataTable::RowMap, TMap<FName, uint8*> as UE 4.26 lays out a TSet: sparse array + bit array + hash.
+    struct RowMapElem { SDK::FName Key; uint8_t* Row; int32_t HashNextId; int32_t HashIndex; };
+    struct RawRowMap {
+        RowMapElem* Data; int32_t Num; int32_t Max;
+        uint32_t FlagsInline[4]; uint32_t* FlagsHeap; int32_t NumBits; int32_t MaxBits;
+        int32_t FirstFreeIndex; int32_t NumFreeIndices;
+        int32_t HashInline; int32_t* HashHeap; int32_t HashSize;
+    };
+    static_assert(sizeof(RowMapElem) == 0x18 && sizeof(RawRowMap) == 0x50, "UDataTable::RowMap layout");
+    static_assert(offsetof(RawRowMap, HashHeap) == 0x40, "RowMap hash allocation");
+    struct RawArray { uint8_t* Data; int32_t Num; int32_t Max; };
+
+    static uint32_t* Bits(RawRowMap* M) { return M->FlagsHeap ? M->FlagsHeap : M->FlagsInline; }
+    static int32_t* Buckets(RawRowMap* M) { return M->HashHeap ? M->HashHeap : &M->HashInline; }
+    static bool IsAllocated(RawRowMap* M, int32_t Id) { return (Bits(M)[Id / 32] >> (Id % 32)) & 1u; }
+    // GetTypeHash(FName) as UDataTable::FindRow (+0x18E6C70) computes it: GetTypeHash(FNameEntryHandle) (+0x2659480,
+    // Block = index >> 16, Offset = index & 0xFFFF) + Number. LayoutProblem checks it against every existing row.
+    static uint32_t HashOf(SDK::FName Key) {
+        const uint32_t Index = static_cast<uint32_t>(Key.ComparisonIndex), Block = Index >> 16, Offset = Index & 0xFFFF;
+        return (Block << 19) + Block + (Offset << 16) + Offset + (Offset >> 4) + Key.Number;
+    }
+    static int32_t BucketOf(const RawRowMap* M, SDK::FName Key) {
+        return static_cast<int32_t>(HashOf(Key) & (M->HashSize - 1));
+    }
+    static bool SameName(SDK::FName A, SDK::FName B) { return A.ComparisonIndex == B.ComparisonIndex && A.Number == B.Number; }
+
+    static uint8_t* Find(RawRowMap* M, SDK::FName Key) {
+        for (int32_t Id = Buckets(M)[BucketOf(M, Key)]; Id >= 0 && Id < M->Num; Id = M->Data[Id].HashNextId)
+            if (SameName(M->Data[Id].Key, Key)) return M->Data[Id].Row;
+        return nullptr;
+    }
+
+    static std::string Header(RawRowMap* M) {
+        return "slots=" + std::to_string(M->Num) + "/" + std::to_string(M->Max) + " free=" + std::to_string(M->NumFreeIndices)
+            + " bits=" + std::to_string(M->NumBits) + "/" + std::to_string(M->MaxBits) + " hash=" + std::to_string(M->HashSize);
+    }
+
+    // What AddRow relies on: a power-of-two hash and every live row in the bucket HashOf puts it in. Freed slots
+    // (bit clear) are skipped; appending past them is still a valid sparse array. "" = usable.
+    static std::string LayoutProblem(RawRowMap* M) {
+        if (!M->Data || M->Num <= 0 || M->Num > M->Max || M->NumBits != M->Num || M->NumBits > M->MaxBits
+            || M->HashSize <= 0 || (M->HashSize & (M->HashSize - 1)) != 0) return "header";
+        int Bad = 0, FirstBad = -1;
+        for (int32_t i = 0; i < M->Num; ++i) {
+            if (IsAllocated(M, i) && BucketOf(M, M->Data[i].Key) != M->Data[i].HashIndex) {
+                if (FirstBad < 0) FirstBad = i;
+                ++Bad;
+            }
+        }
+        if (Bad == 0) return "";
+        const RowMapElem& E = M->Data[FirstBad];
+        return "hash bad=" + std::to_string(Bad) + " first#" + std::to_string(FirstBad) + "(ci=" + std::to_string(E.Key.ComparisonIndex)
+            + " n=" + std::to_string(E.Key.Number) + " hi=" + std::to_string(E.HashIndex) + ")";
+    }
+
+    // TSet::Add without the rehash: append the element, set its allocation bit, push it on its bucket's chain.
+    static void AddRow(RawRowMap* M, SDK::FName Key, uint8_t* Row) {
+        if (M->Num == M->Max) {
+            M->Max += 16;
+            M->Data = static_cast<RowMapElem*>(EngineRealloc(M->Data, M->Max * sizeof(RowMapElem)));
+        }
+        const int32_t Id = M->Num;
+        if (Id >= M->MaxBits) {
+            const int32_t NewMaxBits = M->MaxBits + 128;
+            auto* Grown = static_cast<uint32_t*>(EngineRealloc(M->FlagsHeap, NewMaxBits / 8));
+            if (!M->FlagsHeap) memcpy(Grown, M->FlagsInline, sizeof(M->FlagsInline));
+            memset(Grown + M->MaxBits / 32, 0, (NewMaxBits - M->MaxBits) / 8);
+            M->FlagsHeap = Grown;
+            M->MaxBits = NewMaxBits;
+        }
+        Bits(M)[Id / 32] |= 1u << (Id % 32);
+        ++M->NumBits;
+        const int32_t Bucket = BucketOf(M, Key);
+        M->Data[Id] = { Key, Row, Buckets(M)[Bucket], Bucket };
+        Buckets(M)[Bucket] = Id;
+        ++M->Num;
+    }
+
+    static void AddChild(SDK::FPlayerJourneyNodeData* Parent, SDK::UDataTable* Table, SDK::FName Child) {
+        auto* A = reinterpret_cast<RawArray*>(&Parent->ChildNodes);
+        if (A->Num == A->Max) {
+            A->Max += 4;
+            A->Data = static_cast<uint8_t*>(EngineRealloc(A->Data, A->Max * sizeof(SDK::FDataTableRowHandle)));
+        }
+        auto* Handle = reinterpret_cast<SDK::FDataTableRowHandle*>(A->Data) + A->Num++;
+        Handle->DataTable = Table;
+        Handle->RowName = Child;
+    }
+
+    // A copy of Template that shares no allocation with it: every heap-owning member is emptied, the soft pointers
+    // lose their (normally empty) sub-path string, and the texts take their own reference.
+    static SDK::FPlayerJourneyNodeData* CloneRow(const SDK::FPlayerJourneyNodeData* Template, const uint8_t* Name,
+                                                 const uint8_t* Description) {
+        auto* Row = static_cast<SDK::FPlayerJourneyNodeData*>(EngineRealloc(nullptr, sizeof(SDK::FPlayerJourneyNodeData)));
+        memcpy(Row, Template, sizeof(*Row));
+        VoiceSettings::AssignText(&Row->DisplayName, Name);
+        VoiceSettings::AssignText(&Row->Description, Description);
+        VoiceSettings::AssignText(&Row->UnlockDescription, Description);
+        memset(reinterpret_cast<uint8_t*>(&Row->Icon) + 0x18, 0, 0x10);          // FSoftObjectPath::SubPathString
+        memset(reinterpret_cast<uint8_t*>(&Row->WidgetClass) + 0x18, 0, 0x10);
+        memset(&Row->ChildNodes, 0, sizeof(Row->ChildNodes));
+        memset(&Row->InfoPanelMovie, 0, sizeof(Row->InfoPanelMovie));
+        memset(&Row->RequiredFeatureFlag, 0, sizeof(Row->RequiredFeatureFlag));
+        memset(&Row->CurrencyCosts, 0, sizeof(Row->CurrencyCosts));
+        memset(&Row->Objectives, 0, sizeof(Row->Objectives));
+        memset(&Row->ExperienceCosts, 0, sizeof(Row->ExperienceCosts));
+        memset(&Row->ActivationEventId, 0, sizeof(Row->ActivationEventId));
+        memset(&Row->GameplayModifiers, 0, sizeof(Row->GameplayModifiers));
+        memset(&Row->GameplayAttributeValues, 0, sizeof(Row->GameplayAttributeValues));
+        auto* Attributes = reinterpret_cast<RawRowMap*>(&Row->GameplayAttributeValues);   // same TSet header
+        Attributes->MaxBits = 128;                                                         // default-constructed
+        Attributes->FirstFreeIndex = -1;
+        memset(&Row->Rewards, 0, sizeof(Row->Rewards));
+        memset(&Row->SystemRewards, 0, sizeof(Row->SystemRewards));
+        memset(&Row->QuestIds, 0, sizeof(Row->QuestIds));
+        memset(&Row->QuestIdToNotifyOnUnlock, 0, sizeof(Row->QuestIdToNotifyOnUnlock));
+        memset(&Row->TutorialToShowWhenUnlocked, 0, sizeof(Row->TutorialToShowWhenUnlocked));
+        Row->bAutoUnlockIfParentUnlocked = false;
+        Row->bDisablePersistentUnlockNotification = false;
+        return Row;
+    }
+
+    static void Patch(SDK::UDataTable* Table, SDK::FPlayerJourneyNodeData* Parent, const SDK::FPlayerJourneyNodeData* Template) {
+        auto* M = reinterpret_cast<RawRowMap*>(&Table->RowMap);
+        const std::string Problem = LayoutProblem(M);
+        MpLog("[JourneyTestBranch] " + Table->GetName() + " RowMap " + Header(M)
+            + (Problem.empty() ? std::string(" layout ok") : " layout not as expected: " + Problem + " - skipped"));
+        if (!Problem.empty()) return;
+        const SDK::FName First = VoiceSettings::NameOf(L"Revamped_TestBranch_01");
+        const SDK::FName Second = VoiceSettings::NameOf(L"Revamped_TestBranch_02");
+        const uint8_t* FirstName = CreditsBranding::TextFor(L"REVAMPED TEST BRANCH");
+        const uint8_t* FirstText = CreditsBranding::TextFor(L"If you can read this, new Slayer's Path branches work.");
+        const uint8_t* SecondName = CreditsBranding::TextFor(L"TEST BRANCH: SECOND NODE");
+        const uint8_t* SecondText = CreditsBranding::TextFor(L"A new branch can be more than one node deep.");
+        if (!FirstName || !FirstText || !SecondName || !SecondText) {
+            MpLog("[JourneyTestBranch] could not create node texts - skipped");
+            return;
+        }
+        if (Find(M, First) || Find(M, Second)) {
+            MpLog("[JourneyTestBranch] rows already present - skipped");
+            return;
+        }
+        auto* FirstRow = CloneRow(Template, FirstName, FirstText);
+        auto* SecondRow = CloneRow(Template, SecondName, SecondText);
+        AddRow(M, First, reinterpret_cast<uint8_t*>(FirstRow));
+        AddRow(M, Second, reinterpret_cast<uint8_t*>(SecondRow));
+        AddChild(Parent, Table, First);
+        AddChild(FirstRow, Table, Second);
+        const bool Found = Find(M, First) == reinterpret_cast<uint8_t*>(FirstRow)
+            && Find(M, Second) == reinterpret_cast<uint8_t*>(SecondRow);
+        MpLog("[JourneyTestBranch] " + Table->GetName() + ": Slayer_00 -> Revamped_TestBranch_01 -> _02 added (rows="
+            + std::to_string(M->Num) + " Slayer_00 children=" + std::to_string(Parent->ChildNodes.Num())
+            + " template type=" + std::to_string(static_cast<int>(Template->NodeType)) + " lookup=" + (Found ? "ok" : "FAILED") + ")");
+    }
+
+    // [Revamped 2026-10-31] Read-only [JourneyEffects] probe, same flag: how existing nodes grant stats, so new perk
+    // nodes can. Logs every row's GameplayModifiers classes / GameplayAttributeValues, the components'
+    // PlayerJourneyMasterGEClass, and, as those gameplay-effect classes load, each modifier (attribute, op, magnitude).
+    namespace Effects {
+        static std::set<std::string> s_Wanted, s_Dumped;   // gameplay-effect class names (after the last '.')
+
+        static std::string SoftPath(const void* Soft) {    // TSoftObjectPtr/TSoftClassPtr -> AssetPathName
+            return reinterpret_cast<const SDK::FName*>(static_cast<const uint8_t*>(Soft) + 0x10)->ToString();
+        }
+        static void Want(const std::string& Path) {
+            const size_t Dot = Path.find_last_of('.');
+            if (Path != "None" && !Path.empty()) s_Wanted.insert(Dot == std::string::npos ? Path : Path.substr(Dot + 1));
+        }
+        static std::string SoftList(const void* Arr, bool Track) {   // TArray<TSoftClassPtr<UClass>>, 0x28 each
+            auto* A = static_cast<const RawArray*>(Arr);
+            std::string Out;
+            for (int32_t i = 0; i < A->Num; ++i) {
+                const std::string Path = SoftPath(A->Data + i * 0x28);
+                if (Track) Want(Path);
+                Out += (i ? "," : "") + Path;
+            }
+            return Out;
+        }
+        static std::string AttrName(const uint8_t* Attribute) {      // FGameplayAttribute: name, else field path[0]
+            auto* Name = reinterpret_cast<const SDK::FString*>(Attribute);
+            if (Name->Num() > 1) return Name->ToString();
+            auto* Path = reinterpret_cast<const RawArray*>(Attribute + 0x20);
+            return Path->Num > 0 ? reinterpret_cast<const SDK::FName*>(Path->Data)->ToString() : "?";
+        }
+
+        static void LogRows(SDK::UDataTable* Table) {
+            int Logged = 0;
+            for (auto& Pair : Table->RowMap) {
+                auto* Row = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
+                const auto& M = Row->GameplayModifiers;
+                if (!M.BuffClasses.Num() && !M.GameplayEffectClasses.Num() && !M.GameplayAbilityClasses.Num()
+                    && !M.KeywordBonusClasses.Num() && !Row->GameplayAttributeValues.Num()) continue;
+                std::string Attrs;
+                for (auto& A : Row->GameplayAttributeValues) Attrs += A.Key().ToString() + "=" + std::to_string(A.Value()) + " ";
+                MpLog("[JourneyEffects] node=" + Pair.Key().ToString()
+                    + " buffs=["+ SoftList(&M.BuffClasses, false) + "] effects=[" + SoftList(&M.GameplayEffectClasses, true)
+                    + "] abilities=[" + SoftList(&M.GameplayAbilityClasses, false) + "] keywords=" + std::to_string(M.KeywordBonusClasses.Num())
+                    + " attrs={" + Attrs + "}");
+                ++Logged;
+            }
+            MpLog("[JourneyEffects] " + std::to_string(Logged) + " of " + std::to_string(Table->RowMap.Num()) + " rows carry modifiers");
+        }
+
+        static void LogEffectClass(SDK::UClass* Cls) {
+            auto* Ge = static_cast<SDK::UGameplayEffect*>(Cls->ClassDefaultObject);
+            std::string Mods;
+            for (int32_t i = 0; i < Ge->Modifiers.Num(); ++i) {
+                const auto& Mod = Ge->Modifiers[i];
+                const auto& Mag = Mod.ModifierMagnitude;
+                const int Type = static_cast<int>(Mag.MagnitudeCalculationType);
+                const auto* MagBytes = reinterpret_cast<const uint8_t*>(&Mag);
+                std::string How;
+                if (Type == 0) How = "scalable=" + std::to_string(Mag.ScalableFloatMagnitude.Value) + " curve=" + Mag.ScalableFloatMagnitude.Curve.RowName.ToString();
+                else if (Type == 1) How = "attribute coeff=" + std::to_string(*reinterpret_cast<const float*>(MagBytes + 0x28)) + " of " + AttrName(MagBytes + 0x28 + 0x60);
+                else if (Type == 2) {
+                    auto* Calc = *reinterpret_cast<SDK::UClass* const*>(MagBytes + 0x120);
+                    How = "custom=" + (Calc ? Calc->GetName() : std::string("null"));
+                }
+                else if (Type == 3) How = "setbycaller name=" + Mag.SetByCallerMagnitude.DataName.ToString() + " tag=" + Mag.SetByCallerMagnitude.DataTag.TagName.ToString();
+                Mods += " {" + AttrName(reinterpret_cast<const uint8_t*>(&Mod.Attribute)) + " op=" + std::to_string(static_cast<int>(Mod.ModifierOp)) + " " + How + "}";
+            }
+            std::string Execs;
+            for (int32_t i = 0; i < Ge->Executions.Num(); ++i) {
+                SDK::UClass* Calc = Ge->Executions[i].CalculationClass.Get();
+                Execs += std::string(i ? "," : "") + (Calc ? Calc->GetName() : "null");
+            }
+            MpLog("[JourneyEffects] effect " + Cls->GetName() + " duration=" + std::to_string(static_cast<int>(Ge->DurationPolicy))
+                + " mods=" + std::to_string(Ge->Modifiers.Num()) + Mods + " executions=[" + Execs + "]");
+        }
+
+        static int s_Logged = 0;
+        static bool TouchesPerkStat(SDK::UGameplayEffect* Ge) {
+            static const std::set<std::string> kStats = {
+                "MaxHealth", "MaxStamina", "StaminaRegen", "CombatPlayRateRateModifier", "BaseMovementSpeed",
+                "PartDamageMultiplier", "PartDamagePerHitBonus", "DamageMultiplierVsStaggeredTargets", "CriticalStrikeChance",
+                "ConsumablePylonEffectivenessMultiplier", "HealAmount", "HealRadius", "BaseWeaponDamageMultiplier",
+                "CurrentHealthLimitedToPercentOfMax", "ChanceToReduceIncomingDamage" };
+            for (int32_t i = 0; i < Ge->Modifiers.Num(); ++i)
+                if (kStats.count(AttrName(reinterpret_cast<const uint8_t*>(&Ge->Modifiers[i].Attribute)))) return true;
+            return false;
+        }
+
+        // Every 5 s for 30 minutes (long enough for a hunt): master GE class paths from live/default journey
+        // components, then wanted or perk-stat gameplay-effect classes that have loaded since the last pass.
+        static void Scan() {
+            static uint64_t s_NextMs = 0, s_EndMs = 0;
+            const uint64_t Now = GetTickCount64();
+            if (!s_EndMs) s_EndMs = Now + 30 * 60 * 1000;
+            if (Now < s_NextMs || Now > s_EndMs) return;
+            s_NextMs = Now + 5000;
+            static std::set<std::string> s_Masters;
+            for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+                SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                if (!Obj) continue;
+                if (Obj->IsA(SDK::UPlayerJourneyComponent::StaticClass())) {
+                    const std::string Path = SoftPath(&static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
+                    if (s_Masters.insert(Path).second) {
+                        Want(Path);
+                        // The client never loads the master GE itself; load it so the next pass can dump it.
+                        SDK::UClass* Loaded = Path == "None" ? nullptr
+                            : SDK::UKismetSystemLibrary::LoadClassAsset_Blocking(static_cast<SDK::UPlayerJourneyComponent*>(Obj)->PlayerJourneyMasterGEClass);
+                        MpLog("[JourneyEffects] component " + Obj->GetName() + " masterGE=" + Path + (Loaded ? " (loaded)" : ""));
+                    }
+                    continue;
+                }
+                if (Obj->IsDefaultObject() || !Obj->IsA(SDK::UClass::StaticClass())) continue;
+                auto* Cls = static_cast<SDK::UClass*>(Obj);
+                if (!Cls->ClassDefaultObject || !Cls->ClassDefaultObject->IsA(SDK::UGameplayEffect::StaticClass())) continue;
+                const std::string Name = Obj->GetName();
+                if (s_Dumped.count(Name)) continue;
+                // Wanted (node/master) classes, plus any other loaded effect touching a stat the planned perks need.
+                if (!s_Wanted.count(Name) && !TouchesPerkStat(static_cast<SDK::UGameplayEffect*>(Cls->ClassDefaultObject))) {
+                    s_Dumped.insert(Name);   // checked once
+                    continue;
+                }
+                s_Dumped.insert(Name);
+                if (s_Logged++ < 400) LogEffectClass(Cls);
+            }
+        }
+
+        // A probe must never take the game down (0.2.73 crashed reading a row's FText): a fault ends it.
+        static bool s_Faulted = false;
+        static void LogFault(const char* Where) { MpLog(std::string("[JourneyEffects] fault in ") + Where + " - probe off"); }
+        static void LogRowsGuarded(SDK::UDataTable* Table) {
+            __try { LogRows(Table); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
+            if (s_Faulted) LogFault("LogRows");
+        }
+        static void Tick() {
+            if (s_Faulted) return;
+            __try { Scan(); }
+            __except (EXCEPTION_EXECUTE_HANDLER) { s_Faulted = true; }
+            if (s_Faulted) LogFault("Scan");
+        }
+    }
+
+    // Once a second until the table is loaded; one attempt on it. Game thread only (client tick, server engine tick).
+    static void Tick() {
+        static const bool s_Enabled = MpExeRelativeFlagPresent(L"JOURNEY_TEST_BRANCH.flag");
+        static bool s_Done = false;
+        static uint64_t s_NextMs = 0;
+        if (!s_Enabled || !SDK::UObject::GObjects) return;
+        if (s_Done) { Effects::Tick(); return; }
+        const uint64_t Now = GetTickCount64();
+        if (Now < s_NextMs) return;
+        s_NextMs = Now + 1000;
+        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+            SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+            if (!Obj || Obj->IsDefaultObject() || !Obj->IsA(SDK::UDataTable::StaticClass())) continue;
+            auto* Dt = static_cast<SDK::UDataTable*>(Obj);
+            if (!Dt->RowStruct || Dt->RowStruct->GetName() != "PlayerJourneyNodeData") continue;
+            if (Dt->RowStruct->Size != static_cast<int32_t>(sizeof(SDK::FPlayerJourneyNodeData))) {
+                MpLog("[JourneyTestBranch] row size " + std::to_string(Dt->RowStruct->Size) + " != SDK - skipped");
+                s_Done = true;
+                return;
+            }
+            SDK::FPlayerJourneyNodeData* Parent = nullptr;
+            SDK::FPlayerJourneyNodeData* Template = nullptr;
+            for (auto& Pair : Dt->RowMap) {
+                const std::string Key = Pair.Key().GetRawString();
+                if (Key == "Slayer_00") Parent = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
+                else if (Key == "Dojo") Template = reinterpret_cast<SDK::FPlayerJourneyNodeData*>(Pair.Value());
+            }
+            if (!Parent || !Template) continue;
+            s_Done = true;
+            Effects::LogRowsGuarded(Dt);
+            Patch(Dt, Parent, Template);
+            return;
+        }
+    }
+}
+
 // [1.14.7 2026-10-14] Behemoth health bar: the old-style fixed bar with the HP number ("12,345/15,654") at the
 // bottom middle of the screen, as the 1.4.4 UE4SS BehemothHealthBars mod drew it. Done here because UE4SS cannot
 // call UFunctions on this build: it takes ProcessEvent from a vtable slot this game customises, gets a stub, and
@@ -6324,6 +6663,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     if (Globals::AmServer) MpVoiceProximityTick();
     if (Globals::AmServer) MpHuntJoinTick();
     if (Globals::AmServer) MpBankedXpQuestTick();
+    if (Globals::AmServer) JourneyTestBranch::Tick();
 
     // [2026-07-20] Server-side skeletal pose/socket fix (FORCE_SERVER_MESH_POSE.flag). Server-only; the
     // helper self-throttles + no-ops unless the flag is present. See its definition above.
@@ -15046,6 +15386,7 @@ void ProcessEventClientHook(UObject* Object, UFunction* Function, void* Parms) {
         VoiceIndicators::Tick();
         InventoryProbe::Tick();
         CineCam::Tick();
+        JourneyTestBranch::Tick();
         JoinPopup::TickGuarded();
     }
     if (FunctionName.find("Pressed") != std::string::npos) JoinPopup::OnEvent(Object, FunctionName);
