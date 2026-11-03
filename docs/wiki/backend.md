@@ -51,7 +51,7 @@ Folders on other pages: `src/realtime/` ([realtime](backend-realtime.md)), `src/
 
 ### Startup (`src/server.ts`)
 
-1. `AssertRuntimeSafety()` (`config/runtimeSafety.ts`). Refuses to boot on stale `MYSTPAX_*` env names. When `NODE_ENV=production` it also rejects `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE`, body/raw inventory capture flags, `REALTIME_XMPP_DEV_CITY_MUC` not `false`, a missing or `combined` `MYSTICPARADOX_SERVICE_ROLE`, a missing `MYSTICPARADOX_METRICS_TOKEN` (api role) or `MONGODB_URI`, out-of-range Mongo settings and bad ports.
+1. `AssertRuntimeSafety()` (`config/runtimeSafety.ts`). Refuses to boot on stale `MYSTPAX_*` env names. When `NODE_ENV=production` it also rejects `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE`, body/raw inventory capture flags, unset `REALTIME_XMPP_DEV_CITY_MUC`/`REALTIME_XMPP_DEV_HUNT_MUC` (must be `true` or `false`), a missing or `combined` `MYSTICPARADOX_SERVICE_ROLE`, a missing `MYSTICPARADOX_METRICS_TOKEN` (api role) or `MONGODB_URI`, out-of-range Mongo settings and bad ports.
 2. Reads the service role. This entry point only serves `combined` (local default) or `api`.
 3. Loads the TLS cert/key. In production, no valid cert means startup fails.
 4. `AssertApiKeyHashSecret()` (needs `API_KEY_HASH_SECRET`), then `GetPersistenceLifecycle().start()` (Mongo connect + indexes), then registers gameserver and user API keys (`DrainAndRegisterAPIKeys`, `DrainAndRegisterUserAPIKeys`).
@@ -204,7 +204,7 @@ Real values live in the gitignored `.env`. It is loaded by `--env-file=.env` in 
 | `REALTIME_XMPP_CAPTURE` | on when enabled | `false` silences XMPP protocol capture logs. |
 | `REALTIME_XMPP_WS_PATHS` | `//,/,/__ws/xmpp` | Accepted WebSocket upgrade paths. |
 | `REALTIME_XMPP_ALLOWED_HOSTS` | any | Host allow-list for the upgrade. |
-| `REALTIME_XMPP_DEV_CITY_MUC` | on when unset (`.env.example` sets `false`) | Lets any user join any City MUC (Ramsgate chat). Must be `false` in production. |
+| `REALTIME_XMPP_DEV_CITY_MUC` | on when unset (`.env.example` sets `false`) | Lets any user join any City MUC (Ramsgate chat). Production requires it set explicitly (`true`/`false`); live runs `true`. |
 | `MYSTICPARADOX_INV_CAPTURE`, `MYSTICPARADOX_INV_CAPTURE_RAW`, `MYSTICPARADOX_INV_CAPTURE_FILTER` | off | `[INV-CAP]` inventory capture; `_RAW` adds full JSON (refused in production); `_FILTER` regex of catalog ids. |
 | `MYSTICPARADOX_BODY_CAPTURE` | off | Logs POST bodies of economy paths; refused in production. |
 | `LOG_LEVEL` | `info` | Production log level (info/warn/error/fatal only). |

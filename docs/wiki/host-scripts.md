@@ -17,6 +17,7 @@ Run them as `powershell -ExecutionPolicy Bypass -File <script> [switches]`. `res
 | `host/server-sizing-log.ps1` | Samples CPU, RAM, network, players and hunts into a CSV. `-Summary` prints a hardware suggestion. Params `-Interval`, `-Summary`, `-Test`, `-csv`. |
 | `host/test-stack.ps1` | A second backend + Director on other ports and a separate Mongo database, for feature branches. Run from a git worktree. Switches `-Setup`, `-Stop`, `-Remove`, `-Client <name>`. |
 | `host/hunt-combat-report.ps1` | Summarises one hunt's combat log written by `MysticParadox.dll` (attack montages, predicted hits, rejected hits, damage). Params `-File`, `-List`, `-Window`, `-Dir`. |
+| `host/backup-db.ps1` | `mongodump` of the live database (`MONGODB_URI`/`MONGODB_DB` from the backend `.env`) to one gzip archive in `D:\MysticParadoxDataackups\db`, keeping the newest `-Keep` (14). `-CopyTo` also copies it to a second folder. Read-only on the live server; needs MongoDB Database Tools. Restore command in the file header. |
 
 ## How it works
 

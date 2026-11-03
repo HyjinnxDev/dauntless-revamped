@@ -175,8 +175,8 @@ The ticket is also used as a lightweight identity for `routes/party.ts` endpoint
 | `REALTIME_XMPP_WS_PATHS` | `//,/,/__ws/xmpp` | Comma list of accepted upgrade paths |
 | `REALTIME_XMPP_ALLOWED_HOSTS` | empty (any) | Host header allowlist (port stripped, lowercased) |
 | `REALTIME_XMPP_RECONNECT_GRACE_MS` | `45000` | Delay before broadcasting offline |
-| `REALTIME_XMPP_DEV_CITY_MUC` | on unless `false` | Any authed user may join `City-*`. With `NODE_ENV=production`, `config/runtimeSafety.ts` refuses to start unless this is `false` |
-| `REALTIME_XMPP_DEV_HUNT_MUC` | on unless `false` | Same for `Hunt-*` (not checked by the production guard) |
+| `REALTIME_XMPP_DEV_CITY_MUC` | on unless `false` | Any authed user may join `City-*`. With `NODE_ENV=production`, `config/runtimeSafety.ts` refuses to start unless it is set explicitly (`true` or `false`); live sets `true` for public city chat |
+| `REALTIME_XMPP_DEV_HUNT_MUC` | on unless `false` | Same for `Hunt-*`; production also requires it set explicitly |
 | `HTTPS_PORT` | `3443` | Port the WS endpoint shares with HTTPS |
 | `VOICE_UDP_PORT` | `8791` | Voice relay UDP port |
 | `AUTH_SIGNING_PRIVKEY_B64` / `AUTH_SIGNING_PUBKEY_B64` | required | Sign/verify voice tickets (same keys as game JWTs) |

@@ -194,7 +194,7 @@ Rules enforced in `controllers/admin.ts`:
 | `MYSTICPARADOX_INV_CAPTURE`, `_RAW`, `_FILTER`, `MYSTICPARADOX_ECONOMY_MONITOR`, `MYSTICPARADOX_BODY_CAPTURE`, `MYSTICPARADOX_LOG_ORIGIN_BODIES` | Diagnostics switches. |
 | `MYSTICPARADOX_SERVICE_ROLE` | Must be explicit in production (`combined` refused). |
 
-`config/runtimeSafety.ts` refuses to boot in production with `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE=true`, body capture or raw inventory capture on, `REALTIME_XMPP_DEV_CITY_MUC` not `false`, no metrics token on the API role, or a missing `MONGODB_URI`. It also rejects any env key still starting with `MYSTPAX_` (renamed to `MYSTICPARADOX_`).
+`config/runtimeSafety.ts` refuses to boot in production with `AUTH_MODE=NONE`, `ALLOW_NO_AUTH_DEV_MODE=true`, body capture or raw inventory capture on, `REALTIME_XMPP_DEV_CITY_MUC` or `REALTIME_XMPP_DEV_HUNT_MUC` left unset (must be `true` or `false`), no metrics token on the API role, or a missing `MONGODB_URI`. It also rejects any env key still starting with `MYSTPAX_` (renamed to `MYSTICPARADOX_`).
 
 ## Gotchas
 
