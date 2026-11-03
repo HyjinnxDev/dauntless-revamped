@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 import { GetMongoDb } from "./persistence/mongo/client";
 import { Collections } from "./persistence/mongo/collections";
 import type { FriendEdgeRecord, FriendshipRepository } from "./persistence/contracts/FriendshipRepository";
-import { AllowedNameStyles, GameNameTag, type NameStyle } from "./security/staffRoles";
+import { NameTagOf, type NameStyle, type NameTag } from "./security/staffRoles";
 
 // [Revamped 2026-10-17] Several characters per launcher account.
 //
@@ -119,11 +119,16 @@ export async function SetNameStyle(ownerUserId: string, row: CharacterSlotRow, n
     );
 }
 
-/** The tags the game shows before a character's name: staff tag plus its name style (GameNameTag). */
-export async function GameNameTagFor(roles: readonly string[], gameUserId: string): Promise<string> {
-    if (AllowedNameStyles(roles).length === 0) return GameNameTag(roles, undefined);
-    const Row = await (await Slots()).findOne({ _id: { $eq: gameUserId } });
-    return GameNameTag(roles, Row?.nameStyle);
+/** Every staff account's display name with its tier and the style its last launched character wears
+ *  (all characters show the account name). Feeds GET /mystic/name-tags. */
+export async function ListNameTags(): Promise<Array<NameTag & { name: string }>> {
+    const Staff = await (await GetMongoDb()).collection<{ _id: string; displayName: string; roles: string[] }>(Collections.Accounts)
+        .find({ displayNameNormalized: { $exists: true }, roles: { $in: ["moderator", "admin", "owner"] } }, { projection: { displayName: 1, roles: 1 } })
+        .toArray();
+    const Active = await ActiveCharacters(Staff.map((Account) => Account._id));
+    const Rows = await (await Slots()).find({ _id: { $in: [...Active.values()] } }).toArray();
+    const Styles = new Map(Rows.map((Row) => [Row._id, Row.nameStyle]));
+    return Staff.map((Account) => ({ name: Account.displayName, ...NameTagOf(Account.roles, Styles.get(Active.get(Account._id) ?? Account._id)) }));
 }
 
 /** owner -> the character they launched last (what friends see). Owners never launched map to themselves. */

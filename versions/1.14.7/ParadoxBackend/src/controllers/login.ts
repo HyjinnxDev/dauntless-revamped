@@ -10,7 +10,6 @@
  */
 
 import { GetRepositories } from "../persistence";
-import { GameNameTagFor } from "../characterSlots";
 
 export async function GetUsernameForUserId(userId: string){
     // Launcher accounts are now the authoritative source for player-facing names.
@@ -34,9 +33,8 @@ export async function GetUsernameForUserId(userId: string){
     return UserFromDb?.name ?? userId;
 }
 
-/** GetUsernameForUserId plus the staff or name-style tag ("[Owner] Name" / "[Legend] Name"), for names the game shows.
- *  Character creation keeps the plain name so a demotion never leaves a stale tag behind. */
+/** The name the game shows. [Revamped 2026-11-03] No staff/style tags any more: the game caps names at 20
+ *  characters and the tags cut the name off; the DLL gets them from GET /mystic/name-tags (characterSlots ListNameTags). */
 export async function GetDisplayNameForUserId(userId: string){
-    const Account = await GetRepositories().launcherAccounts.findByUserId(userId).catch(() => undefined);
-    return (Account ? await GameNameTagFor(Account.roles, userId) : "") + await GetUsernameForUserId(userId);
+    return GetUsernameForUserId(userId);
 }

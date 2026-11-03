@@ -34,23 +34,12 @@ export function HasStaffPermission(roles: readonly string[], permission: StaffPe
     return StaffRank(roles) >= MIN_RANK[permission];
 }
 
-/** Prefix the game shows before staff names (nameplate, chat, party). The client DLL styles
- *  nameplates by it (MysticParadox.dll, StaffNameplates), so keep the two in step. */
-export function StaffNameTag(roles: readonly string[]): string {
-    const Rank = StaffRank(roles);
-    return ["", "[Mod] ", "[Admin] ", "[Owner] "][Rank];
-}
-
-// [Revamped 2026-10-19] Patreon name styles, picked per character in the launcher. The game name
-// carries the style tag ("[Legend] Name"); the client DLL (StaffNameplates) strips it off the
-// nameplate and animates the name in that style.
-// [Revamped 2026-11-03] A worn style replaces the staff tag: both tags cut the name off where the
-// game shows it raw.
+// [Revamped 2026-10-19] Patreon name styles, picked per character in the launcher.
+// [Revamped 2026-11-03] Game names carry no tags any more: the game caps a name at 20 characters,
+// so "[Owner] [Legend] Hyjinnx" came out as "Hyj". The client DLL (StaffNameplates) reads staff
+// tier and style from GET /mystic/name-tags instead and shows the tag on the plate's title line.
 export const NAME_STYLES = ["wanderer", "scout", "slayer", "legend", "emerald"] as const;
 export type NameStyle = typeof NAME_STYLES[number];
-const STYLE_TAG: Record<NameStyle, string> = {
-    wanderer: "[Wanderer] ", scout: "[Scout] ", slayer: "[Slayer] ", legend: "[Legend] ", emerald: "[Emerald] "
-};
 
 export const IsNameStyle = (value: unknown): value is NameStyle => NAME_STYLES.includes(value as NameStyle);
 
@@ -59,12 +48,16 @@ export function AllowedNameStyles(roles: readonly string[]): NameStyle[] {
     return roles.includes("owner") ? [...NAME_STYLES] : [];
 }
 
-/** The character's style tag when the account may still wear that style, else StaffNameTag. */
-export function GameNameTag(roles: readonly string[], style: unknown): string {
-    return IsNameStyle(style) && AllowedNameStyles(roles).includes(style) ? STYLE_TAG[style] : StaffNameTag(roles);
+export interface NameTag { tier?: "moderator" | "admin" | "owner"; style?: NameStyle }
+
+/** Staff tier and worn style for the DLL's nameplates; style only while the account may still wear it. */
+export function NameTagOf(roles: readonly string[], style: unknown): NameTag {
+    const Tier = ([undefined, "moderator", "admin", "owner"] as const)[StaffRank(roles)];
+    const Style = IsNameStyle(style) && AllowedNameStyles(roles).includes(style) ? style : undefined;
+    return { ...(Tier ? { tier: Tier } : {}), ...(Style ? { style: Style } : {}) };
 }
 
-/** Strips the staff and style tags so a name the game echoes back still finds the account. */
+/** Strips old staff and style tags so a tagged name a client still caches finds the account. */
 export const StripStaffNameTag = (name: string): string =>
     name.replace(/^(\[(Owner|Admin|Mod|Wanderer|Scout|Slayer|Legend|Emerald)\]\s*)+/i, "");
 

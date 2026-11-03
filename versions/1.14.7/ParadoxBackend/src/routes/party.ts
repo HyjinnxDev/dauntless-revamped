@@ -26,6 +26,7 @@ import {
 import { FindLateJoinOffer, GetPartyInstance, GetPlayerCandidate, GrantLateJoin } from "../controllers/matchmaking";
 import { sessionRegistry } from "../realtime/SessionRegistry";
 import { ValidateVoiceTicket } from "../voiceRelay";
+import { ListNameTags } from "../characterSlots";
 
 // mm2-prod party service. Shapes captured in
 // DauntlessEndpointDocumentation/Matchmaking/{GetParty,Party/*}.md. The response contract is
@@ -74,6 +75,18 @@ function TicketUserId(req: any): string | undefined {
     const Ticket = req.headers["x-mystic-ticket"];
     return typeof Ticket === "string" && Ticket.length > 0 ? ValidateVoiceTicket(Ticket) : undefined;
 }
+
+// GET /mystic/name-tags -> text/plain, one "name\ttier\tstyle" line per staff account (tier/style may be "-").
+// The client DLL (JoinPrompt.cpp NameTagThread, ticket auth) polls it every 30 s for nameplate title lines and styles; names carry no tags.
+let NameTagCache = { At: 0, Body: "" };
+partyRouter.get("/mystic/name-tags", async (req: any, res) => {
+    if (TicketUserId(req) == undefined) { res.status(401).send(""); return; }
+    if (Date.now() - NameTagCache.At > 30_000) {
+        const Tags = await ListNameTags();
+        NameTagCache = { At: Date.now(), Body: Tags.map((T) => `${T.name}\t${T.tier ?? "-"}\t${T.style ?? "-"}\n`).join("") };
+    }
+    res.type("text/plain").send(NameTagCache.Body);
+});
 
 async function LateJoinContext(UserId: string) {
     const Party = await GetPartyForPlayer(UserId);

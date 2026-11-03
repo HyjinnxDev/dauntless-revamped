@@ -53,6 +53,8 @@ void MpJoinPromptStart();
 bool MpJoinPromptTakeOffer(std::string& Text);
 bool MpJoinPromptTakeNotice(std::string& Text);
 void MpJoinPromptAnswer(bool Join);
+// JoinPrompt.cpp: latest backend /mystic/name-tags body ("name\ttier\tstyle\n" lines; "" until fetched).
+std::string MpNameTags();
 // HuntStats.cpp: hunt server -> backend POST /mystic/hunt-stats of one kill's per-player damage JSON (background thread).
 void MpHuntStatsPost(std::string Json, std::wstring ApiKey);
 // WindowLock.cpp: keeps the player's window size/position/border across map loads (client).

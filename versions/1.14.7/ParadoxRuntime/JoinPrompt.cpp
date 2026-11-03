@@ -5,9 +5,12 @@
 // player the hunt the way a party member follows its leader, and the game travels on its own.
 // Auth: the launcher's voice ticket (X-Mystic-Ticket); the runtime holds no game bearer token.
 // Off without the launcher env, or with DISABLE_JOIN_PROMPT.flag beside the exe.
+// [Revamped 2026-11-03] A second thread polls GET /mystic/name-tags (staff tier + name style per display name) every
+// 30 s for dllmain.cpp StaffNameplates; game names carry no tags since the game caps them at 20 characters.
 
 #include <windows.h>
 #include <winhttp.h>
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <string>
@@ -19,6 +22,7 @@ namespace {
 
 std::mutex g_Lock;
 std::string g_Offer, g_Notice;      // game thread takes these (one-shot)
+std::string g_NameTags;             // last /mystic/name-tags body: "name\ttier\tstyle\n" lines
 std::atomic<int> g_Answer{ 0 };     // 1 join, 2 stay
 std::wstring g_Base, g_Ticket;
 
@@ -122,6 +126,18 @@ DWORD WINAPI Thread(LPVOID) {
     }
 }
 
+DWORD WINAPI NameTagThread(LPVOID) {
+    for (bool Logged = false;; Sleep(30000)) {
+        std::string Body;
+        DWORD Status = 0;
+        const bool Ok = Http(L"GET", L"/mystic/name-tags", Body, Status) && Status == 200;
+        if (Ok) Set(g_NameTags, Body);
+        if (!Logged || !Ok) MpLog("[NameTags] " + (Ok ? std::to_string(std::count(Body.begin(), Body.end(), '\n')) + " tagged names"
+            : "fetch failed status=" + std::to_string(Status)));
+        Logged = Logged || Ok;
+    }
+}
+
 bool Take(std::string& Slot, std::string& Out) {
     std::lock_guard<std::mutex> Lk(g_Lock);
     Out.swap(Slot);
@@ -134,9 +150,12 @@ bool Take(std::string& Slot, std::string& Out) {
 bool MpJoinPromptTakeOffer(std::string& Text) { return Take(g_Offer, Text); }
 bool MpJoinPromptTakeNotice(std::string& Text) { return Take(g_Notice, Text); }
 void MpJoinPromptAnswer(bool Join) { g_Answer = Join ? 1 : 2; }
+std::string MpNameTags() {
+    std::lock_guard<std::mutex> Lk(g_Lock);
+    return g_NameTags;
+}
 
 void MpJoinPromptStart() {
-    if (MpExeRelativeFlagPresent(L"DISABLE_JOIN_PROMPT.flag")) { MpLog("[JoinPrompt] off (flag)"); return; }
     char Ticket[4096]{};                         // a JWT; MpReadEnvironment stops at 512
     const DWORD Len = GetEnvironmentVariableA("MYSTICPARADOX_VOICE_TICKET", Ticket, sizeof(Ticket));
     g_Base = MpApiBaseForCrashReports();
@@ -145,6 +164,8 @@ void MpJoinPromptStart() {
         return;
     }
     g_Ticket.assign(Ticket, Ticket + Len);
+    CreateThread(nullptr, 0, NameTagThread, nullptr, 0, nullptr);
+    if (MpExeRelativeFlagPresent(L"DISABLE_JOIN_PROMPT.flag")) { MpLog("[JoinPrompt] off (flag)"); return; }
     CreateThread(nullptr, 0, Thread, nullptr, 0, nullptr);
     MpLog("[JoinPrompt] polling for party hunt offers");
 }
