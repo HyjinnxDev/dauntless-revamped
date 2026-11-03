@@ -34,7 +34,13 @@ $ids = $ids | Sort-Object -Unique | Where-Object {
 foreach ($id in $ids) { Write-Host "stopping node $id"; Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
 foreach ($s in $servers) { Write-Host "stopping game server $($s.ProcessId)"; Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 3
-$left = @($ids | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue }) + @($servers | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } | ForEach-Object ProcessId)
+# Processes can take a while to exit after Stop-Process: wait up to 20 s before calling them unstoppable.
+$deadline = (Get-Date).AddSeconds(20)
+do {
+  $left = @($ids | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue }) + @($servers | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } | ForEach-Object ProcessId)
+  if ($left.Count -eq 0 -or (Get-Date) -gt $deadline) { break }
+  Start-Sleep -Seconds 1
+} while ($true)
 if ($left.Count -gt 0) {
   throw "could not stop process(es) $($left -join ', '): they were probably started as administrator. Run this script once with -Stop from an elevated PowerShell, then start it normally."
 }

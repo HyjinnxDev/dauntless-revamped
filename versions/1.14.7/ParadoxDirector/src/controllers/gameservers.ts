@@ -543,7 +543,9 @@ async function StartServer(Map: string, Behemoth: string | undefined, Matchmaker
     let Child: ReturnType<typeof spawn>;
     try {
         Child = spawn(GAMESERVER_BINARY_PATH, [
-            "-", // argv[1] used to carry the API key; kept as a placeholder so the DLL's argument positions don't move
+            // ponytail: the live server DLL (29 Oct) still reads the key from argv[1]; the new DLL takes the env copy and
+            // accepts "-". Put "-" back here once the new server DLL is deployed (FINDINGS M15).
+            METAGAME_API_KEY,
             Port.toString(),
             Map,
             Behemoth != undefined ? Behemoth : "NO_BEHEMOTH",
