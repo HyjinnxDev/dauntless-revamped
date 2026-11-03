@@ -7,13 +7,10 @@
 param([switch]$DirectorOnly, [switch]$Stop)
 
 $ErrorActionPreference = 'Stop'
-# Admin: a Director started from an elevated window (and its game servers) can only be stopped, or
-# even seen, from an elevated one. Asks once through UAC.
-$admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $admin) {
-  Start-Process powershell.exe -Verb RunAs -ArgumentList (@('-NoExit', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"") + @(if ($DirectorOnly) { '-DirectorOnly' }) + @(if ($Stop) { '-Stop' }))
-  return
-}
+# [Revamped 2026-11-03] No self-elevation (FINDINGS M6): the backend, Director and game servers run as the normal
+# user, so a remote-code bug in any of them doesn't get administrator rights. Port 443 needs no admin on Windows;
+# host-firewall.ps1 is the only script that does. A stack still running from an older elevated start can't be
+# stopped from here: step 1 says so, and one elevated `restart-server.ps1 -Stop` clears it.
 $repo = Split-Path $PSScriptRoot   # versions\1.14.7
 # Machine paths. Another host (deploy/README.md) sets them as machine environment variables; unset = this PC.
 $game = if ($env:REVAMPED_GAME_DIR) { $env:REVAMPED_GAME_DIR.TrimEnd('\') + '\' } else { 'D:\Dev\dauntless 1.14.7\Dauntless_1.14.7\' }
@@ -37,6 +34,10 @@ $ids = $ids | Sort-Object -Unique | Where-Object {
 foreach ($id in $ids) { Write-Host "stopping node $id"; Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }
 foreach ($s in $servers) { Write-Host "stopping game server $($s.ProcessId)"; Stop-Process -Id $s.ProcessId -Force -ErrorAction SilentlyContinue }
 Start-Sleep -Seconds 3
+$left = @($ids | Where-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue }) + @($servers | Where-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } | ForEach-Object ProcessId)
+if ($left.Count -gt 0) {
+  throw "could not stop process(es) $($left -join ', '): they were probably started as administrator. Run this script once with -Stop from an elevated PowerShell, then start it normally."
+}
 if ($Stop) { Write-Host 'stopped'; return }
 
 if (-not $DirectorOnly) {

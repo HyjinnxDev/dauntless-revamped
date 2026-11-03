@@ -129,12 +129,6 @@ function ProcCpuPercent(P: RawProc): number | undefined {
     return Math.round(1000 * ((P.t - Prev.t) / 1e4) / ((Now - Prev.at) * os.cpus().length)) / 10;
 }
 
-let Elevated: boolean | undefined;
-function IsElevated(): Promise<boolean> {
-    if (Elevated !== undefined || process.platform !== "win32") return Promise.resolve(Elevated ?? false);
-    return new Promise((resolve) => execFile("net", ["session"], { windowsHide: true }, (Err) => resolve(Elevated = !Err)));
-}
-
 function Disk() {
     try {
         const S = fs.statfsSync(path.parse(LOG_DIR ?? process.cwd()).root);
@@ -143,7 +137,7 @@ function Disk() {
 }
 
 export async function GetServersOverview(_req: Request, res: Response): Promise<void> {
-    const [Dir, Procs, Elev] = await Promise.all([DirectorStatus(), ListProcesses(), IsElevated()]);
+    const [Dir, Procs] = await Promise.all([DirectorStatus(), ListProcesses()]);
     LastDirector = Dir;
     const ByPid = new Map(Dir?.servers.map((S) => [S.processId, S]) ?? []);
     const Processes = Procs.flatMap((P) => {
@@ -177,9 +171,9 @@ export async function GetServersOverview(_req: Request, res: Response): Promise<
         processes: Processes,
         players: { online: sessionRegistry.onlineAccountCount(), accounts: Accounts, new24h: New24h, pending: Pending, banned: Banned },
         control: {
-            restart: Boolean(RESTART_SCRIPT) && Elev,
-            restartWhyNot: !RESTART_SCRIPT ? "ADMIN_RESTART_SCRIPT is not set in the backend .env."
-                : !Elev ? "The backend isn't running elevated, so the restart script would stop at a UAC prompt. Start it with restart-server.ps1." : undefined,
+            // [Revamped 2026-11-03] No elevation needed any more (FINDINGS M6): the stack runs as the normal user.
+            restart: Boolean(RESTART_SCRIPT),
+            restartWhyNot: !RESTART_SCRIPT ? "ADMIN_RESTART_SCRIPT is not set in the backend .env." : undefined,
             logs: Boolean(LOG_DIR)
         }
     });
@@ -228,7 +222,7 @@ export async function RestartStack(req: Request, res: Response): Promise<void> {
     if (Target !== "stack" && Target !== "director") { res.status(400).json({ error: { code: "ADMIN_VALIDATION", message: "target must be stack or director." } }); return; }
     const Reason = ReadReason(req, res);
     if (Reason == undefined) return;
-    if (!RESTART_SCRIPT || !(await IsElevated())) { res.status(409).json({ error: { code: "ADMIN_RESTART_UNAVAILABLE", message: "Restart isn't available on this host (see the Servers page)." } }); return; }
+    if (!RESTART_SCRIPT) { res.status(409).json({ error: { code: "ADMIN_RESTART_UNAVAILABLE", message: "Restart isn't available on this host (see the Servers page)." } }); return; }
     await Audit(req, `server.restart.${Target}`, { target: Target }, Reason);
     logger.warn(`[ADMIN] ${Target} restart requested from the dashboard: ${Reason}`);
     res.json({ ok: true });

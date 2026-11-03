@@ -82,7 +82,10 @@ if ($Code) { throw 'replica set setup failed' }
 if (Test-Path "$Bundle\mongo\db.archive.gz") {
   if ($Fresh -or $RestoreDb) {
     Write-Host '== restoring database copy'
-    & $Restore --uri 'mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true' --archive="$Bundle\mongo\db.archive.gz" --gzip --drop --quiet
+    # Bundles since 2026-11-03 hold a scrubbed copy under its scratch name (bundle.json dumpDb); restore it as the
+    # database the backend .env names.
+    $Rename = if ($Info.dumpDb) { @('--nsFrom', "$($Info.dumpDb).*", '--nsTo', "$(Read-EnvValue "$V\ParadoxBackend\.env" 'MONGODB_DB').*") } else { @() }
+    & $Restore --uri 'mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true' --archive="$Bundle\mongo\db.archive.gz" --gzip --drop --quiet @Rename
     if ($LASTEXITCODE) { throw 'mongorestore failed' }
   } else { Write-Host '== database kept (already has data; -RestoreDb replaces it with the bundle copy)' }
 }
@@ -93,7 +96,7 @@ $Https = Read-EnvValue $BackendEnv 'HTTPS_PORT'; $Voice = Read-EnvValue $Backend
 $Games = "$(Read-EnvValue $DirectorEnv 'PORT_RANGE_BEGIN')-$(Read-EnvValue $DirectorEnv 'PORT_RANGE_END')"
 & "$V\host\host-firewall.ps1" -HttpsPort $Https -GamePorts $Games -VoicePort $Voice -Allowed Any
 
-# 7. Invite links (same certificate fingerprint as live; the launcher keeps servers apart by host:port).
+# 7. Invite links (the bundle's own certificate; the launcher keeps servers apart by host:port).
 $Fp = node -e "const fs=require('fs');console.log(new (require('crypto').X509Certificate)(fs.readFileSync(process.argv[1])).fingerprint256.replace(/:/g,'').toLowerCase())" (Read-EnvValue $BackendEnv 'PARADOX_CERT_PEM_PATH')
 $Code = ((Read-EnvValue $BackendEnv 'LAUNCHER_INVITE_CODES') -split ',')[0].Trim()
 $Invites = foreach ($Target in @(@('LAN (you, at home)', $Info.testLanIp), @('Public (outside testers)', $Info.publicIp))) {

@@ -138,8 +138,10 @@ if ($Setup) {
   robocopy "$live\ParadoxRuntime" "$repo\ParadoxRuntime" SDK.hpp *.inl PropertyFixup.hpp UnrealContainers.hpp UtfN.hpp deployment_config.generated.h /NFL /NDL /NJH /NJS /NP | Out-Null
   robocopy "$live\ParadoxRuntime\SDK" "$repo\ParadoxRuntime\SDK" /E /NFL /NDL /NJH /NJS /NP | Out-Null
 
-  # 3. Test .env files.
-  Write-TestEnv "$live\ParadoxBackend\.env" "$repo\ParadoxBackend\.env" ([ordered]@{
+  # 3. Test .env files, with secrets of their own (FINDINGS M2: a token from one stack must not work on the other).
+  . "$PSScriptRoot\new-test-secrets.ps1"
+  $secrets = New-TestSecrets $repo
+  $backendSet = [ordered]@{
     PORT = $ports.Http; HTTPS_PORT = $ports.Https; QOS_PORT = $ports.Qos; VOICE_UDP_PORT = $ports.Voice
     DEPLOYSERVER_URL = "127.0.0.1:$($ports.Director)"
     MONGODB_DB = $testDb; MONGODB_APP_NAME = 'paradox-backend-test'
@@ -149,8 +151,12 @@ if ($Setup) {
     GITHUB_CRASH_TOKEN = ''; GITHUB_CRASH_REPO = ''
     DISCORD_NEWS_BOT_TOKEN = ''; DISCORD_NEWS_CHANNEL_ID = ''; DISCORD_STATUS_CHANNEL_ID = ''; DISCORD_GUILD_ID = ''
     DISCORD_CLIENT_ID = ''; DISCORD_CLIENT_SECRET = ''
-  })
+  }
+  foreach ($k in $secrets.Backend.Keys) { $backendSet[$k] = $secrets.Backend[$k] }
+  Write-TestEnv "$live\ParadoxBackend\.env" "$repo\ParadoxBackend\.env" $backendSet
+  Write-Host "test admin authenticator secret: $($secrets.Backend.ADMIN_TOTP_SECRET)"
   Write-TestEnv "$live\ParadoxDirector\.env" "$repo\ParadoxDirector\.env" ([ordered]@{
+    METAGAME_API_KEY = $secrets.Director.METAGAME_API_KEY
     PORT = $ports.Director; PORT_RANGE_BEGIN = $ports.RangeBegin; PORT_RANGE_END = $ports.RangeEnd
     GAMESERVER_BINARY_PATH = "$game\Archon\Binaries\Win64\Dauntless-Win64-Shipping.exe"
     GAMESERVER_LOG_DIR = "$logs\gameservers"; SERVER_RUNTIME_AUTO_UPDATE = 'false'

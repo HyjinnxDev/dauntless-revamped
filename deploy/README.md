@@ -32,9 +32,9 @@ RevampedBundle\                 made by make-bundle.ps1 on the live PC
   backend\game-data\                                      -> repo\versions\1.14.7\ParadoxBackend\game-data\
   director\.env    test settings                          -> repo\versions\1.14.7\ParadoxDirector\.env
   director\game-data\                                     -> repo\versions\1.14.7\ParadoxDirector\game-data\
-  certs\           TLS certificate + key (same as live)  -> C:\Revamped\data\certs\
+  certs\           its own self-signed TLS certificate   -> C:\Revamped\data\certs\
   updates\         signed runtime/launcher files          -> C:\Revamped\data\updates\
-  mongo\db.archive.gz  copy of the live database          -> restored into C:\Revamped\data\mongo\
+  mongo\db.archive.gz  scrubbed copy of the live database -> restored into C:\Revamped\data\mongo\
   game\Dauntless_1.14.7\  game install (~16 GB)           -> C:\Revamped\game\Dauntless_1.14.7\
 ```
 
@@ -42,7 +42,7 @@ On the test machine, `C:\Revamped\data` plays the part of the live PC's `D:\Myst
 certs, updates). `install.ps1` sets machine environment variables `REVAMPED_GAME_DIR`, `REVAMPED_DATA_DIR` and
 `REVAMPED_MONGOD` so the usual `restart-server.ps1` (and the staff console's restart button) work there unchanged.
 
-**The bundle holds secrets** (both `.env` files, the TLS private key). Keep it on your own drives or a USB stick,
+**The bundle holds the test server's own secrets** (both `.env` files, its TLS key; none of them work on live). Keep it on your own drives or a USB stick,
 never in OneDrive/Google Drive/Discord. Delete it from the stick once installed.
 
 ### What the test settings change
@@ -59,8 +59,10 @@ never in OneDrive/Google Drive/Discord. Delete it from the stick once installed.
 | `DISCORD_BOT_URL` / old bot token | - | **blank** | no bot on the test server: news dock hidden, no duplicate bot |
 | `UPDATE_PUBLISHER_ALLOWED_IPS` | ... | **blank** | updates are published to live only |
 
-Database, accounts, staff roles, invite codes and certificate are copies of live, so your normal account logs
-in. The test server never writes to the live database.
+Signing keys, gameserver key, admin authenticator, invite code and certificate are **new** for the test server
+(make-bundle.ps1 prints the authenticator secret). The database is a copy of live **without** emails, passwords,
+sessions or keys: everyone registers again there. Make yourself owner with `scripts/bootstrap_admin.ts`.
+The test server never writes to the live database.
 
 ## Setting up the test server (mini PC)
 
@@ -108,7 +110,7 @@ differ only by port, which the invite link carries.
 
 - **You (at home):** use the *LAN* invite. Your router doesn't loop public-IP traffic back inside.
 - **Outside testers:** the *Public* invite. In the launcher: Servers > Add server > paste it.
-  Everyone signs in again on the test server (same email/password as live: the database is a copy).
+  Everyone registers again on the test server (the copy has no emails or passwords).
 
 ### Day to day
 

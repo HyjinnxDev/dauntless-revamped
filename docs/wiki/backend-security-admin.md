@@ -208,7 +208,7 @@ Rules enforced in `controllers/admin.ts`:
 - **Missing `TARGET_CHANGELIST`** makes game launches fail with "build unsupported" (fails closed, by design).
 - **Executable and DLL hashes are reported by the launcher.** They are a consistency check, not tamper-proof against a modified launcher.
 - **Key-only game-server requests act as a fixed user.** Set `GAMESERVER_NO_PLAYER_USER_ID` deliberately; its default chain ends in the dev account.
-- **Restart from the dashboard** only works when the backend runs elevated (started via `restart-server.ps1`); otherwise it returns 409 `ADMIN_RESTART_UNAVAILABLE`. A full stack restart kills the backend that spawned it, hence the detached process.
+- **Restart from the dashboard** needs only `ADMIN_RESTART_SCRIPT` (no elevation since 2026-11-03, FINDINGS M6); without it the route returns 409 `ADMIN_RESTART_UNAVAILABLE`. A full stack restart kills the backend that spawned it, hence the detached process.
 - **Staff roles are read from the DB on each admin request**, so a role change or ban applies instantly to open dashboard sessions.
 - **Do not widen name tags**: the nameplate text clips in game.
 - A catch-all in `app.ts` answers any unknown request whose origin host contains `leaderboard` with 200 (Trials submit probe); other unknown routes log `Unstubbed route` and return 404.

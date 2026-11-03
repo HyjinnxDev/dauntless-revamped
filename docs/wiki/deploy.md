@@ -26,14 +26,14 @@ Backend ([backend](backend.md)), Director ([director](director.md)) and the game
 
 Steps, in order:
 1. **Repo**: `git clone --single-branch` of the branch (default `deploy-split`) from the **local live repo** (`-Live`) into `<Out>\repo`, then `origin` is set to the live repo's own `origin` URL (GitHub) so the test machine can `git pull` later. On re-run it does `git pull --ff-only <Live> <Branch>`.
-2. **Backend**: reads the live `ParadoxBackend\.env`, runs `Convert-Env`, writes `<Out>\backend\.env` (UTF-8 without BOM), copies `game-data\`. `Convert-Env` replaces the `-Game`, `-Live` and `-Data` paths with `<TargetRoot>\game\Dauntless_1.14.7`, `<TargetRoot>\repo` and `<TargetRoot>\data` (case-insensitive, both slash styles), then sets or appends the listed keys, and warns about any key still holding a `D:` to `Z:` path.
+2. **Backend**: reads the live `ParadoxBackend\.env`, runs `Convert-Env` with the test settings plus fresh secrets (`New-TestSecrets`, `host/new-test-secrets.ps1`), writes `<Out>\backend\.env` (UTF-8 without BOM), copies `game-data\`. `Convert-Env` replaces the `-Game`, `-Live` and `-Data` paths with `<TargetRoot>\game\Dauntless_1.14.7`, `<TargetRoot>\repo` and `<TargetRoot>\data` (case-insensitive, both slash styles), then sets or appends the listed keys, and warns about any key still holding a `D:` to `Z:` path.
 3. **Director**: same with `ParadoxDirector\.env` and `game-data\`. `-PublicIp` defaults to the live Director's `MY_IP`.
-4. **Certs and updates**: copies `<Data>\certs` and `<Data>\updates` (the same certificate, because launchers pin its fingerprint).
-5. **Database**: `mongodump --uri <backend MONGODB_URI> --db <MONGODB_DB> --archive=mongo\db.archive.gz --gzip` (read-only; needs MongoDB Database Tools, found on PATH or under `C:\Program Files\MongoDB\Tools`; skipped with `-SkipDb`).
+4. **Certs and updates**: generates the bundle's own self-signed certificate (`openssl req -x509`, RSA 2048, 825 days, unencrypted key, kept on re-runs) into `<Out>\certs` and copies `<Data>\updates`. The live TLS key never leaves the PC.
+5. **Database**: `mongodump` of the live DB to a temp file, `mongorestore --nsFrom <db>.* --nsTo revamped_bundle_scrub.*` into a scratch database on the live mongod, scrub (drop sessions, sign-in identities, API keys, `adminMfa`, `adminAudit`, Guard sessions; account emails become `<id>@test.invalid`, password hashes removed), `mongodump` the scratch DB to `mongo\db.archive.gz`, drop it. Needs MongoDB Database Tools (PATH or `C:\Program Files\MongoDB\Tools`); skipped with `-SkipDb`.
 6. **Game install**: robocopy of `-Game` (about 16 GB) to `game\Dauntless_1.14.7`, excluding `MysticParadox.dll.bak*`/`.old*` (skipped with `-SkipGame`).
-7. Copies `install.ps1` and the README into the bundle and writes `bundle.json` (`created`, `branch`, `commit`, `targetRoot`, `testLanIp`, `publicIp`, `ports`).
+7. Copies `install.ps1` and the README into the bundle and writes `bundle.json` (`created`, `branch`, `commit`, `targetRoot`, `testLanIp`, `publicIp`, `ports`, `dumpDb`). Prints the test console's authenticator secret.
 
-Settings changed for the test box (`Convert-Env` arguments): backend `HTTPS_PORT` 9443, `VOICE_UDP_PORT` 9791, `REALTIME_XMPP_ALLOWED_HOSTS` extended with the LAN and public IPs, `GITHUB_CRASH_TOKEN`, `DISCORD_NEWS_BOT_TOKEN`, `DISCORD_BOT_URL` and `UPDATE_PUBLISHER_ALLOWED_IPS` blanked; Director `MY_IP` (public), `PORT_RANGE_BEGIN/END` 9780-9790. It warns if any other variable still holds a path on a drive the test machine lacks. Everything else (accounts, staff roles, invite codes, JWT/admin secrets, certificate) is a live copy.
+Settings changed for the test box (`Convert-Env` arguments): backend `HTTPS_PORT` 9443, `VOICE_UDP_PORT` 9791, `REALTIME_XMPP_ALLOWED_HOSTS` extended with the LAN and public IPs, `GITHUB_CRASH_TOKEN`, `DISCORD_NEWS_BOT_TOKEN`, `DISCORD_BOT_URL` and `UPDATE_PUBLISHER_ALLOWED_IPS` blanked; Director `MY_IP` (public), `PORT_RANGE_BEGIN/END` 9780-9790. It warns if any other variable still holds a path on a drive the test machine lacks. Secrets, certificate and invite code are the bundle's own (FINDINGS M2); characters, inventories and staff roles are a live copy without emails or passwords.
 
 ### `install.ps1` (test machine, admin)
 
@@ -75,7 +75,7 @@ Run `host-firewall.ps1` as admin; plain-HTTP and local ports stay on loopback an
 
 | Target | How |
 |---|---|
-| Live PC | read-only: `.env` files, `game-data`, `D:\MysticParadoxData\{certs,updates}`, `mongodump` against live mongod on 27018, game install |
+| Live PC | reads `.env` files, `game-data`, `D:\MysticParadoxData\updates`, game install; `mongodump`/`mongorestore` against live mongod on 27018 (the scratch DB `revamped_bundle_scrub` only, dropped afterwards) |
 | [Backend](backend.md), [Director](director.md) | `.env` files rewritten for the test box; started by `restart-server.ps1` |
 | [Host scripts](host-scripts.md) | `restart-server.ps1`, `host-firewall.ps1` |
 | [backend-persistence](backend-persistence.md) | database dump and restore; replica set init script |
@@ -90,7 +90,7 @@ Script parameters rather than env: `-TestLanIp`, `-PublicIp`, `-Out` (default `D
 ## Gotchas
 
 - **The bundle holds secrets** (both `.env` files with live secrets, the TLS private key, the DB with all accounts). Keep it on your own drives, never in OneDrive/Drive/Discord, and delete it from the stick after install.
-- The test server is a *copy of live identity*: same JWT/admin secrets, same certificate, same invite codes, same accounts. Tokens and logins are interchangeable between the two; only ports and the database file separate them. The test server never writes to the live DB.
+- The test server has **its own identity** (since 2026-11-03): its own JWT/admin/gameserver secrets, certificate and invite code, so tokens from one are refused by the other. Testers register again (emails and passwords are not copied). Bundles made before that date are live copies: rebuild them. Staff need `bootstrap_admin.ts` on the test box for an owner account.
 - `invites.txt` contains a real invite code in plain text.
 - At your own home, use the **LAN** invite; a router usually will not loop the public IP back inside.
 - `install.ps1` runs elevated scripts that came out of the bundle's `repo\` folder; treat the bundle media as trusted code.

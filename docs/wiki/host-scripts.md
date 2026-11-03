@@ -6,13 +6,14 @@
 
 Five PowerShell scripts for the machine that runs the live 1.14.7 server stack. They start and stop the stack, open the firewall, record resource use, summarise a hunt's combat log, and run a second throw-away "test stack" next to the live one. The scripts are Windows only. Defaults assume the original dev PC (`D:\Dev\...`, `D:\MysticParadoxData`). Only `restart-server.ps1` reads machine environment variables to override them (see Config).
 
-Run them as `powershell -ExecutionPolicy Bypass -File <script> [switches]`. `restart-server.ps1` elevates itself; `host-firewall.ps1` must be run as administrator; the sizing logger's header says to run it elevated like the restart script.
+Run them as `powershell -ExecutionPolicy Bypass -File <script> [switches]`. `restart-server.ps1` runs as the normal user (no elevation since 2026-11-03, FINDINGS M6); `host-firewall.ps1` must be run as administrator; the sizing logger's header says to run it elevated like the restart script.
 
 ## File reference
 
 | File | What it does |
 |---|---|
-| `host/restart-server.ps1` | Stops and starts the backend and Director (plus mongod if down). Switches `-DirectorOnly`, `-Stop`. Self-elevates through UAC. |
+| `host/restart-server.ps1` | Stops and starts the backend and Director (plus mongod if down). Switches `-DirectorOnly`, `-Stop`. Runs unelevated, so the stack it starts does too. |
+| `host/new-test-secrets.ps1` | Dot-sourced by `test-stack.ps1` and `deploy/make-bundle.ps1`: `New-TestSecrets <versions\1.14.7>` returns fresh backend/Director `.env` overrides (JWT pair, gameserver key = `METAGAME_API_KEY`, hash secret, admin TOTP, metrics token, invite code; publisher/log-sync/Discord secrets blank). |
 | `host/host-firewall.ps1` | Creates three inbound allow rules (backend TCP, game UDP, voice UDP) and disables the blanket "allow this app" rules for `node.exe` and the game exe. Params `-HttpsPort`, `-GamePorts`, `-VoicePort`, `-Allowed`. |
 | `host/server-sizing-log.ps1` | Samples CPU, RAM, network, players and hunts into a CSV. `-Summary` prints a hardware suggestion. Params `-Interval`, `-Summary`, `-Test`, `-csv`. |
 | `host/test-stack.ps1` | A second backend + Director on other ports and a separate Mongo database, for feature branches. Run from a git worktree. Switches `-Setup`, `-Stop`, `-Remove`, `-Client <name>`. |
@@ -29,7 +30,7 @@ Run them as `powershell -ExecutionPolicy Bypass -File <script> [switches]`. `res
 | `-DirectorOnly` | Stop only the Director (port 3001 owner) and the game servers; build and start the Director |
 | `-Stop` | Stop backend, Director and game servers; start nothing (mongod keeps running) |
 
-1. If not elevated, re-launches itself with `Start-Process powershell.exe -Verb RunAs -NoExit` (same switches) and returns. Reason: a Director started from an elevated window and its game servers can only be seen or stopped from an elevated one.
+1. No elevation (FINDINGS M6: a remote-code bug in the backend, Director or a game server must not get administrator rights; port 443 needs none on Windows). If a process it should stop is still alive after the stop (an older stack started elevated), it throws and says to run `-Stop` once from an elevated PowerShell.
 2. Resolves machine paths: `REVAMPED_GAME_DIR`, `REVAMPED_DATA_DIR`, `REVAMPED_MONGOD`. Unset means the dev PC defaults. The repo is the script's parent folder (`versions\1.14.7`). Creates `<data>\logs`.
 3. **Stop.** Collects the owners of the listening TCP ports (`443, 3000, 3001`, or just `3001` with `-DirectorOnly`) plus the parent process of every `Dauntless-Win64-Shipping.exe` that runs from the game dir with a `-server` argument. Of those it force-kills only `node.exe` processes, then the game servers themselves, then waits 3 s. A second Director would be caught through its children. The 1.4.4 stack and game clients are left alone because the server match requires the live game path and `-server`.
 4. With `-Stop` it ends here.
@@ -94,7 +95,7 @@ Procedures used on the live PC that no script wraps yet.
 3. Uncommitted work: `git diff --binary > wip-tracked.patch`, copy every `git ls-files --others --exclude-standard` file, and note `git rev-parse HEAD`.
 4. Restore: stop the stack and the 27018 mongod, copy `mongo\` back, `git reset --hard <noted HEAD>`, `git apply wip-tracked.patch`, copy the untracked files back, then `restart-server.ps1`.
 
-**Restart the backend only** (Director, hubs and running hunts stay up; players drop for about 15 s): `restart-server.ps1` has no switch for this. Run, elevated (the backend was started elevated, so a normal shell cannot stop it), steps 1 and 3 of the script: stop the owner of TCP 443/3000, then `Start-Process cmd.exe -ArgumentList '/c', 'npm start > "D:\MysticParadoxData\logs\backend.log" 2>&1' -WorkingDirectory <repo>\versions\1.14.7\ParadoxBackend -WindowStyle Hidden` and wait for `paradox=ready` in the log. Do not launch it with `Start-Process -Wait`: that waits for the backend itself and never returns. A backend-only restart reaches players at their next login; the hubs keep the `/progression/config` they fetched at boot.
+**Restart the backend only** (Director, hubs and running hunts stay up; players drop for about 15 s): `restart-server.ps1` has no switch for this. Run steps 1 and 3 of the script (elevated only if the backend was started elevated, before 2026-11-03): stop the owner of TCP 443/3000, then `Start-Process cmd.exe -ArgumentList '/c', 'npm start > "D:\MysticParadoxData\logs\backend.log" 2>&1' -WorkingDirectory <repo>\versions\1.14.7\ParadoxBackend -WindowStyle Hidden` and wait for `paradox=ready` in the log. Do not launch it with `Start-Process -Wait`: that waits for the backend itself and never returns. A backend-only restart reaches players at their next login; the hubs keep the `/progression/config` they fetched at boot.
 
 **After a reboot** start both `restart-server.ps1` and `discord-bot\start-bot.ps1`. The bot is a separate process; without it the backend logs `[News] bot not read: TypeError: fetch failed`.
 
@@ -134,14 +135,14 @@ Script parameters are above. Environment variables:
 
 ## Gotchas
 
-- **UAC.** `restart-server.ps1` opens a new elevated window (`-NoExit`) and returns immediately. Output appears there, not in your terminal.
+- **Switching off elevation.** A stack started by the old self-elevating script runs as administrator; the new script can't stop it. Once: `restart-server.ps1 -Stop` from an elevated PowerShell, then `restart-server.ps1` from a normal one. mongod is left running either way (it may stay elevated until the next reboot; harmless, it only listens on 127.0.0.1).
 - **Readiness poll checks `Test-Path` before `Select-String`.** Under `ErrorActionPreference=Stop`, `Select-String` throws on a missing file even with `-ErrorAction SilentlyContinue`. Without the check the script stops right after starting the backend (the log was just deleted) and the Director never starts (happened 2026-10-29). If Ramsgate is down after a restart, read the elevated window, then run `-DirectorOnly`.
 - **`-DirectorOnly` kills every game server**, so hunts drop. The backend stays up.
 - **Port numbers are hard-coded** in `restart-server.ps1` (443, 3000, 3001, 27018) and in `server-sizing-log.ps1` (hubs counted as UDP 8789 and up). A custom Director `PORT` or game range is not understood by them.
 - **It kills by port owner.** Any `node.exe` listening on 443, 3000 or 3001 is force-stopped. Do not run an unrelated Node service there.
 - **Test backend HTTP 3100 = the Discord bot's default `BOT_HTTP_PORT`.** With the bot running on the same PC, the test backend fails with `EADDRINUSE`, and `test-stack.ps1` would force-stop the bot as the owner of 3100. Move one of them.
 - **The sizing logger is wrong with a local client.** The client's CPU and RAM are not server cost. Play from another PC. In `-Test` mode the `mongo` column includes live (mongod is shared).
-- **`test-stack.ps1` copies the live `.env` files** and then overrides ports and blanks the Discord, GitHub and admin-login keys. The other secrets (JWT key, gameserver API key) are copied as they are. Treat the worktree `.env` files as secrets.
+- **`test-stack.ps1` copies the live `.env` files** and then overrides ports, blanks the Discord and GitHub keys and replaces every signing key and API key with fresh ones (`New-TestSecrets`, FINDINGS M2), so a token from one stack is refused by the other. `-Setup` prints the test console's new authenticator secret. A stack set up before 2026-11-03 keeps the live secrets until it is set up again.
 - **Test DB copy is a snapshot** of live data at `-Setup` time. It is kept on later runs, so a refresh means `-Remove` and `-Setup`.
 - **The test stack shares the live mongod** (different database) and starts it with the live paths if it is down.
 - **Firewall script scope.** Default `-Allowed 192.168.1.0/24` only works if your LAN is that subnet. For outside players use `-Allowed Any` and port-forward.

@@ -1,9 +1,13 @@
 # Builds the test-server bundle: one folder with everything a second Windows machine needs to run the
-# Dauntless 1.14.7 stack (deploy/README.md). Only READS the live server: its .env files, game data, certificates,
-# update files, game install and a mongodump of its database. Nothing live is stopped, changed or restarted.
+# Dauntless 1.14.7 stack (deploy/README.md). Reads the live server: its .env files, game data, update files, game
+# install and a mongodump of its database. Nothing live is stopped or restarted; the database copy is scrubbed in a
+# temporary database (revamped_bundle_scrub) on the live mongod, then dropped.
+# [Revamped 2026-11-03] FINDINGS M2: the bundle gets its OWN secrets (signing keys, gameserver key, hash secret,
+# admin TOTP, invite code), its own self-signed certificate, and a database without sign-ins, sessions, emails or
+# password hashes, so losing the bundle or the test box never exposes live accounts or keys.
 #   powershell -ExecutionPolicy Bypass -File deploy\make-bundle.ps1 -TestLanIp 192.168.1.50
 # Re-run to refresh it (code is pulled, files are re-copied). -SkipGame / -SkipDb leave those parts as they are.
-# The bundle holds secrets (.env files, TLS private key): keep it on your own drives, never in a cloud folder.
+# The bundle holds the test server's own secrets (.env files, TLS key): still keep it off cloud folders.
 param(
   [Parameter(Mandatory)][string]$TestLanIp,                  # the test machine's LAN address
   [string]$PublicIp,                                         # default: live Director MY_IP (same router)
@@ -18,6 +22,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. "$Live\versions\1.14.7\host\new-test-secrets.ps1"
+$ScrubDb = 'revamped_bundle_scrub'
 # Test ports: the live box keeps 443 / UDP 8780-8791 on the router, so the test box gets its own.
 $Ports = @{ Https = 9443; GameFirst = 9780; GameLast = 9790; Voice = 9791 }
 $V = "$Live\versions\1.14.7"
@@ -57,6 +63,7 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $BackendEnv = [IO.File]::ReadAllText("$V\ParadoxBackend\.env")
 $DirectorEnv = [IO.File]::ReadAllText("$V\ParadoxDirector\.env")
 if (-not $PublicIp) { $PublicIp = Read-EnvValue $DirectorEnv 'MY_IP' }
+$Secrets = New-TestSecrets $V
 
 # 1. Code: a clone of the branch, its remote set to GitHub so the test machine can pull later.
 Write-Host "== repo ($Branch)"
@@ -71,7 +78,7 @@ if ($LASTEXITCODE) { throw 'git failed' }
 Write-Host '== backend'
 $Hosts = @((Read-EnvValue $BackendEnv 'REALTIME_XMPP_ALLOWED_HOSTS') -split ',' | Where-Object { $_ }) + $TestLanIp + $PublicIp | Select-Object -Unique
 New-Item -ItemType Directory -Force "$Out\backend" | Out-Null
-$BackendTest = Convert-Env $BackendEnv @{
+$BackendSet = @{
   HTTPS_PORT = $Ports.Https
   VOICE_UDP_PORT = $Ports.Voice
   REALTIME_XMPP_ALLOWED_HOSTS = $Hosts -join ','
@@ -79,7 +86,10 @@ $BackendTest = Convert-Env $BackendEnv @{
   DISCORD_NEWS_BOT_TOKEN = ''
   DISCORD_BOT_URL = ''
   UPDATE_PUBLISHER_ALLOWED_IPS = ''
+  PARADOX_KEY_PASSPHRASE = ''   # the bundle's own certificate key (step 4) is not encrypted
 }
+foreach ($Key in $Secrets.Backend.Keys) { $BackendSet[$Key] = $Secrets.Backend[$Key] }
+$BackendTest = Convert-Env $BackendEnv $BackendSet
 [IO.File]::WriteAllText("$Out\backend\.env", $BackendTest)
 Copy-Tree "$V\ParadoxBackend\game-data" "$Out\backend\game-data"
 
@@ -90,13 +100,22 @@ $DirectorTest = Convert-Env $DirectorEnv @{
   MY_IP = $PublicIp
   PORT_RANGE_BEGIN = $Ports.GameFirst
   PORT_RANGE_END = $Ports.GameLast
+  METAGAME_API_KEY = $Secrets.Director.METAGAME_API_KEY
 }
 [IO.File]::WriteAllText("$Out\director\.env", $DirectorTest)
 Copy-Tree "$V\ParadoxDirector\game-data" "$Out\director\game-data"
 
-# 4. Certificates (the launcher pins this certificate's fingerprint) and signed runtime/launcher updates.
+# 4. A certificate of its own (the launcher pins its fingerprint; the live key never leaves this PC) and the signed
+#    runtime/launcher updates.
 Write-Host '== certs, updates'
-Copy-Tree "$Data\certs" "$Out\certs"
+$OpenSsl = Get-Command openssl -ErrorAction SilentlyContinue | ForEach-Object Source
+if (-not $OpenSsl) { $OpenSsl = 'C:\Program Files\Git\usr\bin\openssl.exe' }
+if (-not (Test-Path $OpenSsl)) { throw 'openssl not found (it ships with Git for Windows)' }
+New-Item -ItemType Directory -Force "$Out\certs" | Out-Null
+if (-not (Test-Path "$Out\certs\fullchain.pem")) {
+  & $OpenSsl req -x509 -newkey rsa:2048 -nodes -sha256 -days 825 -subj '/CN=revamped-test' -keyout "$Out\certs\privkey.pem" -out "$Out\certs\fullchain.pem" 2>&1 | Out-Null
+  if ($LASTEXITCODE) { throw 'test certificate generation failed' }
+}
 Copy-Tree "$Data\updates" "$Out\updates"
 
 # 5. Database copy. mongodump only reads; the live server keeps running.
@@ -105,9 +124,43 @@ if (-not $SkipDb) {
   $Dump = Get-Command mongodump -ErrorAction SilentlyContinue | ForEach-Object Source
   if (-not $Dump) { $Dump = Get-ChildItem 'C:\Program Files\MongoDB\Tools\*\bin\mongodump.exe' -ErrorAction SilentlyContinue | Select-Object -Last 1 -ExpandProperty FullName }
   if (-not $Dump) { throw 'mongodump not found: winget install MongoDB.DatabaseTools (or re-run with -SkipDb)' }
+  $RestoreTool = Join-Path (Split-Path $Dump) 'mongorestore.exe'
+  $Uri = Read-EnvValue $BackendEnv 'MONGODB_URI'; $LiveDb = Read-EnvValue $BackendEnv 'MONGODB_DB'
+  if ($LiveDb -eq $ScrubDb) { throw "the live database is named $ScrubDb?" }
   New-Item -ItemType Directory -Force "$Out\mongo" | Out-Null
-  & $Dump --uri (Read-EnvValue $BackendEnv 'MONGODB_URI') --db (Read-EnvValue $BackendEnv 'MONGODB_DB') --archive="$Out\mongo\db.archive.gz" --gzip --quiet
+  $Raw = "$env:TEMP\revamped-live-dump.gz"
+  & $Dump --uri $Uri --db $LiveDb --archive="$Raw" --gzip --quiet
   if ($LASTEXITCODE) { throw 'mongodump failed (is the live mongod on 27018 running?)' }
+  # Into a scratch database (never the live one: --nsTo renames, --drop only touches the scratch copy), scrub, dump.
+  & $RestoreTool --uri $Uri --archive="$Raw" --gzip --nsFrom "$LiveDb.*" --nsTo "$ScrubDb.*" --drop --quiet
+  if ($LASTEXITCODE) { throw 'scratch restore failed' }
+  Remove-Item $Raw -Force
+  $env:MONGO_URI = $Uri; $env:SCRUB_DB = $ScrubDb
+  Push-Location "$V\ParadoxBackend"
+  try {
+    node -e @'
+const { MongoClient } = require('mongodb');
+MongoClient.connect(process.env.MONGO_URI).then(async (c) => {
+  if (process.env.SCRUB_DB !== 'revamped_bundle_scrub') throw new Error('refusing to scrub ' + process.env.SCRUB_DB);
+  const db = c.db(process.env.SCRUB_DB);
+  // Sign-ins, sessions, keys, staff authenticators and the audit log (IPs) don't travel.
+  for (const name of ['refreshSessions', 'authIdentities', 'adminSessions', 'adminMfa', 'adminAudit', 'userApiKeys', 'gameServerApiKeys',
+    'gameExchangeCodes', 'discordOAuthTransactions', 'launcherGuardSessions']) await db.collection(name).drop().catch(() => undefined);
+  // No emails or password hashes: testers register again on the test server.
+  const r = await db.collection('accounts').updateMany({ email: { $type: 'string' } },
+    [{ $set: { email: { $concat: [{ $toString: '$_id' }, '@test.invalid'] } } }, { $unset: ['passwordHash'] }]);
+  await db.collection('accounts').updateMany({ passwordHash: { $exists: true } }, { $unset: { passwordHash: '' } });
+  console.log('scrubbed ' + r.modifiedCount + ' account emails');
+  await c.close();
+}).catch((e) => { console.error(e.message); process.exit(1); });
+'@
+    if ($LASTEXITCODE) { throw 'database scrub failed' }
+  } finally { Pop-Location }
+  & $Dump --uri $Uri --db $ScrubDb --archive="$Out\mongo\db.archive.gz" --gzip --quiet
+  $DumpCode = $LASTEXITCODE
+  Push-Location "$V\ParadoxBackend"
+  try { node -e "require('mongodb').MongoClient.connect(process.env.MONGO_URI).then(async c => { await c.db('$ScrubDb').dropDatabase(); await c.close(); })" } finally { Pop-Location }
+  if ($DumpCode) { throw 'mongodump of the scrubbed copy failed' }
 }
 
 # 6. Game install (~16 GB) without the old runtime DLL backups.
@@ -120,6 +173,7 @@ if (-not $SkipGame) {
 Copy-Item "$PSScriptRoot\install.ps1", "$PSScriptRoot\README.md" $Out -Force
 [ordered]@{
   created = (Get-Date).ToString('s'); branch = $Branch; commit = (git -C "$Out\repo" rev-parse --short HEAD)
-  targetRoot = $TargetRoot; testLanIp = $TestLanIp; publicIp = $PublicIp; ports = $Ports
+  targetRoot = $TargetRoot; testLanIp = $TestLanIp; publicIp = $PublicIp; ports = $Ports; dumpDb = $ScrubDb
 } | ConvertTo-Json | Set-Content -Encoding ascii "$Out\bundle.json"
+Write-Host "test admin authenticator secret (add it to your app for the test console): $($Secrets.Backend.ADMIN_TOTP_SECRET)"
 Write-Host "bundle ready: $Out  (copy the whole folder to the test machine, then run install.ps1 there as admin)"
