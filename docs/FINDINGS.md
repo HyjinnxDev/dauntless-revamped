@@ -17,7 +17,9 @@ No critical findings.
 
 **Resolved since (2026-10-24, live on `main`):** L4 fixed; L8 mostly fixed; H4 re-rated (the 500 is deliberate, see its status). Also fixed then, found while writing the wiki: a ban now closes chat/voice and revokes sessions on every character slot (`controllers/admin.ts`); published `partyOutbox` rows expire after a day (`ttlAt` TTL); bounty grant windows roll instead of ending 2027-12-31 (`routes/tuning.ts`); a blank `MAX_CONCURRENT_HUNT_SERVERS` means 3, not 0; `reset_mastery.cjs --apply` needs `--confirm=RESET_ALL_MASTERY`; hunt pass progress and Elite purchases no longer change keys when passes move (two-week seasons, one pass per season, `huntPassRotation.ts`); Challenges no longer show "~27000 days" to unlock.
 
-**Fixed on branch `fix/cleanup-sweep` (2026-10-28, not merged or deployed yet):** L1, L2, L13, L16. Plus about 40 bugs not listed here, found in a second sweep (launcher sign-in/download races, backend crash paths, store/party/chat fixes); see that branch's commits.
+**Fixed on branch `fix/cleanup-sweep` (2026-10-28, merged and live 2026-10-29):** L1, L2, L13, L16. Plus about 40 bugs not listed here, found in a second sweep (launcher sign-in/download races, backend crash paths, store/party/chat fixes); see that branch's commits.
+
+**Fixed on branch `launch/must-fixes` (2026-11-03, not deployed yet):** M1-M11 and M15; M12 and M13 in part; M14 frozen. See each Status line, including two deploy notes (M4 `.env` flag, M6 elevated stack).
 
 ---
 
@@ -64,90 +66,105 @@ No critical findings.
 - **What:** `MysticParadox.dll` and `winmm.dll` are downloaded from the invite's server and checked only against the SHA-256 that the same server publishes. The Ed25519 signature in the manifest is not verified.
 - **Why it matters:** the launcher supports adding any community server through a `dauntless-revamped://` invite link. A hostile or compromised host gets arbitrary native code running in the player's game process. Players will not expect "join a server" to mean that.
 - **Fix:** carry the host's runtime-signing public key in the invite (and pin it next to the certificate fingerprint), and verify the manifest signature before installing. At minimum, warn clearly when adding a server that it will run code on the player's PC.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed; launcher 0.2.10 + a runtime publish). The launcher installs runtime files only with an Ed25519 signature from the invite's new optional `pk`, the built-in Revamped key, or a key the player accepts once and that is pinned per server (`publicKey` now in the manifest). Still open: signatures cover file bytes only, so a host can serve an older DLL it signed; `launcher-bridge` (0.1.18) is unchanged (M14).
 
 ### M2. Test bundle and test stack carry live secrets and the full live database
 - **Where:** `deploy/make-bundle.ps1:57-58,74-85` (backend `.env` copied with only Discord/GitHub/publisher keys blanked), `:96-99` (TLS certs), `:102-110` (`mongodump` of the live DB); `versions/1.14.7/host/test-stack.ps1:80-90,142` (`Write-TestEnv` from the live `.env`); `deploy/install.ps1:103` (invite codes written to `C:\Revamped\invites.txt`)
 - **What:** the test server gets the live JWT signing keys, `GAMESERVER_API_KEYS`, `API_KEY_HASH_SECRET`, admin settings, the TLS private key and a copy of every account (emails, password hashes, inventories). It sits on another machine and a USB stick, and is opened to outside testers.
 - **Why it matters:** tokens minted by the test server are valid on live and the reverse, and the game-server key works on both. Compromising the less-watched test box, or losing the USB stick, means compromising live.
 - **Fix:** generate fresh signing keys, gameserver key and hash secret for the test environment (`configure-selfhost.ps1` already does this). Use a separate certificate. Copy the database only with personal fields scrubbed, or seed test accounts instead.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed; affects the next bundle / `test-stack.ps1 -Setup`). `host/new-test-secrets.ps1` gives both fresh JWT, gameserver, hash, TOTP and invite secrets; the bundle gets its own certificate and a database copy scrubbed of emails, password hashes, sessions and keys. Existing bundles and test stacks keep the old copies until rebuilt.
 
 ### M3. Group chat: nick impersonation and no flood limit
 - **Where:** `versions/1.14.7/ParadoxBackend/src/realtime/RoomService.ts:125` (nick taken from the client's join JID), `:147-175` (`groupMessage`, no rate limit)
 - **What:** the MUC nick is whatever the client puts after the `/` in the room JID; the backend never ties it to the player's display name. `groupMessage` has no per-connection or per-account limit (`DirectChatService` does).
 - **Why it matters:** with city chat now on, any player can post in Ramsgate under another player's name, or flood every room up to the frame limit.
 - **Fix:** set the nick server-side from the account's display name (ignore the requested nick, or reject a mismatch). Reuse `DirectChatService`'s `consumeRate` windows in `groupMessage`.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). The nick is rebuilt from the account's real name and its userId part must be the joiner's own; groupchat has the direct-chat budgets (12/10 s per connection, 60/min per account).
 
 ### M4. Hunt-room dev flag defaults on and is not covered by the production check
 - **Where:** `versions/1.14.7/ParadoxBackend/src/realtime/RoomService.ts:49-53`, `src/config/runtimeSafety.ts:35`
 - **What:** `REALTIME_XMPP_DEV_HUNT_MUC` defaults to on ("DEV-ONLY, INSECURE"): any signed-in user may join any `Hunt-*` room. `AssertRuntimeSafety` only checks the City flag.
 - **Why it matters:** players can read and post in other parties' hunt chat if they learn the room id. Even after H1 is fixed, this stays open silently.
 - **Fix:** map hunt rooms to the players the Director reports for that hunt (the backend already tracks hunt membership for late joins), then default the flag off and add it to the production check.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). `Hunt-<id>` is the `/candidate/status` GameSessionId; a join needs matchmaking to have routed the player there (`IsInGameSession`) or a party member already in the room. The flag defaults off and production refuses `true`. **Deploy note:** live `.env` has `REALTIME_XMPP_DEV_HUNT_MUC="true"`; set it to `false` before restarting, or the backend refuses to boot.
 
 ### M5. Admin MFA is one shared secret with no replay protection
 - **Where:** `versions/1.14.7/ParadoxBackend/src/controllers/admin.ts:69-77`, `src/security/totp.ts`
 - **What:** one `ADMIN_TOTP_SECRET` for every staff member; a used code is not remembered, so it can be replayed within its window. Combined with H1 it is currently off entirely.
 - **Why it matters:** anyone given the secret for one staff account can pass MFA for all of them. Removing one moderator means rotating it for everyone.
 - **Fix:** store a TOTP secret per staff account (enrol in the console), and record the last used time step per account to block replays. The Discord admin sign-in path also exists; consider making it the only path for owners.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). Per-staff authenticators in `adminMfa` (enrol from the console banner, owner reset), every code single-use for sign-in and separately for operations step-up. `ADMIN_TOTP_SECRET` now only bootstraps unenrolled staff; remove it once everyone has enrolled.
 
 ### M6. Backend runs elevated on the host PC
 - **Where:** `versions/1.14.7/host/restart-server.ps1:9-16` (self-elevates), `src/controllers/adminServers.ts:128-131,227` (dashboard restart requires an elevated backend)
 - **What:** the stack is started from an elevated PowerShell, so the backend and Director run as administrator on a personal machine.
 - **Why it matters:** any remote-code bug in the backend, its dependencies or a game-server exploit runs with admin rights on the owner's PC.
 - **Fix:** run the backend and Director as a normal user. Do the one admin-only step (stopping processes started elevated) by not starting them elevated in the first place, or through a narrowly scoped scheduled task. Restart from the dashboard then works without elevation.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). `restart-server.ps1` no longer self-elevates and the dashboard restart no longer needs it. **Deploy note:** the running stack was started elevated: stop it once with `-Stop` from an elevated PowerShell, then start it normally.
 
 ### M7. Fake gameserver header buys a 10x rate-limit budget and a DB scan per request
 - **Where:** `versions/1.14.7/ParadoxBackend/src/security/rateLimit.ts:38-40,60-66`, `src/persistence/mongo/repositories/MongoApiKeyRepository.ts:42,79`
 - **What:** the global limiter picks the 6000/min "gameserver" bucket just because the `x-mysticparadox-gameserver-apikey` header is present, before the key is checked. Every check of that key (and every user API-key lookup) loads the whole key collection with `find({})`.
 - **Why it matters:** any client gets 10x the normal request budget on routes that don't use `HasParadoxBackendAuth` (crash uploads, launcher endpoints, `/content`), and each forged request on an authenticated route costs a full collection read.
 - **Fix:** only use the gameserver bucket for requests from known game-server addresses (the Director's `MY_IP`, loopback), or validate the key before choosing the bucket and cache valid hashes in memory for a minute. Look keys up by hash (`findOne({ keyHash })`) instead of scanning.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). Only a valid key picks the gameserver bucket (in-memory hash set, refreshed at most once a minute); user keys are found by hash.
 
 ### M8. Player deletion leaves orphan rows
 - **Where:** `versions/1.14.7/ParadoxBackend/src/persistence/mongo/repositories/MongoAdminRepository.ts:87-135`
 - **What:** `deletePlayerData` removes accounts, sessions, characters, friendships and API keys, but not guild membership/invites, slayer links, bounty and cooldown state, entitlements, escalation progress, party membership, hunt stats or Gauntlet clears. `deleteCharacterSlot` (~143-150) cleans several of these, so the two paths have drifted.
 - **Why it matters:** a deleted guild member stays listed in the guild; a deleted guild leader can leave a guild nobody can manage. Personal data is left behind after a deletion request.
 - **Fix:** keep one list of user-owned collections and use it in both delete paths. Add a test that every collection with a `userId`/`accountId` field is covered.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). Both delete paths share `RemoveCharacterState`; guild leadership passes to the longest-standing member (empty guild deleted); party rows go through `MongoPartyRepository.leave`; `adminDeleteCoverage.test.ts` fails on any uncovered collection.
 
 ### M9. UDP encryption key lookup can hand one player's key to another
 - **Where:** `versions/1.14.7/ParadoxBackend/src/encryptionKeyStore.ts:62-76`
 - **What:** when a lookup matches neither a candidate id nor a token, it returns the most recently issued key.
 - **Why it matters:** with several players connecting at once, a game server can be given the wrong player's key, so that player fails to connect (and the key goes to the wrong session).
 - **Fix:** return "not found" instead of falling back, and fix whichever request shape needed the fallback by sending the candidate id or token.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed). No most-recent fallback; `/key/consume` is gameserver-only (live log: every call already had the key and matched by token).
 
 ### M10. RuntimeLoader can load an unverified legacy DLL
 - **Where:** `versions/1.14.7/tools/RuntimeLoader/src/lib.rs:13-14,44-59`
 - **What:** `winmm.dll` loads whichever of `MysticParadox.dll` or `MystPaxInternalServer.dll` has the newer modified time. Launchers only hash `MysticParadox.dll` and `winmm.dll`.
 - **Why it matters:** a stale or planted `MystPaxInternalServer.dll` with a newer timestamp is loaded instead of the verified runtime.
 - **Fix:** drop the legacy name (the rename was 8 Oct), or load it only when `MysticParadox.dll` is absent.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed; ships as the `winmm.dll` extra of the next runtime publish). The loader loads only `MysticParadox.dll`. New L20 below for `mystic_loader.ini`.
 
 ### M11. `MpLog` opens and flushes a file on every call, from every thread
 - **Where:** `versions/1.14.7/ParadoxRuntime/dllmain.cpp:211-233` (738 call sites in `dllmain.cpp`)
 - **What:** each log line builds a path, opens an `std::ofstream`, writes, flushes and closes. There is no lock across threads (game thread, hooks, watchdog, HTTP threads) and no size cap or rotation.
 - **Why it matters:** blocking disk I/O on the game thread causes hitches on clients and servers; lines from different threads can interleave; long-running hubs grow logs without bound.
 - **Fix:** one open handle behind a mutex (or a lock-free queue drained by a background thread), with a size cap and one rotated file.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed; server and client DLL). One append handle behind an SRWLOCK, one `WriteFile` per line, no flush, rotation to `.1` above 50 MB; `NetLog` goes through it. The hunt-combat log keeps its own unlocked stream.
 
 ### M12. Server runtime initialisation runs inside `DllMain`
 - **Where:** `versions/1.14.7/ParadoxRuntime/dllmain.cpp:24682-24685` (`DLL_PROCESS_ATTACH` → `Init()`), `:24572-24600` (`std::stoi(Args[2])`)
 - **What:** `Init()` parses arguments and installs hooks while holding the loader lock. `std::stoi` on a bad port argument throws an uncaught C++ exception there.
 - **Why it matters:** a bad launch argument kills the server with no log line. Work under the loader lock (file I/O, MinHook, thread creation) is a known source of deadlocks that show up rarely and are hard to diagnose.
 - **Fix:** in `DllMain`, only start a thread that runs `Init()`. Parse the port with `wcstol` and an explicit range check, and log and exit cleanly on failure.
+- **Status (2026-11-03):** partly fixed (branch `launch/must-fixes`, not deployed). The port is parsed with `wcstol` and a range check; a bad one logs and terminates. `Init` deliberately stays in `DllMain` (hooks and `GIsServer` must be in place before the engine starts; a thread would race it), and `CommandLineToArgvW`'s block is still not freed (the optional P2P module may keep pointers into it).
 
 ### M13. `dllmain.cpp` is a single 24,700-line file holding almost every feature
 - **Where:** `versions/1.14.7/ParadoxRuntime/dllmain.cpp`
 - **What:** hooks for nearly every feature, around 90 `*.flag` file toggles, many one-off probe hooks, and hard-coded addresses for build 647472, all in one translation unit. Newer features (Voice, CineCam, WindowLock, HuntStats, JoinPrompt) already live in their own files.
 - **Why it matters:** slow builds, merge conflicts with every upstream subtree pull, and finished probes that never get removed. Hard to review.
 - **Fix:** continue the existing pattern: move one feature at a time into its own `.cpp` with a small header, starting with the probes, which can then simply be deleted.
+- **Status (2026-11-03):** partly addressed (branch `launch/must-fixes`, not deployed). The never-installed FindRow, ConfigComplete and Mastery probes are deleted. The always-on probes (progression cache/readiness, cell offer, gauntlet tick, hunt pass) may do real work and were left; no file split.
 
 ### M14. `launcher/` and `launcher-bridge/` are near-duplicate trees
 - **Where:** `launcher/src`, `launcher-bridge/src` (about 22 of 45 source files differ, mostly branding; `pinned.ts`, `relay.ts`, `downloader.ts`, `verify.ts` are byte-identical)
 - **What:** two copies of the same security-sensitive launcher code.
 - **Why it matters:** every security fix (M1, for example) must be made twice, and the copies are already drifting.
 - **Fix:** retire `launcher-bridge` once old Forever installs have migrated (check the launcher logs for 0.1.x versions). Until then, freeze it and only change the hand-over path.
+- **Status (2026-11-03):** frozen: `launcher-bridge` stays at 0.1.18 (wiki gotcha). Retire it once the backend log shows no 0.1.x launchers.
 
 ### M15. Gameserver API key is on the game-server command line
 - **Where:** `versions/1.14.7/ParadoxDirector/src/controllers/gameservers.ts:525-527`; `ParadoxRuntime/dllmain.cpp:24577-24580`; same in `versions/1.4.4/UndauntedDeployServer/src/controllers/gameservers.ts:283-296` (which also passes its whole environment to the child)
 - **What:** the key that lets a caller grant items and currency to any account is argv[1] of every game-server process.
 - **Why it matters:** any local process or user can read it from the process list (WMI, Task Manager). It authorises the backend's gameserver API and the Director admin API.
 - **Fix:** pass it through an environment variable on the child (the Director already sets a custom `env`) or a pipe, and have the DLL read it from there. In 1.4.4, pass only the variables the game needs.
+- **Status (2026-11-03):** fixed (branch `launch/must-fixes`, not deployed; Director + server DLL together). The key travels as `MYSTICPARADOX_GAMESERVER_API_KEY` in the child env (argv[1] is `-`), and Director secrets are filtered out of that env by name. The 1.4.4 DeployServer is unchanged (legacy, not running).
 
 ---
 
@@ -261,6 +278,12 @@ No critical findings.
 - About 20 `.bak`/timestamped JSON backups sit in `ParadoxBackend/game-data/` (gitignored). Move them out of the source tree.
 
 ---
+
+### L20. `mystic_loader.ini` loads unverified DLLs
+- **Where:** `versions/1.14.7/tools/RuntimeLoader/src/lib.rs` (`read_dll_list_from_ini`)
+- **What:** the `winmm.dll` proxy loads every DLL listed in `mystic_loader.ini` next to it; launchers hash neither the ini nor those DLLs.
+- **Why it matters:** anything that can write to the game folder can add native code; low, because such a writer could already replace the game files.
+- **Fix:** drop the ini support, or have launchers delete an ini they didn't install.
 
 ## Checked and found sound
 
