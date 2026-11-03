@@ -1,4 +1,4 @@
-import { sign, createHash, createPrivateKey } from "node:crypto";
+import { sign, createHash, createPrivateKey, createPublicKey } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 
@@ -97,6 +97,9 @@ const manifest = {
   size: bytes.length,
   sha256,
   signature: signatureBase64,
+  // [Revamped 2026-11-03] The raw Ed25519 public key (base64) the files are signed with. A launcher whose invite
+  // carries no key asks the player once and pins it (launcher/src/main/runtime.ts, FINDINGS M1).
+  publicKey: createPublicKey(signingKey).export({ format: "der", type: "spki" }).subarray(12).toString("base64"),
   file: artifactName,
   publishedAt: new Date().toISOString(),
   url: `${baseUrl}/launcher/v1/runtime/${encodeURIComponent(target)}/${encodeURIComponent(channel)}/windows-x86_64/download`,

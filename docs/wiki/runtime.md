@@ -41,7 +41,7 @@ Everything lives in `versions/1.14.7/ParadoxRuntime/`. Full table in [runtime-fi
 
 ### 1. Loading
 
-1. The game folder holds a `winmm.dll` proxy (Rust, `versions/1.14.7/tools/RuntimeLoader`). The game loads it as the normal Windows multimedia DLL; it forwards calls to the real system `winmm` and loads `MysticParadox.dll` (or legacy `MystPaxInternalServer.dll` if newer) plus any extra DLLs listed in `mystic_loader.ini`. See [tools](tools.md).
+1. The game folder holds a `winmm.dll` proxy (Rust, `versions/1.14.7/tools/RuntimeLoader`). The game loads it as the normal Windows multimedia DLL; it forwards calls to the real system `winmm` and loads `MysticParadox.dll` plus any extra DLLs listed in `mystic_loader.ini` (launchers don't verify those extras). See [tools](tools.md).
 2. `DllMain(DLL_PROCESS_ATTACH)` calls `Init()`. `InitLog` is a no-op on purpose (loader lock), so `[Init]` lines never appear. But `Init` calls `InitClientHooks`/`InitServerHooks` from inside `DllMain`, and those do call `MpLog` and start threads.
 3. `Init()` sets `Globals::AmServer` if the command line contains `-server`, and `Globals::BaseAddress` to the exe base.
 4. On `DLL_PROCESS_DETACH` it sets `g_MpProcessDetaching` so nothing logs after the CRT shuts down (logging after detach crashed every client exit before 0.2.96).

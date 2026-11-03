@@ -17,7 +17,7 @@ import { formatInvite } from "../src/shared/invite";
 import { setSink } from "../src/main/log";
 import type { SpawnFn } from "../src/main/launch";
 import type { Snapshot } from "../src/shared/types";
-import { FakeContentServer, FakeMystic, makeFiles, manifestFor, RUNTIME_DLL, RUNTIME_WINMM, sha256, TEST_BUILD } from "./fakes";
+import { FakeContentServer, FakeMystic, makeFiles, manifestFor, RUNTIME_DLL, RUNTIME_WINMM, sha256, TEST_BUILD, TEST_RUNTIME_PK } from "./fakes";
 import { makeTestCert, type TestCert } from "./certs";
 
 const BACKEND_PORT = 62440;
@@ -127,7 +127,7 @@ function harness(userDataDir?: string, relayPort: number | undefined = RELAY_POR
 }
 
 const invite = (port = BACKEND_PORT, fp = cert.fingerprint, code = "ABCD-EFGH-JKLM") =>
-  formatInvite({ host: "127.0.0.1", port, fp, code, name: "Friday Hunts" });
+  formatInvite({ host: "127.0.0.1", port, fp, code, name: "Friday Hunts", pk: TEST_RUNTIME_PK });
 
 function relayGet(pathname: string): Promise<number> {
   return new Promise((resolve, reject) => {

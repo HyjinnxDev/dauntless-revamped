@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { promises as fsp, readFileSync } from "node:fs";
 import path from "node:path";
-import { isValidFingerprint, isValidHost, isValidInviteCode, cleanServerName } from "../shared/invite";
+import { isValidFingerprint, isValidHost, isValidInviteCode, isValidRuntimeKey, cleanServerName } from "../shared/invite";
 import { isValidUsername } from "../shared/username";
 import { GAME_LANGUAGES, LANGUAGES, type GameLanguage, type Language } from "../shared/types";
 
@@ -13,6 +13,8 @@ export interface StoredServer {
   name: string;
   fp: string; // pinned certificate fingerprint
   code: string | null; // invite code not used yet
+  pk?: string; // runtime signing key from the invite
+  pinnedPk?: string; // runtime signing key the player accepted the first time (no pk in the invite)
 }
 
 export interface StoredSettings {
@@ -69,6 +71,8 @@ function sanitizeServer(sv: unknown): StoredServer | null {
     name,
     fp: sv.fp,
     code: typeof sv.code === "string" && isValidInviteCode(sv.code) ? sv.code : null,
+    ...(isValidRuntimeKey(sv.pk) ? { pk: sv.pk } : {}),
+    ...(isValidRuntimeKey(sv.pinnedPk) ? { pinnedPk: sv.pinnedPk } : {}),
   };
 }
 

@@ -20,6 +20,7 @@ const ROOT = path.resolve(__dirname, "..", "..");
 // Records over the union types: the compiler fails this file if a new code is added without text.
 const ERROR_CODES: Record<ErrorCode, true> = {
   account_banned: true,
+  runtime_untrusted: true,
   server_list_full: true,
   approval_pending: true,
   invite_invalid_format: true,
@@ -73,6 +74,7 @@ const INVITE_ERRORS: Record<InviteError, true> = {
   host: true,
   port: true,
   fp: true,
+  pk: true,
   code: true,
   name: true,
 };

@@ -79,7 +79,7 @@ The full path from export to final files (hunt tables, Slayer's Path, Reward Cac
 ### RuntimeLoader
 
 1. The game's import table loads `winmm.dll` from its own folder (the proxy) instead of the system one.
-2. On `DLL_PROCESS_ATTACH`, `initialize()` finds the directory of the proxy and chooses a runtime DLL: of `MysticParadox.dll` and the legacy `MystPaxInternalServer.dll`, the one with the **newest modified time** wins (ties go to the canonical name). It calls `LoadLibraryW` on it. Errors are ignored silently.
+2. On `DLL_PROCESS_ATTACH`, `initialize()` finds the directory of the proxy and loads `MysticParadox.dll` with `LoadLibraryW` if it is there. The legacy `MystPaxInternalServer.dll` is never loaded (FINDINGS M10: it used to win when its timestamp was newer, and launchers don't verify it). Errors are ignored silently.
 3. It then reads optional `mystic_loader.ini` (one DLL path per line; text after `;` or `#` is a comment; `[section]` lines ignored; `key = value` uses the value). Each path is joined onto the proxy's folder (an absolute path stays absolute) and loaded if the file exists. Entries naming either runtime DLL are skipped.
 4. Every `winmm.dll` and `version.dll` export is a stub made by the `proxy_function!` macro. On call it loads the real DLL from `GetSystemDirectoryW` (cached) and calls the same function. If the real one is missing, it returns a default (usually 0 or FALSE) or calls the fallback function.
 

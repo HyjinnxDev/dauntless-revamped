@@ -306,32 +306,38 @@ export async function requestGameSession(
 export interface RuntimeFile {
   name: string;
   sha256: string;
+  signature: string; // Ed25519 over the file's bytes, base64 (publish-runtime-update.mjs)
   path: string; // where to download it on this server
 }
 
 export interface RuntimeRelease {
   version: string;
   files: RuntimeFile[];
+  publicKey?: string; // the key the host says it signs with; trusted only once the player accepts it
 }
 
 const RUNTIME_BASE = "/launcher/v1/runtime/client/stable/windows-x86_64";
 const SAFE_NAME = /^[A-Za-z0-9._-]{1,96}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 
+const SIGNATURE = /^[A-Za-z0-9+/]{86}==$/; // 64 bytes, base64
+const PUBLIC_KEY = /^[A-Za-z0-9+/]{43}=$/; // 32 bytes, base64
+
 // The published runtime release (ParadoxLauncher/scripts/publish-runtime-update.mjs). Only the core
-// pair is installed; the server accepts that set without the optional co-op files.
-// ponytail: trusts the release over the pinned connection and checks each file's SHA-256 against it;
-// the Ed25519 signature is not checked (it needs the host's public key in the invite). Add it if
-// runtime files ever come from somewhere other than the invite's own server.
+// pair is installed; the server accepts that set without the optional co-op files. Each file carries its
+// Ed25519 signature, checked against the server's key before anything is written (runtime.ts, FINDINGS M1).
 export function parseRuntimeRelease(raw: unknown): RuntimeRelease | null {
   if (!isObject(raw) || typeof raw.version !== "string" || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(raw.version)) return null;
   if (Number(raw.targetChangelist) !== TARGET_CHANGELIST || typeof raw.sha256 !== "string" || !SHA256.test(raw.sha256)) return null;
-  const files: RuntimeFile[] = [{ name: "MysticParadox.dll", sha256: raw.sha256, path: `${RUNTIME_BASE}/download` }];
+  if (typeof raw.signature !== "string" || !SIGNATURE.test(raw.signature)) return null;
+  const files: RuntimeFile[] = [{ name: "MysticParadox.dll", sha256: raw.sha256, signature: raw.signature, path: `${RUNTIME_BASE}/download` }];
   if (!Array.isArray(raw.extraFiles)) return null;
   const winmm = raw.extraFiles.find((e) => isObject(e) && typeof e.name === "string" && e.name.toLowerCase() === "winmm.dll");
   if (!isObject(winmm) || typeof winmm.sha256 !== "string" || !SHA256.test(winmm.sha256) || !SAFE_NAME.test(winmm.name as string)) return null;
-  files.push({ name: "winmm.dll", sha256: winmm.sha256, path: `${RUNTIME_BASE}/extra/winmm.dll` });
-  return { version: raw.version, files };
+  if (typeof winmm.signature !== "string" || !SIGNATURE.test(winmm.signature)) return null;
+  files.push({ name: "winmm.dll", sha256: winmm.sha256, signature: winmm.signature, path: `${RUNTIME_BASE}/extra/winmm.dll` });
+  const publicKey = typeof raw.publicKey === "string" && PUBLIC_KEY.test(raw.publicKey) ? { publicKey: raw.publicKey } : {};
+  return { version: raw.version, files, ...publicKey };
 }
 
 export async function fetchRuntimeRelease(ep: Endpoint): Promise<RuntimeRelease | ApiFailure> {

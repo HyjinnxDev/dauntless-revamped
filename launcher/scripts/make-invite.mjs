@@ -1,5 +1,7 @@
 // Prints an invite link for the launcher (format: src/shared/invite.ts).
-//   node scripts/make-invite.mjs --host 203.0.113.7 --cert D:\MysticParadoxData\certs\fullchain.pem --code ABCD-1234 --name "Friday Hunts" [--port 443]
+//   node scripts/make-invite.mjs --host 203.0.113.7 --cert D:\MysticParadoxData\certs\fullchain.pem --code ABCD-1234 --name "Friday Hunts" [--port 443] [--pk <file or base64>]
+// --pk: the host's runtime signing key (ParadoxLauncher/.secrets/*.public.raw.b64), for a server not signed with the
+// Revamped key built into the launcher. Launchers before 0.2.10 refuse invites that carry it.
 // The fingerprint is the SHA-256 of the backend's own certificate (the first one in the PEM file).
 // The code must be one of the backend's LAUNCHER_INVITE_CODES.
 import { X509Certificate } from "node:crypto";
@@ -27,4 +29,10 @@ const fp = new X509Certificate(pem).fingerprint256.replace(/:/g, "").toLowerCase
 if (!/^[A-Za-z0-9-]{4,64}$/.test(code)) throw new Error("invite codes are 4-64 letters, digits or -");
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("bad port");
 const q = ["v=1", `host=${encodeURIComponent(host)}`, `port=${port}`, `fp=${fp}`, `code=${encodeURIComponent(code)}`, `name=${encodeURIComponent(name)}`];
+const pkArg = arg("pk", "");
+if (pkArg) {
+  const pk = (/^[A-Za-z0-9+/]{43}=$/.test(pkArg) ? pkArg : readFileSync(pkArg, "utf8")).trim();
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(pk)) throw new Error("--pk must be a raw Ed25519 public key in base64 (44 characters)");
+  q.push(`pk=${encodeURIComponent(pk)}`);
+}
 console.log(`dauntless-revamped://join?${q.join("&")}`);

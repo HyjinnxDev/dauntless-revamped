@@ -65,7 +65,7 @@ import {
 import { compareManifests, resolveInside, type GameManifest, type ManifestFile } from "./manifest";
 import { contentDownloadBase, DownloadError, DownloadJob } from "./downloader";
 import { AbortedError, hashFile, removePartFiles, verifyInstall, VerifiedCache } from "./verify";
-import { installRuntime, installedRuntime, runtimeMatches, RuntimeError, win64Dir } from "./runtime";
+import { installRuntime, installedRuntime, REVAMPED_RUNTIME_KEY, runtimeKey, runtimeMatches, RuntimeError, win64Dir } from "./runtime";
 import { locateExistingGame } from "./game-folder";
 import { applyIntro, isIntroFile } from "./intro";
 import { buildLaunchArgs, describeLaunch, GameProcess, gameLocale, pointXmppAtRelay, relayEnv, type SpawnFn } from "./launch";
@@ -97,6 +97,8 @@ export interface Platform {
   // The file checked by hash before every launch (tests use a fake game).
   exePin?: { relativePath: string; sha256: string };
   chooseFolder(title: string, defaultPath: string): Promise<string | null>;
+  // Asked once per server whose runtime is signed by a key the launcher doesn't know yet (FINDINGS M1).
+  confirmRuntimeKey?(serverName: string): Promise<boolean>;
   openExternal(url: string): Promise<void>;
   openPath(dir: string): Promise<void>;
   emitSnapshot(s: Snapshot): void;
@@ -130,6 +132,13 @@ const ACCESS_TOKEN_LIFETIME_MS = 10 * 60 * 1000;
 
 const err = (code: ErrorCode, detail?: string): { ok: false; error: LauncherError } => ({ ok: false, error: detail ? { code, detail } : { code } });
 const OK: ActionResult = { ok: true };
+
+// The runtime keys a new invite and the server's previous entry leave: the invite's pk replaces the old one, a pinned
+// key stays (so re-joining doesn't ask again, and a later key change is still refused).
+export function runtimeKeysOf(inv: { pk?: string }, before: StoredServer | undefined): Pick<StoredServer, "pk" | "pinnedPk"> {
+  const pk = inv.pk ?? before?.pk;
+  return { ...(pk ? { pk } : {}), ...(before?.pinnedPk ? { pinnedPk: before.pinnedPk } : {}) };
+}
 
 export function endpointFor(sv: StoredServer): Endpoint {
   return { host: sv.host, port: sv.port, pin: sv.fp };
@@ -425,8 +434,8 @@ export class Controller {
     if (!known && this.s.savedServers.length >= MAX_SAVED_SERVERS) return err("server_list_full");
     const signedInThere = await this.keys.has(inv);
     await this.settings.update((s) => {
-      const entry = { host: inv.host, port: inv.port, name: inv.name, fp: inv.fp, code: signedInThere ? null : inv.code };
       const i = s.savedServers.findIndex((sv) => serverId(sv.host, sv.port) === id);
+      const entry = { host: inv.host, port: inv.port, name: inv.name, fp: inv.fp, code: signedInThere ? null : inv.code, ...runtimeKeysOf(inv, i >= 0 ? s.savedServers[i] : undefined) };
       if (i >= 0) s.savedServers[i] = entry;
       else s.savedServers.push(entry);
     });
@@ -496,7 +505,8 @@ export class Controller {
     const signedInThere = await this.keys.has(inv);
     await this.settings.update((s) => {
       // A friend who already has an account on this server does not need the code again.
-      s.server = { host: inv.host, port: inv.port, name: inv.name, fp: inv.fp, code: signedInThere ? null : inv.code };
+      const before = s.savedServers.find((sv) => sv.host === inv.host && sv.port === inv.port);
+      s.server = { host: inv.host, port: inv.port, name: inv.name, fp: inv.fp, code: signedInThere ? null : inv.code, ...runtimeKeysOf(inv, before ?? undefined) };
     });
     if (!same) this.resetServerState();
     log.info(`joined server ${inv.host}:${inv.port}`);
@@ -1029,6 +1039,12 @@ export class Controller {
     if (t) this.p.emitProgress(t);
   }
 
+  // The invite's key, the Revamped key and a pinned key: any of them may sign this server's runtime.
+  private trustedRuntimeKeys() {
+    const sv = this.s.server;
+    return [sv?.pk, REVAMPED_RUNTIME_KEY, sv?.pinnedPk].filter((k): k is string => !!k).map(runtimeKey);
+  }
+
   // The server's current runtime release, installed next to the game exe.
   private async ensureRuntime(dir: string): Promise<RuntimeRelease | ApiFailure> {
     const ep = this.endpoint();
@@ -1037,12 +1053,26 @@ export class Controller {
     if (!("files" in release)) return release;
     this.runtimeRelease = release;
     try {
-      await installRuntime(ep, dir, release);
+      try {
+        await installRuntime(ep, dir, release, this.trustedRuntimeKeys());
+      } catch (e) {
+        // First time on a server with no key in its invite: the host names its key in the release. The player
+        // accepts it once and it is pinned; a later release signed by another key is refused.
+        const sv = this.s.server;
+        if (!(e instanceof RuntimeError && e.code === "signature") || !sv || sv.pk || sv.pinnedPk || !release.publicKey) throw e;
+        if (!(await this.p.confirmRuntimeKey?.(sv.name))) return { ok: false, error: "runtime_untrusted" };
+        const pinnedPk = release.publicKey;
+        await this.settings.update((s) => {
+          for (const entry of [s.server, ...s.savedServers]) if (entry && entry.host === sv.host && entry.port === sv.port) entry.pinnedPk = pinnedPk;
+        });
+        log.warn(`the user accepted the runtime signing key of ${sv.host}:${sv.port}`);
+        await installRuntime(ep, dir, release, this.trustedRuntimeKeys());
+      }
     } catch (e) {
       log.error(`runtime install failed: ${describeError(e)}`);
       // A Dauntless left running (a crashed or hung game) keeps the old DLL loaded: offer to close it.
       if (e instanceof RuntimeError && e.code === "in_use" && (await this.p.findRunningClients()).length > 0) return { ok: false, error: "already_running" };
-      const map = { download: "runtime_unavailable", in_use: "runtime_in_use", hash: "runtime_failed", disk: "runtime_failed" } as const;
+      const map = { download: "runtime_unavailable", in_use: "runtime_in_use", hash: "runtime_failed", disk: "runtime_failed", signature: "runtime_untrusted" } as const;
       return { ok: false, error: e instanceof RuntimeError ? map[e.code] : "runtime_failed", detail: e instanceof RuntimeError ? e.file : undefined };
     }
     log.info(`runtime ${release.version} installed`);

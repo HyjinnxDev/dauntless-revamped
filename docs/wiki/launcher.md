@@ -101,7 +101,7 @@ There is no archive extraction: files are individual downloads, so the usual zip
 
 ### Runtime install
 
-`ensureRuntime` (called on every Play) fetches `/launcher/v1/runtime/client/stable/windows-x86_64` and `installRuntime` writes `MysticParadox.dll` and `winmm.dll` next to the game exe (`Archon/Binaries/Win64`), only if the SHA-256 differs. It writes `<name>.new`, renames, clears the Zone.Identifier mark and re-hashes. The hash comes from the same server over pinned TLS; the release's Ed25519 signature is **not** checked by the launcher (noted in a `ponytail:` comment in `hostapi.ts`). The release is produced by [paradox-launcher](paradox-launcher.md) and served by the backend.
+`ensureRuntime` (called on every Play) fetches `/launcher/v1/runtime/client/stable/windows-x86_64` and `installRuntime` writes `MysticParadox.dll` and `winmm.dll` next to the game exe (`Archon/Binaries/Win64`), only if the SHA-256 differs. It writes `<name>.new`, renames, clears the Zone.Identifier mark and re-hashes. Every file must also carry an Ed25519 signature (FINDINGS M1) from a trusted key: the invite's `pk`, the Revamped key built into the launcher (`REVAMPED_RUNTIME_KEY`, the self-host key), or a key pinned on first use. A server with no `pk` whose release is signed by another key names it in the manifest's `publicKey`: the launcher asks once (`confirmRuntimeKey`, "This server runs its own code"), stores it as the server's `pinnedPk` and refuses any later release signed by another key (`runtime_untrusted`). A re-joined invite keeps the pin. The release is produced by [paradox-launcher](paradox-launcher.md) and served by the backend.
 
 ### Play
 
@@ -166,6 +166,9 @@ Launcher has no `.env`. Inputs are:
 - Build inputs: `launcher/data/dauntless-1.14.7.json`, `assets/` (icon, intro and login-loop videos).
 
 ## Gotchas
+
+- **Runtime signatures cover file bytes only.** A host can still serve an older signed DLL of its own; the manifest's version and changelist aren't signed.
+- **A `pk` in an invite breaks launchers before 0.2.10** (they refuse unknown invite keys), so Revamped's own invites don't carry one: the built-in key covers them.
 
 - The compiled-in manifest decides what a "correct" install is. If the live game files or the hosted CDN copy change, regenerate it with `scripts/make-game-manifest.mjs` and ship a new launcher; otherwise the server is refused ("manifest differs").
 - The comment at the top of `src/main/game-manifest.ts` still says `dauntless-1.4.4.json`; the real alias is `data/dauntless-1.14.7.json`.

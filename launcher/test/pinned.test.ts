@@ -13,7 +13,9 @@ import { request, HttpError, type Endpoint } from "../src/main/http";
 import { fetchRuntimeRelease, fetchServerStatus, login, parseRuntimeRelease, probeContent, refreshSession, registerAccount } from "../src/main/hostapi";
 import { DownloadError, DownloadJob } from "../src/main/downloader";
 import { validateManifest, type GameManifest } from "../src/main/manifest";
-import { createServer, FakeContentServer, FakeMystic, makeFiles, manifestFor, TEST_BUILD } from "./fakes";
+import { createServer, FakeContentServer, FakeMystic, makeFiles, manifestFor, signRuntime, TEST_BUILD, TEST_RUNTIME_PK } from "./fakes";
+import { REVAMPED_RUNTIME_KEY, runtimeKey, signedByAny } from "../src/main/runtime";
+import { runtimeKeysOf } from "../src/main/controller";
 import { makeTestCert, type TestCert } from "./certs";
 
 const META_PORT = 62420;
@@ -120,8 +122,11 @@ test("the runtime release: only the core pair, downloaded from this server whate
     ["MysticParadox.dll", "/launcher/v1/runtime/client/stable/windows-x86_64/download"],
     ["winmm.dll", "/launcher/v1/runtime/client/stable/windows-x86_64/extra/winmm.dll"],
   ]);
-  const good = { version: "1.0.0", targetChangelist: 647472, sha256: "a".repeat(64), extraFiles: [{ name: "winmm.dll", sha256: "b".repeat(64) }] };
+  const sig = "A".repeat(86) + "==";
+  const good = { version: "1.0.0", targetChangelist: 647472, sha256: "a".repeat(64), signature: sig, extraFiles: [{ name: "winmm.dll", sha256: "b".repeat(64), signature: sig }] };
   assert.ok(parseRuntimeRelease(good));
+  assert.equal(parseRuntimeRelease({ ...good, signature: undefined }), null, "an unsigned runtime");
+  assert.equal(parseRuntimeRelease({ ...good, extraFiles: [{ name: "winmm.dll", sha256: "b".repeat(64) }] }), null, "an unsigned loader");
   assert.equal(parseRuntimeRelease({ ...good, targetChangelist: 392819 }), null, "a runtime for another game build");
   assert.equal(parseRuntimeRelease({ ...good, extraFiles: [] }), null, "no loader");
   assert.equal(parseRuntimeRelease({ ...good, sha256: "zz" }), null);
@@ -185,4 +190,21 @@ test("downloads refuse a server whose certificate does not match, before any req
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// [Revamped 2026-11-03] FINDINGS M1: runtime files must be signed by a trusted key.
+test("runtime signatures: only a trusted key's signature counts; pinned keys survive a new invite", () => {
+  const data = Buffer.from("some dll bytes");
+  const sig = signRuntime(data);
+  assert.equal(signedByAny(data, sig, [runtimeKey(TEST_RUNTIME_PK)]), true);
+  assert.equal(signedByAny(data, sig, [runtimeKey(REVAMPED_RUNTIME_KEY)]), false, "the Revamped key did not sign it");
+  assert.equal(signedByAny(Buffer.from("tampered"), sig, [runtimeKey(TEST_RUNTIME_PK)]), false);
+  assert.equal(signedByAny(data, "", [runtimeKey(TEST_RUNTIME_PK)]), false);
+  assert.equal(runtimeKey(REVAMPED_RUNTIME_KEY).export({ format: "der", type: "spki" }).toString("base64"),
+    "MCowBQYDK2VwAyEAGiARrtultkODd4LxMx2YxOOa3C83PO0lUW4TKU4e184=", "the built-in key is the self-host key the backend checks uploads with");
+
+  const before = { host: "h", port: 1, name: "n", fp: "f".repeat(64), code: null, pinnedPk: TEST_RUNTIME_PK };
+  assert.deepEqual(runtimeKeysOf({}, before), { pinnedPk: TEST_RUNTIME_PK }, "an invite without pk keeps the pin");
+  assert.deepEqual(runtimeKeysOf({ pk: REVAMPED_RUNTIME_KEY }, before), { pk: REVAMPED_RUNTIME_KEY, pinnedPk: TEST_RUNTIME_PK });
+  assert.deepEqual(runtimeKeysOf({}, undefined), {});
 });

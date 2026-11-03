@@ -39,6 +39,16 @@ test("round-trips through formatInvite", () => {
   assert.throws(() => formatInvite({ ...inv, fp: "nope" }));
 });
 
+// [Revamped 2026-11-03] FINDINGS M1: optional runtime signing key.
+test("pk round-trips and a malformed pk is refused", () => {
+  const pk = "GiARrtultkODd4LxMx2YxOOa3C83PO0lUW4TKU4e184=";
+  const inv: Invite = { host: "play.example.net", port: 8443, code: "Code-42", name: "Hunts", fp: FP, pk };
+  const r = parseInvite(formatInvite(inv));
+  assert.ok(r.ok && r.invite.pk === pk);
+  const broken = formatInvite({ ...inv, pk: undefined }) + "&pk=abc";
+  assert.deepEqual(parseInvite(broken), { ok: false, error: "pk" });
+});
+
 const bad: [string, string][] = [
   ["", "empty"],
   ["hello", "not_invite"],

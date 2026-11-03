@@ -85,6 +85,7 @@ Same as [launcher](launcher.md) with Forever names: env `DAUNTLESS_FOREVER_RELAY
 
 ## Gotchas
 
+- **Frozen at 0.1.18 (FINDINGS M14).** Security fixes go to `launcher/` only; the bridge does not check runtime signatures (M1). Retire it once the backend log shows no 0.1.x launcher versions.
 - **Do not edit it expecting Revamped players to see it.** Only old Forever installs run this code. Fix bugs in [launcher](launcher.md).
 - Shared-file security fixes (pinned TLS, relay, downloader, verify) must be copied by hand if the bridge ever ships again. There is no shared package.
 - The hand-over runs only for a packaged Squirrel install (`Update.exe` one level up); the portable ZIP behaves as an old launcher.

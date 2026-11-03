@@ -10,8 +10,9 @@ use winapi::um::winnt::DLL_PROCESS_ATTACH;
 mod exports;
 pub mod proxy;
 
-const RUNTIME_DLL_NAMES: [&str; 2] = ["MysticParadox.dll", "MystPaxInternalServer.dll"];
-const CANONICAL_RUNTIME_DLL_NAME: &str = RUNTIME_DLL_NAMES[0];
+// [Revamped 2026-11-03] FINDINGS M10: only the runtime the launchers hash and verify. The legacy
+// MystPaxInternalServer.dll name (renamed 8 Oct) used to win whenever its timestamp was newer.
+const CANONICAL_RUNTIME_DLL_NAME: &str = "MysticParadox.dll";
 
 /// Optional additional-DLL list placed next to the proxy DLL.
 const INI_FILE: &str = "mystic_loader.ini";
@@ -42,20 +43,8 @@ fn module_directory(module: HMODULE) -> Option<PathBuf> {
 }
 
 fn select_runtime_dll(directory: &Path) -> Option<PathBuf> {
-    RUNTIME_DLL_NAMES
-        .iter()
-        .filter_map(|name| {
-            let path = directory.join(name);
-            let metadata = std::fs::metadata(&path).ok()?;
-            if !metadata.is_file() {
-                return None;
-            }
-            let modified = metadata.modified().unwrap_or(std::time::UNIX_EPOCH);
-            let canonical = usize::from(name.eq_ignore_ascii_case(CANONICAL_RUNTIME_DLL_NAME));
-            Some((modified, canonical, path))
-        })
-        .max_by_key(|(modified, canonical, _)| (*modified, *canonical))
-        .map(|(_, _, path)| path)
+    let path = directory.join(CANONICAL_RUNTIME_DLL_NAME);
+    std::fs::metadata(&path).ok()?.is_file().then_some(path)
 }
 
 fn initialize(dll_path: &Path) {
@@ -67,10 +56,7 @@ fn initialize(dll_path: &Path) {
     // runtime above.
     if let Some(dlls) = read_dll_list_from_ini(&dll_path.join(INI_FILE)) {
         for dll in dlls {
-            if RUNTIME_DLL_NAMES
-                .iter()
-                .any(|required| required.eq_ignore_ascii_case(&dll))
-            {
+            if CANONICAL_RUNTIME_DLL_NAME.eq_ignore_ascii_case(&dll) {
                 continue;
             }
 
@@ -156,13 +142,15 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_to_the_legacy_runtime_name() {
+    fn never_loads_the_legacy_runtime_name() {
         let dir = test_dir("legacy");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("MystPaxInternalServer.dll"), b"runtime").unwrap();
+        assert!(select_runtime_dll(&dir).is_none(), "a stray legacy DLL alone is ignored");
 
+        fs::write(dir.join(CANONICAL_RUNTIME_DLL_NAME), b"runtime").unwrap();
         let selected = select_runtime_dll(&dir).unwrap();
-        assert_eq!(selected.file_name().unwrap(), "MystPaxInternalServer.dll");
+        assert_eq!(selected.file_name().unwrap(), CANONICAL_RUNTIME_DLL_NAME);
 
         fs::remove_dir_all(dir).ok();
     }

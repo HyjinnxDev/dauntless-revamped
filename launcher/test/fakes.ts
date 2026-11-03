@@ -3,7 +3,7 @@
 
 import http from "node:http";
 import https from "node:https";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import type { AddressInfo } from "node:net";
 
 export const CONTENT_PORT = 62012;
@@ -218,6 +218,10 @@ export class FakeContentServer {
 
 export const RUNTIME_DLL = Buffer.from("fake MysticParadox.dll");
 export const RUNTIME_WINMM = Buffer.from("fake winmm.dll");
+// The fake host's runtime signing key (FINDINGS M1): invites carry TEST_RUNTIME_PK, the release is signed with it.
+const RUNTIME_SIGNING = generateKeyPairSync("ed25519");
+export const TEST_RUNTIME_PK = RUNTIME_SIGNING.publicKey.export({ format: "der", type: "spki" }).subarray(12).toString("base64");
+export const signRuntime = (data: Buffer): string => sign(null, data, RUNTIME_SIGNING.privateKey).toString("base64");
 
 export interface MysticOptions {
   inviteCodes?: Set<string>;
@@ -374,9 +378,10 @@ export class FakeMystic {
           version: "1.2.3",
           targetChangelist: 647472,
           sha256: sha256(RUNTIME_DLL),
-          signature: "unused",
+          signature: signRuntime(RUNTIME_DLL),
+          publicKey: TEST_RUNTIME_PK,
           url: `https://elsewhere.example${base}/download`,
-          extraFiles: [{ name: "winmm.dll", sha256: sha256(RUNTIME_WINMM), signature: "unused", url: "https://elsewhere.example/x" }],
+          extraFiles: [{ name: "winmm.dll", sha256: sha256(RUNTIME_WINMM), signature: signRuntime(RUNTIME_WINMM), url: "https://elsewhere.example/x" }],
         });
       }
       if (p === `${base}/download`) return void res.writeHead(200).end(RUNTIME_DLL);

@@ -388,6 +388,7 @@ const en = {
   join_ok: "Looks good. The connection is encrypted and locked to this server's certificate.",
   invite_err_mode: "This invite has an unknown mode. Ask the host for a new one.",
   invite_err_fp: "The certificate fingerprint in the invite isn't valid. Copy the whole invite again.",
+  invite_err_pk: "The runtime key in the invite isn't valid. Copy the whole invite again.",
   connect_checking_wait: "Waiting for an answer…",
   connect_cert_title: "This is not your friend's server",
   connect_cert_subtitle: "The security certificate doesn't match",
@@ -497,6 +498,11 @@ const en = {
   err_runtime_failed: "The server's runtime files couldn't be installed. Antivirus may have blocked them: check its quarantine.",
   err_runtime_rejected: "The server refused this runtime version. Use Repair game files, then try again.",
   err_runtime_in_use: "The game files in this folder are in use, most likely by the game servers running on this PC. Choose another game folder in Settings: the server's own folder can't be used to play.",
+  err_runtime_untrusted: "This server's game files aren't signed by a key the launcher trusts, so they weren't installed. Ask the host for a new invite link.",
+  dialog_runtime_key_title: "This server runs its own code",
+  dialog_runtime_key_body: "{name} sends its own game runtime, which runs on your PC with the game. Only continue if you trust whoever runs this server. The launcher remembers this server's key and refuses files signed by any other.",
+  dialog_runtime_key_accept: "Trust this server",
+  dialog_runtime_key_cancel: "Cancel",
 };
 
 export type StringKey = keyof typeof en;
@@ -885,6 +891,7 @@ const fi: Record<StringKey, string> = {
   join_ok: "Näyttää hyvältä. Yhteys on salattu ja lukittu tämän palvelimen varmenteeseen.",
   invite_err_mode: "Kutsussa on tuntematon tila. Pyydä ylläpitäjältä uusi kutsu.",
   invite_err_fp: "Kutsun varmenteen sormenjälki ei kelpaa. Kopioi koko kutsu uudelleen.",
+  invite_err_pk: "Kutsun ajonaikainen avain ei ole kelvollinen. Kopioi koko kutsu uudelleen.",
   connect_checking_wait: "Odotetaan vastausta…",
   connect_cert_title: "Tämä ei ole kaverisi palvelin",
   connect_cert_subtitle: "Turvavarmenne ei täsmää",
@@ -994,6 +1001,11 @@ const fi: Record<StringKey, string> = {
   err_runtime_failed: "Palvelimen ajonaikaisia tiedostoja ei voitu asentaa. Virustorjunta on voinut estää ne: tarkista sen karanteeni.",
   err_runtime_rejected: "Palvelin hylkäsi tämän ajonaikaisen version. Korjaa pelitiedostot ja yritä uudelleen.",
   err_runtime_in_use: "Tämän kansion pelitiedostot ovat käytössä, luultavasti tällä PC:llä käynnissä olevien pelipalvelinten. Valitse toinen pelikansio asetuksista: palvelimen omaa kansiota ei voi käyttää pelaamiseen.",
+  err_runtime_untrusted: "Tämän palvelimen pelitiedostoja ei ole allekirjoitettu avaimella, johon käynnistin luottaa, joten niitä ei asennettu. Pyydä ylläpitäjältä uusi kutsulinkki.",
+  dialog_runtime_key_title: "Tämä palvelin ajaa omaa koodiaan",
+  dialog_runtime_key_body: "{name} lähettää oman pelin ajonaikaisen osan, joka ajetaan PC:lläsi pelin mukana. Jatka vain, jos luotat palvelimen ylläpitäjään. Käynnistin muistaa tämän palvelimen avaimen ja hylkää muilla avaimilla allekirjoitetut tiedostot.",
+  dialog_runtime_key_accept: "Luota tähän palvelimeen",
+  dialog_runtime_key_cancel: "Peruuta",
 };
 
 const es: Record<StringKey, string> = {
@@ -1377,6 +1389,7 @@ const es: Record<StringKey, string> = {
   join_ok: "Todo bien. La conexión está cifrada y bloqueada al certificado de este servidor.",
   invite_err_mode: "Esta invitación tiene un modo desconocido. Pide una nueva al anfitrión.",
   invite_err_fp: "La huella del certificado de la invitación no es válida. Vuelve a copiar la invitación entera.",
+  invite_err_pk: "La clave de runtime de la invitación no es válida. Vuelve a copiar la invitación completa.",
   connect_checking_wait: "Esperando respuesta…",
   connect_cert_title: "Este no es el servidor de tu amigo",
   connect_cert_subtitle: "El certificado de seguridad no coincide",
@@ -1485,6 +1498,11 @@ const es: Record<StringKey, string> = {
   err_runtime_failed: "No se pudieron instalar los archivos de runtime del servidor. Puede que el antivirus los bloqueara: revisa su cuarentena.",
   err_runtime_rejected: "El servidor rechazó esta versión del runtime. Repara los archivos del juego y vuelve a intentarlo.",
   err_runtime_in_use: "Los archivos del juego de esta carpeta están en uso, seguramente por los servidores de juego de este PC. Elige otra carpeta del juego en Ajustes: la carpeta del propio servidor no sirve para jugar.",
+  err_runtime_untrusted: "Los archivos del juego de este servidor no están firmados con una clave en la que confíe el launcher, así que no se instalaron. Pide al anfitrión un enlace de invitación nuevo.",
+  dialog_runtime_key_title: "Este servidor ejecuta su propio código",
+  dialog_runtime_key_body: "{name} envía su propio runtime del juego, que se ejecuta en tu PC junto con el juego. Continúa solo si confías en quien gestiona este servidor. El launcher recuerda la clave de este servidor y rechaza archivos firmados con cualquier otra.",
+  dialog_runtime_key_accept: "Confiar en este servidor",
+  dialog_runtime_key_cancel: "Cancelar",
 };
 
 export const STRINGS: Record<Language, Record<StringKey, string>> = { en, fi, es };

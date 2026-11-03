@@ -2,7 +2,10 @@
 //
 //   dauntless-revamped://join?v=1&host=<IPv4 or DNS name>&port=<backend HTTPS port, default 443>
 //     &fp=<SHA-256 of the backend's TLS certificate (DER), 64 lower-case hex>&code=<invite code>
-//     &name=<url-encoded server name>
+//     &name=<url-encoded server name>[&pk=<the host's runtime signing key: raw Ed25519 public key, base64>]
+//
+// [Revamped 2026-11-03] pk (FINDINGS M1): the runtime DLLs a server hands out must be signed with this key (or the
+// Revamped key built into the launcher). Optional, so older invites still parse.
 //
 // The host is a public or LAN address: every connection is TLS pinned to fp, so a self-signed
 // certificate is fine and nothing is ever sent to a server with another one.
@@ -23,15 +26,16 @@ export interface Invite {
   code: string;
   name: string;
   fp: string; // the pinned certificate fingerprint
+  pk?: string; // the host's runtime signing key (raw Ed25519 public key, base64)
 }
 
-export type InviteError = "empty" | "too_long" | "not_invite" | "version" | "params" | "host" | "port" | "fp" | "code" | "name";
+export type InviteError = "empty" | "too_long" | "not_invite" | "version" | "params" | "host" | "port" | "fp" | "code" | "name" | "pk";
 
 export type InviteResult = { ok: true; invite: Invite } | { ok: false; error: InviteError };
 
 const MAX_INVITE_LENGTH = 2048;
 
-const ALLOWED = new Set(["v", "host", "port", "fp", "code", "name"]);
+const ALLOWED = new Set(["v", "host", "port", "fp", "code", "name", "pk"]);
 const REQUIRED: InviteError[] = ["host", "fp", "code", "name"];
 
 export function isValidIPv4(text: string): boolean {
@@ -69,6 +73,11 @@ export function isValidInviteCode(code: string): boolean {
 // SHA-256 of the certificate's DER bytes, as 64 lower-case hex characters.
 export function isValidFingerprint(fp: unknown): fp is string {
   return typeof fp === "string" && /^[0-9a-f]{64}$/.test(fp);
+}
+
+// A raw 32-byte Ed25519 public key in standard base64 (44 characters with its one "=").
+export function isValidRuntimeKey(pk: unknown): pk is string {
+  return typeof pk === "string" && /^[A-Za-z0-9+/]{43}=$/.test(pk) && Buffer.from(pk, "base64").length === 32;
 }
 
 // Server names are shown to the friend, always as text (never as HTML).
@@ -129,7 +138,10 @@ export function parseInvite(input: unknown): InviteResult {
   const name = cleanServerName(values.get("name") as string);
   if (name === null) return { ok: false, error: "name" };
 
-  return { ok: true, invite: { host, port, code, name, fp } };
+  const pk = values.get("pk");
+  if (pk !== undefined && !isValidRuntimeKey(pk)) return { ok: false, error: "pk" };
+
+  return { ok: true, invite: { host, port, code, name, fp, ...(pk ? { pk } : {}) } };
 }
 
 export function isLoopbackHost(host: string): boolean {
@@ -141,5 +153,6 @@ export function formatInvite(invite: Invite): string {
   if (!isValidFingerprint(invite.fp)) throw new Error("invites need a certificate fingerprint");
   const parts = ["v=1", `host=${encodeURIComponent(invite.host)}`, `port=${invite.port}`, `fp=${invite.fp}`];
   parts.push(`code=${encodeURIComponent(invite.code)}`, `name=${encodeURIComponent(invite.name)}`);
+  if (invite.pk) parts.push(`pk=${encodeURIComponent(invite.pk)}`);
   return `${INVITE_SCHEME}://join?${parts.join("&")}`;
 }

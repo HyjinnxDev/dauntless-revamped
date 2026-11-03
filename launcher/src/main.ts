@@ -413,6 +413,22 @@ function makePlatform(): Platform {
       });
       return r.canceled || r.filePaths.length !== 1 ? null : r.filePaths[0];
     },
+    // [Revamped 2026-11-03] FINDINGS M1: once per server whose runtime key isn't known yet.
+    confirmRuntimeKey: async (serverName) => {
+      const lang = controller?.snapshot().settings.language ?? "en";
+      const options = {
+        type: "warning" as const,
+        title: translate(lang, "dialog_runtime_key_title"),
+        message: translate(lang, "dialog_runtime_key_title"),
+        detail: translate(lang, "dialog_runtime_key_body", { name: serverName }),
+        buttons: [translate(lang, "dialog_runtime_key_cancel"), translate(lang, "dialog_runtime_key_accept")],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      };
+      const r = mainWindow ? await dialog.showMessageBox(mainWindow, options) : await dialog.showMessageBox(options);
+      return r.response === 1;
+    },
     openExternal: (url) => shell.openExternal(url),
     openPath: async (dir) => {
       await shell.openPath(dir);

@@ -91,6 +91,7 @@ The live tree on 2026-10-24 has only `runtime/client/stable/windows-x86_64` (ver
 | `size` | bytes | Main DLL. |
 | `sha256` | lowercase hex | Main DLL. |
 | `signature` | base64, 64 bytes | Ed25519 over the raw DLL bytes. |
+| `publicKey` | base64, 32 bytes | Raw Ed25519 public key of `--key` (since 2026-11-03). A launcher whose invite has no `pk` pins it after asking the player once. |
 | `file` | artifact name | The backend download route serves `<version>/<file>`. |
 | `publishedAt` | ISO time | Refreshed on every run. |
 | `url` | `<base-url>/launcher/v1/runtime/<target>/<channel>/windows-x86_64/download` | |
