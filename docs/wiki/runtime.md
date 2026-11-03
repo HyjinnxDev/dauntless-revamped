@@ -138,7 +138,7 @@ Mic capture (WASAPI, 48 kHz mono) -> Opus 20 ms frames -> UDP to the backend voi
 
 ### Cinematic camera (`CineCam*`)
 
-F8/F9/F10 camera (state in `dllmain.cpp` `namespace CineCam`, menu in `CineCamMenu.cpp`). The menu is Dear ImGui drawn in a D3D11 `Present` hook (D3D11 only). Path math (Catmull-Rom / Kochanek-Bartels) in `CineCamPath.cpp`. Settings in `CINECAM.ini`, shots in `CINECAM_shots\`. Owner accounts only: `OwnerOnly` requires the local player name to start with `[Owner] `. Off with `DISABLE_CINECAM.flag`.
+F8/F9/F10 camera (state in `dllmain.cpp` `namespace CineCam`, menu in `CineCamMenu.cpp`). The menu is Dear ImGui drawn in a D3D11 `Present` hook (D3D11 only). Path math (Catmull-Rom / Kochanek-Bartels) in `CineCamPath.cpp`. Settings in `CINECAM.ini`, shots in `CINECAM_shots\`. Owner accounts only: `OwnerOnly` requires the local player name to start with `[Owner] ` or a name-style tag (a worn style replaces the staff tag; styles are owner-only). Off with `DISABLE_CINECAM.flag`.
 
 ### Window lock (`WindowLock.cpp`)
 

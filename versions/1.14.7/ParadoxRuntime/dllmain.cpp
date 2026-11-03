@@ -5701,14 +5701,14 @@ static void Tick() {
 // comes off the nameplate (chat keeps it) and a title line under the name says the role instead: "Server Owner"
 // in legendary orange with the name pulsing gold and glowing; "Server Admin" / "Server Moderator" in the plate's
 // own text style. Client only, game thread, from ProcessEventClientHook like the behemoth bar.
-// [Revamped 2026-10-19] Patreon name styles: a second tag after the staff one ("[Owner] [Legend] Name", backend
-// staffRoles.ts GameNameTag, picked per character in the launcher) also comes off and styles the name:
+// [Revamped 2026-10-19] Patreon name styles: a style tag ("[Legend] Name", backend staffRoles.ts GameNameTag,
+// picked per character in the launcher; since 2026-11-03 it replaces the staff tag) also comes off and styles the name:
 //   Wanderer  green
 //   Scout     red, dark edge + drop shadow, slow brightness pulse
 //   Slayer    purple, violet glow, ethereal breathing + lavender shimmer
 //   Legend    gold, orange glow + deep shadow, white-gold shimmer
 //   Emerald   (the Owner tier) emerald/aqua cycle with diamond-white sparkles, teal glow, breathing teal aura
-// A style replaces the owner's gold pulse; the staff title line stays.
+// A style replaces the owner's gold pulse and the staff title line (the backend sends no staff tag with a style).
 // DISABLE_STAFF_NAMEPLATES.flag beside the exe turns it off.
 // ponytail: re-reads plate text every kScanMs; hook UNamePlatesWidget::UpdateName instead if that ever costs.
 // ponytail: a plate whose tags go away mid-map keeps its font; fine while a style change only lands on map load.
@@ -13444,7 +13444,7 @@ static void Tick() {
 // Keyframes carry focus distance too (focus pulls); each key picks how it moves to the next (smooth/linear/hold).
 // Photo = the engine's HighResShot (no HUD, no menu); files land in Archon\Saved\Screenshots.
 // Settings persist in CINECAM.ini beside the exe, saved shots in CINECAM_shots\. DISABLE_CINECAM.flag turns it off.
-// Owner accounts only: the local player's name must carry the backend's "[Owner] " tag (login.ts
+// Owner accounts only: the local player's name must carry the backend's "[Owner] " tag or a name-style tag (login.ts
 // GetDisplayNameForUserId; usernames are alphanumeric, so nobody else can type it). Anyone else: every key, the
 // menu and the guides stay off. Fails closed while the player state or its name is not there yet.
 // Log tag [CineCam].
@@ -14134,7 +14134,12 @@ static bool OwnerOnly(SDK::APlayerController* PC, ULONGLONG Now) {
     if (Now >= s_Next) {
         s_Next = Now + 1000;
         SDK::APlayerState* Ps = PC->PlayerState;
-        s_Owner = Ps && Ps->PlayerNamePrivate.ToString().rfind("[Owner] ", 0) == 0;
+        // A worn name style replaces "[Owner] " (staffRoles.ts GameNameTag).
+        // ponytail: styles are owner-only (AllowedNameStyles); give the gate its own signal once Patreon tiers wear them.
+        const StaffNameplates::TierInfo* Info = nullptr;
+        const StaffNameplates::StyleInfo* Si = nullptr;
+        if (Ps) StaffNameplates::ParseTags(Ps->PlayerNamePrivate.ToString(), Info, Si);
+        s_Owner = (Info && Info->T == StaffNameplates::Tier::Owner) || Si;
         if (s_Logged != static_cast<int>(s_Owner) && (s_Owner || Ps)) {
             s_Logged = static_cast<int>(s_Owner);
             Log(s_Owner ? "owner account - camera unlocked" : "not an owner account - camera locked");

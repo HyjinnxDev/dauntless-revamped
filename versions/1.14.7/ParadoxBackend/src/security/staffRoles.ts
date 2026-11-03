@@ -42,8 +42,10 @@ export function StaffNameTag(roles: readonly string[]): string {
 }
 
 // [Revamped 2026-10-19] Patreon name styles, picked per character in the launcher. The game name
-// carries the style as a second tag after the staff one ("[Owner] [Legend] Name"); the client DLL
-// (StaffNameplates) strips it off the nameplate and animates the name in that style.
+// carries the style tag ("[Legend] Name"); the client DLL (StaffNameplates) strips it off the
+// nameplate and animates the name in that style.
+// [Revamped 2026-11-03] A worn style replaces the staff tag: both tags cut the name off where the
+// game shows it raw.
 export const NAME_STYLES = ["wanderer", "scout", "slayer", "legend", "emerald"] as const;
 export type NameStyle = typeof NAME_STYLES[number];
 const STYLE_TAG: Record<NameStyle, string> = {
@@ -57,9 +59,9 @@ export function AllowedNameStyles(roles: readonly string[]): NameStyle[] {
     return roles.includes("owner") ? [...NAME_STYLES] : [];
 }
 
-/** StaffNameTag plus the character's style tag, when the account may still wear that style. */
+/** The character's style tag when the account may still wear that style, else StaffNameTag. */
 export function GameNameTag(roles: readonly string[], style: unknown): string {
-    return StaffNameTag(roles) + (IsNameStyle(style) && AllowedNameStyles(roles).includes(style) ? STYLE_TAG[style] : "");
+    return IsNameStyle(style) && AllowedNameStyles(roles).includes(style) ? STYLE_TAG[style] : StaffNameTag(roles);
 }
 
 /** Strips the staff and style tags so a name the game echoes back still finds the account. */
