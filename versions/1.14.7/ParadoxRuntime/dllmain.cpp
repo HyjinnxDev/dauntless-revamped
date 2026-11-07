@@ -4838,6 +4838,7 @@ static void MpNetIdContractProbe();                    // [1.14.7 genuine net-id
 static void MpCaptureGenuineNetIdType();               // [1.14.7 synthetic net-id type capture]
 static void MpVoiceProximityTick();                    // [1.14.7 hub proximity voice reports]
 static void MpHuntJoinTick();                          // [join-in-progress rescale + hunt state report]
+static void MpSkyfishingTick();                        // [Ramsgate skyfishing pier, SkyfishingFeature forced]
 static bool IsClientRolePumpPossessionStable(UObject* PC, UObject** OutPawn);
 static void TickFrankDroneClientDiag(void* Pawn, const char* Trigger);
 static std::string FrankDroneGateSummary(void* PlayerRole);
@@ -5855,6 +5856,7 @@ void GameEngineTickHook(UGameEngine* GameEngine, float DeltaTime, char CanRender
     MpDriveReplicationGraph(DeltaTime);
     if (Globals::AmServer) MpVoiceProximityTick();
     if (Globals::AmServer) MpHuntJoinTick();
+    if (Globals::AmServer) MpSkyfishingTick();
 
     // [2026-07-20] Server-side skeletal pose/socket fix (FORCE_SERVER_MESH_POSE.flag). Server-only; the
     // helper self-throttles + no-ops unless the flag is present. See its definition above.
@@ -21491,6 +21493,97 @@ static void MpHuntJoinTick() {
         std::cout << Line << std::endl;
         s_lastLine = Line;
         s_reportMs = Now;
+    }
+}
+
+// [1.14.7 2026-10-19 SKYFISHING] Cut activity, logic complete in the paks: skyfishing_pier_bp (interaction ->
+// skyfisher_bpc.AuthStartSkyfishing), skyfish_cloud_bp (wind, spawns skyfish), kite/bait from data tables. Retail
+// removed the placed pier + cloud (ramsgate_01_skyfishing keeps only two cloud emitters) and nothing adds
+// skyfisher_bpc to the pawn. When FORCE_FEATURE_FLAGS.txt lists SkyfishingFeature (pier BeginPlay checks it, so
+// the clients need the same line), a Ramsgate server spawns the cloud where the emitters are and a pier on the
+// docks' leftover fishing props (kite_01_sm, buckets), links them, and adds skyfisher_bpc to every pawn.
+// "[Skyfishing] player at" lines (every 10 s) are for moving the pier spot.
+static void MpSkyfishingTick() {
+    if (g_wdIsHub.load(std::memory_order_relaxed) != 1) return;
+    static const bool s_on = std::find(g_ForcedFeatureFlags.begin(), g_ForcedFeatureFlags.end(), "SkyfishingFeature")
+        != g_ForcedFeatureFlags.end();
+    if (!s_on) return;
+    static uint64_t s_nextMs = 0, s_posMs = 0;
+    const uint64_t Now = GetTickCount64();
+    if (Now < s_nextMs) return;
+    s_nextMs = Now + 1000;
+
+    SDK::UWorld* World = SDK::UWorld::GetWorld();
+    if (!World || !World->AuthorityGameMode) return;
+    static int s_isRamsgate = -1;
+    if (s_isRamsgate < 0) {
+        const std::string Map = SDK::UGameplayStatics::GetCurrentLevelName(World, true).ToString();
+        s_isRamsgate = Map.find("ramsgate") != std::string::npos;
+        MpLog("[Skyfishing] map " + Map + (s_isRamsgate ? ": spawning pier" : ": not Ramsgate, off"));
+    }
+    if (!s_isRamsgate) return;
+
+    using BehemothHealthBar::Ref;
+    static Ref s_PierCls, s_CloudCls, s_FisherCls, s_Pier, s_Cloud;
+    auto* PierCls = BehemothHealthBar::LoadClass(s_PierCls, L"/Game/Blueprints/AdventureActivities/SkyFishing/skyfishing_pier_bp.skyfishing_pier_bp_C");
+    auto* CloudCls = BehemothHealthBar::LoadClass(s_CloudCls, L"/Game/Blueprints/AdventureActivities/SkyFishing/skyfish_cloud_bp.skyfish_cloud_bp_C");
+    auto* FisherCls = BehemothHealthBar::LoadClass(s_FisherCls, L"/Game/Blueprints/AdventureActivities/SkyFishing/skyfisher_bpc.skyfisher_bpc_C");
+    if (!PierCls || !CloudCls || !FisherCls) {
+        static bool s_warned = false;
+        if (!s_warned) MpLog("[Skyfishing] class load failed pier=" + MpPtr(PierCls) + " cloud=" + MpPtr(CloudCls) + " fisher=" + MpPtr(FisherCls));
+        s_warned = true;
+        return;
+    }
+
+    // Cloud: midpoint of the two fishing_clouds emitters. Pier: docks, beside kite_01_sm, facing the cloud.
+    const SDK::FVector CloudAt{ -14565.f, 12510.f, 3386.f }, PierAt{ -10950.f, 13800.f, 3141.f };
+    auto Spawn = [&](SDK::UClass* Cls, const SDK::FVector& At, float Yaw) -> SDK::AActor* {
+        SDK::FTransform T{};
+        const float H = Yaw * 3.14159265f / 360.f;
+        T.Rotation.Z = std::sin(H);
+        T.Rotation.W = std::cos(H);
+        T.Translation = At;
+        T.Scale3D = SDK::FVector{ 1.f, 1.f, 1.f };
+        SDK::AActor* A = SDK::UGameplayStatics::BeginDeferredActorSpawnFromClass(
+            World, Cls, T, SDK::ESpawnActorCollisionHandlingMethod::AlwaysSpawn, nullptr);
+        if (A) A = SDK::UGameplayStatics::FinishSpawningActor(A, T);
+        if (A && !A->bReplicates) A->SetReplicates(true);
+        MpLog("[Skyfishing] spawned " + (A ? A->GetFullName() : std::string("null")));
+        return A;
+    };
+    if (!s_Cloud.Get<SDK::AActor>()) s_Cloud.Set(Spawn(CloudCls, CloudAt, 0.f));
+    if (!s_Pier.Get<SDK::AActor>()) {
+        const float Yaw = std::atan2(CloudAt.Y - PierAt.Y, CloudAt.X - PierAt.X) * 180.f / 3.14159265f;
+        SDK::AActor* Pier = Spawn(PierCls, PierAt, Yaw);
+        s_Pier.Set(Pier);
+        // Not FindPropertyByNameInChain: its index guard (< 0x100000) skips names loaded this late.
+        FProperty* Link = nullptr;
+        for (UStruct* S = Pier ? Pier->Class : nullptr; S && !Link; S = S->SuperStruct)
+            for (FField* F = S->ChildProperties; F && !Link; F = F->Next)
+                if (F->Name.ToString() == "LinkedSkyfishCloud") Link = reinterpret_cast<FProperty*>(F);
+        if (Link) *reinterpret_cast<SDK::AActor**>(reinterpret_cast<uint8_t*>(Pier) + Link->Offset) = s_Cloud.Get<SDK::AActor>();
+        MpLog(std::string("[Skyfishing] pier LinkedSkyfishCloud ") + (Link ? "set" : "NOT FOUND"));
+    }
+
+    static auto* s_Pawns = new SDK::TArray<SDK::AActor*>();   // engine-allocated storage, never freed (exit-safe)
+    SDK::UGameplayStatics::GetAllActorsOfClass(World, SDK::AArchonCharacter::StaticClass(), s_Pawns);
+    const bool LogPos = Now - s_posMs >= 10000;
+    if (LogPos) s_posMs = Now;
+    for (int32_t i = 0; i < s_Pawns->Num(); ++i) {
+        SDK::AActor* P = (*s_Pawns)[i];
+        if (!P || P->GetComponentByClass(FisherCls)) {
+            if (P && LogPos) {
+                const SDK::FVector L = P->K2_GetActorLocation();
+                MpLog("[Skyfishing] player at " + std::to_string(L.X) + " " + std::to_string(L.Y) + " " + std::to_string(L.Z));
+            }
+            continue;
+        }
+        SDK::FTransform T{};
+        T.Rotation.W = 1.f;
+        T.Scale3D = SDK::FVector{ 1.f, 1.f, 1.f };
+        SDK::UActorComponent* C = P->AddComponentByClass(FisherCls, false, T, false);
+        if (C) C->SetIsReplicated(true);
+        MpLog("[Skyfishing] skyfisher_bpc on " + P->GetFullName() + " -> " + MpPtr(C));
     }
 }
 
