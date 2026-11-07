@@ -5503,7 +5503,7 @@ namespace JourneyTrees {
           { L"+1% attack speed.", L"+2% attack speed.", L"+3% attack speed.", L"+4% attack speed.", L"+5% attack speed." } },
     };
     static const TreeSpec kTrees[] = {
-        { L"Stats", L"REVAMPED: STATS", L"New combat stat perks. Every tier stacks with the original Slayer's Path nodes.",
+        { L"Stats", L"REVAMPED: STATS", L"Unlock to open new combat stat perks. Every tier stacks with the original Slayer's Path nodes.",
           kStatsPerks, static_cast<int>(sizeof(kStatsPerks) / sizeof(kStatsPerks[0])) },
     };
     // Layout (all source rows: Linear, Relative, 1.0): the default spacing put tiers far apart and perk chains close
@@ -5575,7 +5575,8 @@ namespace JourneyTrees {
             const SDK::FName HubName = VoiceSettings::NameOf(HubId.c_str());
             if (Find(M, HubName)) { MpLog("[JourneyTrees] " + SDK::FString(HubId.c_str()).ToString() + " already present - skipped"); continue; }
             auto* Hub = CloneRow(Rows.at("Dojo"), Text(Tree.Name), Text(Tree.Desc));
-            Hub->bAutoUnlockIfParentUnlocked = true;   // free entry point, like Slayer_00
+            // Free, but bought with a click: an auto-unlocked hub left its tier I children Locked (0) until some
+            // other unlock made the game recompute the claimable frontier (seen 2026-10-31).
             const auto* Tier = Rows.at(SourceId(Tree.Perks[0], 1));
             MpLog("[JourneyTrees] layout before: hub rule=" + std::to_string(static_cast<int>(Hub->ChildNodeLayoutRule))
                 + " dist=" + std::to_string(static_cast<int>(Hub->DistanceRule)) + " breadth=" + std::to_string(Hub->BreadthDistanceScale)

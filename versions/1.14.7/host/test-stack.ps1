@@ -23,7 +23,7 @@ $liveClient = 'D:\Dev\dauntless 1.14.7\Client'
 $clientDir = "$root\client"
 $logs     = "$root\logs"
 $testDb   = 'mysticparadox_test'
-$ports    = @{ Http = 3100; Https = 4443; Qos = 8100; Director = 3101; Voice = 8792; RangeBegin = 8800; RangeEnd = 8810 }
+$ports    = @{ Http = 3102; Https = 4443; Qos = 8100; Director = 3101; Voice = 8792; RangeBegin = 8800; RangeEnd = 8810 }
 
 if ((Resolve-Path $repo).Path -eq (Resolve-Path $live).Path) { throw 'run this from a worktree, not the live checkout' }
 
