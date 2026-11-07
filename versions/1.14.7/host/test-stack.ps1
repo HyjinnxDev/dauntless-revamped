@@ -5,13 +5,14 @@
 #   ... test-stack.ps1 -Stop      stop them and their game servers
 #   ... test-stack.ps1 -Remove    stop, drop the test DB, delete $root. Then: git worktree remove <worktree>
 #   ... test-stack.ps1 -Client tester1   start a windowed test client logged in as dev user "tester1"
+#   ... -Client tester1 -Full            same, fullscreen 2560x1440 (judging visuals)
 #       (the test backend's dev login: no launcher; the user is created on first login). Run it again
 #       with another name for a second client.
 # Live stays on 443/3000/3001/80, UDP 8780-8791, DB mysticparadox, D:\MysticParadoxData.
 # Test uses the ports below, DB $testDb, and everything else under $root (a hard-linked game copy, logs,
 # updates, crash/launcher logs). Discord, GitHub and admin-login secrets are blanked in the test .env.
 # Clients reach it with MYSTICPARADOX_API_BASE=https://paradox.test:4443.
-param([switch]$Setup, [switch]$Stop, [switch]$Remove, [string]$Client)
+param([switch]$Setup, [switch]$Stop, [switch]$Remove, [string]$Client, [switch]$Full)
 
 $ErrorActionPreference = 'Stop'
 $repo     = Split-Path $PSScriptRoot   # <worktree>\versions\1.14.7
@@ -68,11 +69,12 @@ require('mongodb').MongoClient.connect(process.env.MONGO_URI).then(async c => {
     }
   }
   Set-Content $ini -Encoding Unicode -Value (@('[OnlineSubsystemMcp.XMPP]', 'ServerAddr="wss://paradox.test"', "ServerPort=$($ports.Https)", 'bUseSSL=true', '') + $kept)
-  Start-Process "$clientDir\Archon\Binaries\Win64\Dauntless-Win64-Shipping.exe" -ArgumentList @(
+  $display = if ($Full) { @('-fullscreen', '-ResX=2560', '-ResY=1440') } else { @('-windowed', '-ResX=1280', '-ResY=720') }
+  Start-Process "$clientDir\Archon\Binaries\Win64\Dauntless-Win64-Shipping.exe" -ArgumentList (@(
     '-DisableEOS', '-EpicPortal', '-NoEAC', '-AUTH_TYPE=exchangecode', '-epicapp=Archon', '-epicenv=Prod',
     '-epicsandboxid=jackal', '-epicdeploymentid=53565ba467df4edbb6f5a3d939a8b4f2',
     "-AUTH_LOGIN=$Client", "-AUTH_PASSWORD=$Client", "-epicusername=$Client", "-epicuserid=$Client",
-    "-epicaccountid=$Client", '-epiclocale=en-US', '-windowed', '-ResX=1280', '-ResY=720')
+    "-epicaccountid=$Client", '-epiclocale=en-US') + $display)
   Write-Host "test client '$Client' starting"
   return
 }
